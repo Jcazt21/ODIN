@@ -1,0 +1,191 @@
+"""Canonicalización de entidades: un solo nombre por figura/empresa.
+
+Resuelve el problema de que la misma entidad entre a la BD con nombres
+distintos según el artículo ("Abinader" vs "Luis Abinader", "PRM" vs
+"Partido Revolucionario Moderno"). Se aplica en TODOS los puntos donde un
+análisis se convierte en filas de la BD: la vista previa (`/api/analyze`),
+el guardado manual (`POST /api/articles`) y el crawl (`pipeline.py`).
+
+Pasos, todos locales y gratis (cero llamadas a LLM):
+
+  1. Catálogo de aliases (`entity_aliases`): "MINERD" -> nombre completo.
+  2. Fusión intra-lista: un nombre contenido por palabras en otro más largo
+     del mismo tipo se funde con él ("Abinader" ⊂ "Luis Abinader").
+  3. Apellido/nombre parcial -> nombre completo ya conocido en la BD, SOLO
+     si la coincidencia es única: "Abinader" -> "Luis Abinader" se aplica
+     porque solo hay un *Abinader* registrado; "Fernández" NO se toca si
+     conviven Leonel, Omar y César Fernández.
+  4. Deduplicado final por (nombre normalizado, tipo) sumando menciones.
+
+Funciona con cualquier objeto que tenga los atributos `name`, `type`,
+`mentions_count`, `sentiment_toward`, `sentiment_score` y `context`
+(EntityResult del análisis o EntityPayload de la API).
+"""
+from __future__ import annotations
+
+import logging
+import unicodedata
+
+from sqlalchemy import select
+
+import db.aliases as alias_store
+
+log = logging.getLogger("odin.canonicalize")
+
+# partículas que no cuentan como "palabra significativa" de un nombre
+_NAME_PARTICLES = {"de", "del", "la", "las", "los", "y", "e"}
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
+    )
+
+
+def _norm_key(name: str) -> str:
+    """Clave de comparación: sin acentos, minúsculas, espacios colapsados."""
+    return " ".join(_strip_accents(name).lower().split())
+
+
+def known_person_fullname_map() -> dict[str, str]:
+    """Mapa apellido -> nombre completo, construido con los PERSON ya guardados
+    en la BD y los canónicos PERSON del catálogo de aliases.
+
+    Solo se indexa la ÚLTIMA palabra significativa de cada nombre completo
+    ("abinader" para "Luis Abinader"): es el patrón con que la prensa abrevia
+    ("Abinader", "Fulcar"). Los nombres de pila famosos ("Danilo", "Leonel")
+    se resuelven vía el catálogo curado de aliases, no aquí — indexar todas
+    las palabras produciría falsos positivos. Los apellidos que apuntan a MÁS
+    de un nombre completo distinto se descartan por ambiguos ("Fernández" con
+    Leonel, Omar y César en la BD no se toca). Se consulta en cada análisis
+    (las tablas son pequeñas); si la BD no está disponible, devuelve vacío en
+    lugar de romper el análisis.
+    """
+    from db.models import Entity
+    from db.session import get_session
+
+    candidates: dict[str, set[str]] = {}
+
+    def _index(full_name: str) -> None:
+        words = [w for w in _norm_key(full_name).split() if w not in _NAME_PARTICLES]
+        if len(words) < 2:
+            return  # un nombre de una sola palabra no desambigua nada
+        candidates.setdefault(words[-1], set()).add(full_name)
+
+    try:
+        session = get_session()
+        try:
+            names = session.scalars(
+                select(Entity.name).where(Entity.type == "PERSON").distinct()
+            ).all()
+        finally:
+            session.close()
+    except Exception:
+        log.warning("no se pudo leer entidades PERSON de la BD", exc_info=True)
+        names = []
+
+    for name in names:
+        _index(name)
+    for canonical, etype in alias_store.all_canonicals():
+        if etype == "PERSON":
+            _index(canonical)
+
+    return {w: next(iter(fulls)) for w, fulls in candidates.items() if len(fulls) == 1}
+
+
+def _apply_alias_catalog(entities: list) -> None:
+    """Sustituye in-place el nombre por el canónico del catálogo de siglas.
+    El tipo registrado en el alias tiene prioridad (corrige p.ej. "Impuestos
+    Internos" marcado como PERSON)."""
+    for ent in entities:
+        match = alias_store.resolve(ent.name)
+        if match:
+            ent.name, ent.type = match
+
+
+def _resolve_partial_persons(entities: list, person_map: dict[str, str]) -> None:
+    """"Abinader" -> "Luis Abinader" cuando la BD solo conoce un Abinader."""
+    for ent in entities:
+        if ent.type != "PERSON":
+            continue
+        words = [w for w in _norm_key(ent.name).split() if w not in _NAME_PARTICLES]
+        if len(words) != 1:  # solo nombres parciales de una palabra
+            continue
+        full = person_map.get(words[0])
+        if full and _norm_key(full) != _norm_key(ent.name):
+            log.info("canonicalizado %r -> %r", ent.name, full)
+            ent.name = full
+
+
+def _merge_duplicates(entities: list) -> list:
+    """Funde entidades con el mismo (nombre normalizado, tipo) y las que están
+    contenidas por palabras en un nombre más largo del mismo tipo. Conserva el
+    sentimiento de la variante con más menciones y suma los conteos."""
+    ordered = sorted(entities, key=lambda e: (len(_norm_key(e.name)), e.mentions_count), reverse=True)
+    merged: dict[tuple[str, str], object] = {}
+    for ent in ordered:
+        nkey = _norm_key(ent.name)
+        if not nkey:
+            continue
+        target_key = None
+        if (nkey, ent.type) in merged:
+            target_key = (nkey, ent.type)
+        else:
+            for mkey, mtype in merged:
+                if mtype == ent.type and f" {nkey} " in f" {mkey} ":
+                    target_key = (mkey, mtype)
+                    break
+        if target_key is None:
+            merged[(nkey, ent.type)] = ent
+        else:
+            dst = merged[target_key]
+            dst.mentions_count += ent.mentions_count
+            if dst.sentiment_toward is None:
+                dst.sentiment_toward = ent.sentiment_toward
+                dst.sentiment_score = ent.sentiment_score
+            if dst.context is None:
+                dst.context = ent.context
+    result = list(merged.values())
+    result.sort(key=lambda e: e.mentions_count, reverse=True)
+    return result
+
+
+def canonicalize_entities(entities: list, person_map: dict[str, str] | None = None) -> list:
+    """Aplica los 4 pasos y devuelve la lista canonicalizada (puede ser más
+    corta que la de entrada si hubo fusiones). `person_map` se puede pasar
+    precomputado para procesar varios artículos con una sola consulta."""
+    entities = [e for e in entities if (e.name or "").strip()]
+    for ent in entities:
+        ent.name = " ".join(ent.name.split())
+    _apply_alias_catalog(entities)
+    if person_map is None:
+        person_map = known_person_fullname_map()
+    _resolve_partial_persons(entities, person_map)
+    return _merge_duplicates(entities)
+
+
+def match_actor_name(name: str | None, entities: list) -> str | None:
+    """Reapunta un nombre de actor (dominant/blamed/credited) a la entidad
+    canonicalizada que le corresponde: si "Abinader" se convirtió en
+    "Luis Abinader", el actor debe seguirlo. Devuelve el nombre tal cual si
+    no hay entidad que coincida (no inventamos ni descartamos)."""
+    if not name or not (name := " ".join(name.split())):
+        return None
+    match = alias_store.resolve(name)
+    if match:
+        name = match[0]
+    nkey = _norm_key(name)
+    for ent in entities:
+        ekey = _norm_key(ent.name)
+        if nkey == ekey or f" {nkey} " in f" {ekey} ":
+            return ent.name
+    return name
+
+
+def canonicalize_result(result, person_map: dict[str, str] | None = None) -> None:
+    """Canonicaliza in-place un AnalysisResult completo: entidades + los
+    campos de actor del análisis de encuadre."""
+    result.entities = canonicalize_entities(result.entities, person_map=person_map)
+    for attr in ("dominant_actor", "blamed_actor", "credited_actor"):
+        if hasattr(result, attr):
+            setattr(result, attr, match_actor_name(getattr(result, attr), result.entities))

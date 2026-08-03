@@ -1,0 +1,27 @@
+# --- Scraping ---
+requests>=2.32
+trafilatura>=1.12        # extracción robusta de cuerpo/autor/fecha de artículos
+feedparser>=6.0          # descubrimiento de artículos vía RSS
+beautifulsoup4>=4.12     # fallback / parsing puntual
+lxml>=5.2
+
+# --- Base de datos ---
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9     # driver PostgreSQL
+# pyodbc>=5.1            # descomentar para SQL Server (requiere ODBC Driver 17/18)
+
+# --- Análisis en español (modelos locales, gratis) ---
+pysentimiento>=0.7       # sentimiento/emoción en español (BETO/RoBERTuito)
+spacy>=3.7               # NER: figuras públicas y empresas
+# Modelo de spaCy en español (instalar aparte):
+#   python -m spacy download es_core_news_lg
+
+# --- Analizador LLM opcional (precisión de producción, de pago) ---
+google-genai>=1.0   # API de Google Gemini; requiere GEMINI_API_KEY
+
+# --- Utilidades ---
+python-dotenv>=1.0
+
+# --- API (frontend) ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
