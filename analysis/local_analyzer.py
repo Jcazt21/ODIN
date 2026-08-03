@@ -54,6 +54,8 @@ _VENUE_WORDS = {
     "teatro", "hospital", "clinica", "hotel", "aeropuerto", "puerto",
     "mercado", "club", "estacion", "terminal", "edificio", "torre",
     "residencial", "urbanizacion", "sector", "barrio", "condominio",
+    "circunscripcion", "demarcacion", "subalcaldia", "subsecretaria",
+    "tribunal", "gabinete", "despacho", "consultorio", "villa",
     # no son lugares, pero funcionan igual sintácticamente ("el homenaje a
     # Juan Pablo Duarte", "en honor a..."): el nombre que sigue no actúa, solo
     # recibe el homenaje/da nombre a algo.
@@ -72,7 +74,7 @@ def sentence_mentions_venue_word(text: str) -> bool:
     return any(w.strip(".,;:()\"'") in _VENUE_WORDS for w in words)
 
 
-def _preceded_by_venue_noun(ent, window: int = 6) -> bool:
+def _preceded_by_venue_noun(ent, window: int = 10) -> bool:
     """Mira hacia atrás desde la entidad (la más cercana primero); se detiene
     al cruzar un verbo, que marca el límite de la cláusula/sintagma actual.
 
@@ -132,8 +134,39 @@ def _strip_accents(text: str) -> str:
 
 
 def _norm_key(name: str) -> str:
-    """Clave de comparación: sin acentos, minúsculas, espacios colapsados."""
+    """Clave de comparación: sin acentos, minúsculas, espacios colapsados.
+
+    Guiones -> espacio ("Jean-Claude" == "Jean Claude") y puntos fuera
+    ("P.R.M." == "PRM"); debe coincidir con `canonicalize._norm_key`, que
+    aplica la misma normalización sobre estas mismas claves más adelante en
+    el pipeline.
+    """
+    name = name.replace("-", " ").replace(".", "")
     return " ".join(_strip_accents(name).lower().split())
+
+
+def _extraction_confidence(display_name: str, etype: str, count: int) -> float:
+    """Qué tan segura estuvo la extracción de que esta es una mención real,
+    no ruido. Señales baratas, disponibles ya en este punto del pipeline:
+
+    - una sola mención en todo el artículo pesa menos que varias
+      (más chance de ser un acierto aislado del NER, no un patrón repetido).
+    - un nombre PERSON de una sola palabra significativa ("Fernández") es
+      intrínsecamente más ambiguo que uno completo, incluso después de
+      intentar resolverlo (`_resolve_partial_persons` en canonicalize.py
+      puede no encontrar un único candidato).
+
+    No incluye la señal del árbitro de Gemini: ese paso corre después, en
+    api.py, fuera de LocalAnalyzer.
+    """
+    score = 1.0
+    if count == 1:
+        score -= 0.15
+    if etype == "PERSON":
+        words = [w for w in _norm_key(display_name).split() if w not in _NAME_PARTICLES]
+        if len(words) <= 1:
+            score -= 0.1
+    return round(max(score, 0.1), 2)
 
 
 def _aggregate(probas_list: list[dict | None]) -> tuple[str, float]:
@@ -148,7 +181,7 @@ def _aggregate(probas_list: list[dict | None]) -> tuple[str, float]:
         n += 1
     if n == 0:
         return "NEU", 0.0
-    label = max(totals, key=totals.get)
+    label = max(totals, key=lambda k: totals[k])
     return label, round(float(totals[label] / n), 4)
 
 
@@ -301,7 +334,7 @@ class LocalAnalyzer:
 
         # 3) construir resultados agregando el sentimiento ya calculado
         results: list[EntityResult] = []
-        for (nkey, etype), g in groups.items():
+        for (_nkey, etype), g in groups.items():
             display = g["display"].most_common(1)[0][0]  # variante más usada
             probas = [probas_by_index[i] for i in sorted(g["sent_idx"])]
             label, score = _aggregate(probas)
@@ -317,6 +350,7 @@ class LocalAnalyzer:
                     sentiment_toward=label,
                     sentiment_score=score,
                     context=context,
+                    extraction_confidence=_extraction_confidence(display, etype, g["count"]),
                 )
             )
         results.sort(key=lambda e: e.mentions_count, reverse=True)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import unicodedata
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -38,13 +39,24 @@ _lock = threading.Lock()
 _cache: dict[str, tuple[str, str]] | None = None  # None = no cargado aún
 
 
+def normalize_key(text: str) -> str:
+    """Clave de comparación para alias: minúsculas y sin acentos, para que
+    "Policia" y "Policía" (o "MINERD"/"Minerd") generen la misma clave."""
+    text = text.strip().lower()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
+    )
+
+
 def _build_cache() -> dict[str, tuple[str, str]]:
     session = get_session()
     try:
         rows = session.scalars(
             select(EntityAlias).where(EntityAlias.is_active.is_(True))
         ).all()
-        return {r.alias_key: (r.canonical_name, r.type) for r in rows}
+        # Se renormaliza `alias_key` acá (no solo al insertar) para que las
+        # filas ya existentes con acentos en la clave también matcheen.
+        return {normalize_key(r.alias_key): (r.canonical_name, r.type) for r in rows}
     finally:
         session.close()
 
@@ -72,9 +84,10 @@ def resolve(name: str) -> tuple[str, str] | None:
     """Devuelve ``(canonical_name, type)`` si existe un alias activo para
     *name*, o ``None`` si no hay coincidencia.
 
-    La búsqueda es case-insensitive: "MINERD", "Minerd" y "minerd" son iguales.
+    La búsqueda es case-insensitive y sin acentos: "MINERD", "Minerd" y
+    "minerd" son iguales, igual que "Policía" y "Policia".
     """
-    key = name.strip().lower()
+    key = normalize_key(name)
     if not key:
         return None
     return _get_cache().get(key)
@@ -99,11 +112,11 @@ def load_seed() -> int:
     session = get_session()
     inserted = 0
     try:
-        existing_keys = set(
-            session.scalars(select(EntityAlias.alias_key)).all()
-        )
+        existing_keys = {
+            normalize_key(k) for k in session.scalars(select(EntityAlias.alias_key)).all()
+        }
         for alias, canonical_name, entity_type in SEED_ALIASES:
-            alias_key = alias.strip().lower()
+            alias_key = normalize_key(alias)
             if alias_key in existing_keys:
                 continue
             session.add(

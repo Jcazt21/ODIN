@@ -18,6 +18,12 @@ class EntityResult:
     sentiment_toward: str | None = None   # "POS" | "NEG" | "NEU"
     sentiment_score: float | None = None  # 0..1
     context: str | None = None
+    # Cuán segura estuvo la extracción de que esta es una mención real (no
+    # ruido de segmentación ni un nombre parcial ambiguo). 1.0 = certera;
+    # más bajo sugiere revisión manual en el frontend. Solo LocalAnalyzer la
+    # calcula hoy (ver analysis/local_analyzer.py); 1.0 por defecto para
+    # cualquier otro Analyzer que no la produzca explícitamente.
+    extraction_confidence: float = 1.0
 
 
 @dataclass

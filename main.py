@@ -11,9 +11,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+from typing import TYPE_CHECKING
 
 from config import settings
 from scrapers import SCRAPERS
+
+if TYPE_CHECKING:
+    # Solo para tipos: importarlo de verdad arrastraría `analysis/__init__.py`
+    # y con él spaCy, justo lo que la carga perezosa de abajo evita.
+    from analysis.base import Analyzer
 
 
 def main() -> None:
@@ -58,6 +64,7 @@ def main() -> None:
 
     # Carga perezosa: importar el analizador aquí evita cargar modelos pesados
     # cuando solo se listan fuentes o se inicializa la BD.
+    analyzer: Analyzer
     if args.analyzer == "gemini":
         from analysis.gemini_analyzer import GeminiAnalyzer
 

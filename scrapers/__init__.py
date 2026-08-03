@@ -1,5 +1,4 @@
 from scrapers.base import BaseScraper, ScrapedArticle
-from scrapers.listin import ListinDiarioScraper
 from scrapers.diario_libre import DiarioLibreScraper
 from scrapers.do_scrapers import (
     AlMomentoScraper,
@@ -9,6 +8,7 @@ from scrapers.do_scrapers import (
     HoyScraper,
     NDigitalScraper,
 )
+from scrapers.listin import ListinDiarioScraper
 
 # Registro de scrapers disponibles, por clave de fuente.
 SCRAPERS: dict[str, type[BaseScraper]] = {

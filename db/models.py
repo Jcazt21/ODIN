@@ -4,13 +4,23 @@ Diseñados para ser portables entre PostgreSQL (desarrollo) y SQL Server (client
 se usan tipos genéricos del ORM, sin funciones específicas de un motor.
 
 Estructura:
-  Article     -> un artículo de periódico con su análisis global.
-  Entity      -> una figura pública o empresa mencionada, con la opinión hacia ella.
-  EntityAlias -> sigla ("MINERD") y su nombre canónico, editable desde el frontend.
+  Article          -> un artículo de periódico con su análisis global.
+  Entity           -> una mención de una figura/empresa EN UN artículo concreto,
+                       con la opinión hacia ella en ese artículo. Conserva el
+                       nombre tal como se mostró en ese artículo (puede diferir
+                       de CanonicalEntity.name si luego se corrigió el nombre
+                       canónico).
+  CanonicalEntity  -> la figura/empresa como dimensión: una fila por persona u
+                       organización real, sin importar en cuántos artículos ni
+                       con qué variante de nombre aparezca. Permite contar
+                       artículos por persona real (no por string) y que una
+                       corrección manual del nombre canónico se refleje para
+                       todas las menciones ya vinculadas.
+  EntityAlias      -> sigla ("MINERD") y su nombre canónico, editable desde el frontend.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -26,7 +36,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -66,7 +76,7 @@ class Article(Base):
     blamed_actor: Mapped[str | None] = mapped_column(String(300))     # señalado como causante
     credited_actor: Mapped[str | None] = mapped_column(String(300))   # presentado como solución
 
-    entities: Mapped[list["Entity"]] = relationship(
+    entities: Mapped[list[Entity]] = relationship(
         back_populates="article",
         cascade="all, delete-orphan",
     )
@@ -97,10 +107,54 @@ class Entity(Base):
     sentiment_score: Mapped[float | None] = mapped_column(Float)      # confianza 0..1
     context: Mapped[str | None] = mapped_column(Text)                 # frase(s) de ejemplo
 
-    article: Mapped["Article"] = relationship(back_populates="entities")
+    # ¿Cuán segura estuvo la extracción de que esta mención es real? 1.0 =
+    # certera (varias menciones, span limpio); más baja cuando el nombre es
+    # parcial y de una sola mención, señal de que conviene revisión manual.
+    extraction_confidence: Mapped[float] = mapped_column(Float, default=1.0)
+
+    # Nula hasta que se vincula (todas las escrituras nuevas la fijan; las
+    # filas guardadas antes de esta columna quedan sin vínculo).
+    canonical_entity_id: Mapped[int | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+
+    article: Mapped[Article] = relationship(back_populates="entities")
+    canonical_entity: Mapped[CanonicalEntity | None] = relationship(back_populates="mentions")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Entity {self.name} ({self.type}) {self.sentiment_toward}>"
+
+
+class CanonicalEntity(Base):
+    """Dimensión de personas/organizaciones: una fila por figura real.
+
+    `canonicalize_entities()` ya unifica el nombre dentro de cada artículo y
+    contra lo ya guardado (siglas, apellido único...); esta tabla persiste
+    ESE nombre resultante como fila durable, para poder agrupar menciones por
+    identidad real (no por string) y permitir una corrección manual (renombrar
+    o fusionar dos filas) que se refleje en todos los artículos ya vinculados,
+    no solo en análisis futuros.
+    """
+
+    __tablename__ = "canonical_entities"
+    __table_args__ = (
+        UniqueConstraint("name", "type", name="uq_canonical_entity_name_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(300), index=True)        # "Luis Abinader"
+    type: Mapped[str] = mapped_column(String(20))                     # "PERSON" | "ORG"
+    description: Mapped[str | None] = mapped_column(String(300))      # "Presidente de la RD"
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    mentions: Mapped[list[Entity]] = relationship(back_populates="canonical_entity")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<CanonicalEntity {self.name} ({self.type})>"
 
 
 class EntityAlias(Base):

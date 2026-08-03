@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select
 
 import db.aliases as alias_store
-from analysis.canonicalize import _norm_key, known_person_fullname_map, _NAME_PARTICLES
+from analysis.canonicalize import _NAME_PARTICLES, _norm_key, known_person_fullname_map
 from db.models import Article, Entity
 from db.session import get_session, init_db
 

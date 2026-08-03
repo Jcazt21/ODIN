@@ -7,8 +7,17 @@ queda ambiguo, y SOLO desde el flujo manual (`api.py`) — nunca desde
 en pruebas automatizadas, solo en uso real disparado por el usuario.
 
 Costo: TODOS los casos ambiguos de un artículo van en UNA sola llamada
-(`are_person_mentions`), no una llamada por entidad — el system prompt se
-paga una vez por artículo en lugar de N veces.
+(`are_person_mentions`), no una llamada por entidad — el system prompt es la
+mayor parte de los tokens de entrada y así se paga una vez por artículo en
+lugar de N veces.
+
+Emparejamiento: cada veredicto viene con el `case_id` de su caso. Se hizo así
+en lugar de una lista posicional de booleanos porque, con posiciones, que el
+modelo omitiera un caso intermedio corría todos los veredictos siguientes y se
+los aplicaba a la entidad equivocada, sin forma de detectarlo. Ver `_align`.
+
+Activación: requiere `ODIN_GEMINI_ARBITER=1` (apagado por defecto). Tener la
+llave configurada no basta — una credencial no debe activar gasto.
 
 Requisitos: pip install google-genai; GEMINI_API_KEY (o GOOGLE_API_KEY).
 """
@@ -23,14 +32,32 @@ log = logging.getLogger("odin.entity_arbiter")
 _MODEL = "gemini-3.5-flash"
 
 
-class _Verdicts(BaseModel):
-    is_person_mention: list[bool] = Field(
+class _Verdict(BaseModel):
+    """Un veredicto atado a su caso por número, no por posición.
+
+    La versión anterior devolvía `list[bool]` y se emparejaba por índice: si el
+    modelo omitía un caso intermedio, todos los veredictos siguientes se
+    aplicaban a la entidad equivocada y no había forma de notarlo. Con `case_id`
+    una respuesta incompleta o desordenada se detecta y solo afecta a los casos
+    realmente ausentes.
+    """
+
+    case_id: int = Field(
+        description="Número del CASO al que corresponde este veredicto (el que aparece como 'CASO N')"
+    )
+    is_person_mention: bool = Field(
         description=(
-            "Un veredicto por CASO, en el mismo orden: true si la oración "
-            "habla DE la persona (alguien que hizo, dijo o vivió algo en la "
-            "noticia); false si el nombre solo aparece porque es el nombre "
-            "de un lugar, edificio, calle, sala o evento nombrado en su honor"
+            "true si la oración habla DE la persona (alguien que hizo, dijo o "
+            "vivió algo en la noticia); false si el nombre solo aparece porque "
+            "es el nombre de un lugar, edificio, calle, sala o evento nombrado "
+            "en su honor"
         )
+    )
+
+
+class _Verdicts(BaseModel):
+    verdicts: list[_Verdict] = Field(
+        description="Un veredicto por cada CASO recibido, cada uno con su case_id"
     )
 
 
@@ -57,8 +84,37 @@ _SYSTEM = (
     'Medina" en la misma oración sí sería true, porque él sí participa).\n\n'
     "Ante una duda razonable, responde true — preferimos no perder una "
     "mención real a descartar de más. Devuelve exactamente un veredicto por "
-    "caso, en el mismo orden."
+    "caso, cada uno con el case_id del CASO correspondiente. No omitas "
+    "ningún caso ni inventes case_id que no te haya dado."
 )
+
+
+def _align(verdicts: list[_Verdict], total: int) -> list[bool]:
+    """Empareja los veredictos con los casos por `case_id`, no por posición.
+
+    Los casos van numerados 1..total. Lo que no venga con un case_id válido se
+    resuelve fail-open (True): preferimos conservar una mención real antes que
+    descartarla por un fallo del modelo. A diferencia del emparejamiento
+    posicional anterior, un caso omitido solo se pierde a sí mismo — no corre a
+    los demás — y queda registrado en el log en vez de pasar en silencio.
+    """
+    by_id: dict[int, bool] = {}
+    for v in verdicts:
+        if 1 <= v.case_id <= total:
+            by_id[v.case_id] = v.is_person_mention
+        else:
+            log.warning("árbitro devolvió un case_id fuera de rango: %s", v.case_id)
+
+    faltantes = [i for i in range(1, total + 1) if i not in by_id]
+    if faltantes:
+        log.warning(
+            "árbitro no devolvió veredicto para los casos %s de %d; se conservan "
+            "esas menciones",
+            faltantes,
+            total,
+        )
+
+    return [by_id.get(i, True) for i in range(1, total + 1)]
 
 
 def are_person_mentions(items: list[tuple[str, str]]) -> list[bool]:
@@ -86,15 +142,18 @@ def are_person_mentions(items: list[tuple[str, str]]) -> list[bool]:
                 "response_schema": _Verdicts,
                 "temperature": 0.0,
                 "thinking_config": {"thinking_budget": 0},
-                # el JSON es una lista de booleanos: unas decenas de tokens
-                "max_output_tokens": 64 + 8 * len(items),
+                # Cada veredicto es ahora un objeto {case_id, is_person_mention}
+                # en vez de un booleano suelto: ~20 tokens en lugar de ~3. El
+                # margen es holgado a propósito — quedarse corto trunca el JSON
+                # y tira toda la llamada al fail-open, que es justo el desperdicio
+                # que se quiere evitar.
+                "max_output_tokens": 128 + 32 * len(items),
             },
         )
-        verdicts = list(response.parsed.is_person_mention)
-        if len(verdicts) < len(items):
-            # respuesta incompleta: fail-open para los casos sin veredicto
-            verdicts += [True] * (len(items) - len(verdicts))
-        return verdicts[: len(items)]
+        # El SDK tipa `parsed` como una unión amplia; el `response_schema` de
+        # arriba garantiza que aquí viene un _Verdicts. Si no lo fuera, el
+        # except de abajo lo convierte en fail-open.
+        return _align(list(response.parsed.verdicts), len(items))  # type: ignore[union-attr]
     except Exception:
         log.warning(
             "árbitro de Gemini falló para %d casos; se conservan las menciones",

@@ -5,6 +5,34 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Sin bytecode cacheado (contenedor efímero, no aporta) y logs sin buffer
+# (aparecen en `docker logs` al instante en vez de esperar a que el buffer
+# de stdout se llene). HOME se define más abajo, recién antes del USER
+# appuser: si se define acá arriba, pip (que todavía corre como root en los
+# pasos de instalación) resolvería su cache por defecto a
+# $HOME/.cache/pip en vez de /root/.cache/pip, que es donde apunta el
+# --mount=type=cache de abajo — el cache dejaría de usarse y encima
+# quedaría escrito dentro de la capa de la imagen.
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# El modelo de spaCy va primero y en su propia capa: el cache de capas de
+# Docker es en cascada (si una capa se invalida, todas las siguientes en el
+# mismo stage se reconstruyen aunque su propia instrucción no cambie). Como
+# requirements.txt cambia seguido, si esta capa fuera *después* de instalar
+# requirements.txt, cada cambio ahí forzaría re-descargar los ~568MB del
+# modelo también. Puesta antes, solo se re-descarga si cambia esta línea.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl
+
+# torch llega de rebote (pysentimiento -> transformers/accelerate -> torch).
+# El índice por defecto de PyPI resuelve a la build con CUDA, que arrastra
+# los paquetes nvidia-*/triton (~4.5GB) sin ninguna GPU disponible en el
+# contenedor. Instalarlo antes desde el índice CPU oficial hace que pip lo
+# encuentre ya satisfecho al procesar requirements.txt y no lo reemplace.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
+
 # psycopg2-binary trae libpq embebido; no hacen falta headers de compilación.
 #
 # Cache de capas + cache de BuildKit (--mount=type=cache): mientras
@@ -15,13 +43,19 @@ COPY requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r requirements.txt
 
-# El modelo de spaCy va en su propia capa: al no depender de requirements.txt,
-# no se vuelve a descargar cuando cambian las dependencias de Python (ni al
-# revés). Solo se re-descarga si cambia esta línea.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl
+# Usuario sin privilegios para correr la app: si el proceso se ve
+# comprometido (RCE en alguna dependencia, etc.) no queda como root dentro
+# del contenedor. El cache de huggingface/spaCy vive bajo su home (ver
+# volumen hf_cache en docker-compose.yml, actualizado a esta misma ruta).
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser \
+    && mkdir -p /home/appuser/.cache/huggingface \
+    && chown -R appuser:appuser /home/appuser
 
-COPY . .
+ENV HOME=/home/appuser
+
+COPY --chown=appuser:appuser . .
+
+USER appuser
 
 EXPOSE 8000
 

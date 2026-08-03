@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: odin
+Version: 0.1.0
+Summary: Análisis de artículos de prensa dominicana: extracción, NER y sentimiento
+Requires-Python: <3.14,>=3.12
+Requires-Dist: requests>=2.32
+Requires-Dist: trafilatura>=1.12
+Requires-Dist: feedparser>=6.0
+Requires-Dist: beautifulsoup4>=4.12
+Requires-Dist: lxml>=5.2
+Requires-Dist: SQLAlchemy>=2.0
+Requires-Dist: psycopg2-binary>=2.9
+Requires-Dist: pysentimiento>=0.7
+Requires-Dist: spacy>=3.7
+Requires-Dist: google-genai>=1.0
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: fastapi>=0.115
+Requires-Dist: uvicorn[standard]>=0.32
+Requires-Dist: PyJWT>=2.9
+Provides-Extra: dev
+Requires-Dist: ruff>=0.9; extra == "dev"
+Requires-Dist: mypy>=1.14; extra == "dev"
+Requires-Dist: pre-commit>=4.0; extra == "dev"
+Requires-Dist: pytest>=8.3; extra == "dev"
+Requires-Dist: pip-tools>=7.4; extra == "dev"

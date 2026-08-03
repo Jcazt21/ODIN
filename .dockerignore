@@ -5,6 +5,20 @@ __pycache__
 .git
 .env
 odin.db
-frontend/node_modules
-frontend/dist
+# El backend nunca toca código de frontend; tiene su propio contexto/
+# .dockerignore en frontend/. Excluirlo entero evita copiar ~decenas de MB
+# de fuente JS/assets irrelevantes dentro de la imagen del backend.
+frontend
 docs
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+odin.egg-info
+.agents
+.pre-commit-config.yaml
+pyproject.toml
+requirements.lock
+README.md
+task.md
+deploy-test.md

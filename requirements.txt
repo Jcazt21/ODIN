@@ -9,6 +9,7 @@ lxml>=5.2
 SQLAlchemy>=2.0
 psycopg2-binary>=2.9     # driver PostgreSQL
 # pyodbc>=5.1            # descomentar para SQL Server (requiere ODBC Driver 17/18)
+alembic>=1.13            # migraciones versionadas (alembic upgrade head)
 
 # --- Análisis en español (modelos locales, gratis) ---
 pysentimiento>=0.7       # sentimiento/emoción en español (BETO/RoBERTuito)
@@ -25,3 +26,4 @@ python-dotenv>=1.0
 # --- API (frontend) ---
 fastapi>=0.115
 uvicorn[standard]>=0.32
+PyJWT>=2.9               # tokens de sesión del login (HS256)

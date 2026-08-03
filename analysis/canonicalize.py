@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import unicodedata
+from typing import Any
 
 from sqlalchemy import select
 
@@ -35,6 +36,26 @@ log = logging.getLogger("odin.canonicalize")
 # partículas que no cuentan como "palabra significativa" de un nombre
 _NAME_PARTICLES = {"de", "del", "la", "las", "los", "y", "e"}
 
+# títulos de cortesía/cargo que spaCy a veces incluye en el span de PERSON
+# cuando van pegados al nombre sin coma ("Presidente Abinader" como una sola
+# entidad): no son parte del nombre y duplican la entidad si se dejan (misma
+# persona con y sin título cuenta como dos claves distintas).
+_TITLE_WORDS = {
+    "presidente", "vicepresidente", "ministro", "ministra", "director", "directora",
+    "senador", "senadora", "diputado", "diputada", "gobernador", "gobernadora",
+    "alcalde", "alcaldesa", "general", "coronel", "doctor", "doctora", "ingeniero",
+    "ingeniera", "licenciado", "licenciada", "reverendo", "monsenor", "cardenal",
+    "obispo", "padre", "pastor", "pastora",
+}
+
+
+def _strip_title_prefix(name: str) -> str:
+    """Elimina un título de cortesía del inicio del nombre, si lo hay."""
+    words = name.split()
+    if len(words) > 1 and _strip_accents(words[0].lower()) in _TITLE_WORDS:
+        return " ".join(words[1:])
+    return name
+
 
 def _strip_accents(text: str) -> str:
     return "".join(
@@ -43,13 +64,20 @@ def _strip_accents(text: str) -> str:
 
 
 def _norm_key(name: str) -> str:
-    """Clave de comparación: sin acentos, minúsculas, espacios colapsados."""
+    """Clave de comparación: sin acentos, minúsculas, espacios colapsados.
+
+    Guiones -> espacio ("Jean-Claude" == "Jean Claude") y puntos fuera
+    ("P.R.M." == "PRM"), para que variantes tipográficas de la misma sigla o
+    nombre compuesto no generen entidades duplicadas.
+    """
+    name = name.replace("-", " ").replace(".", "")
     return " ".join(_strip_accents(name).lower().split())
 
 
 def known_person_fullname_map() -> dict[str, str]:
     """Mapa apellido -> nombre completo, construido con los PERSON ya guardados
-    en la BD y los canónicos PERSON del catálogo de aliases.
+    en la BD, los `canonical_entities` PERSON (incluye renombrados manuales) y
+    los canónicos PERSON del catálogo de aliases.
 
     Solo se indexa la ÚLTIMA palabra significativa de cada nombre completo
     ("abinader" para "Luis Abinader"): es el patrón con que la prensa abrevia
@@ -60,8 +88,14 @@ def known_person_fullname_map() -> dict[str, str]:
     Leonel, Omar y César en la BD no se toca). Se consulta en cada análisis
     (las tablas son pequeñas); si la BD no está disponible, devuelve vacío en
     lugar de romper el análisis.
+
+    Incluir `canonical_entities` (no solo `Entity.name`) es lo que cierra el
+    ciclo de retroalimentación: si un usuario corrige el nombre de una figura
+    en el panel de entidades canónicas, esa corrección entra aquí en el
+    siguiente análisis — no hace falta esperar a que la prensa repita el
+    nombre completo en un artículo nuevo para que vuelva a resolverse bien.
     """
-    from db.models import Entity
+    from db.models import CanonicalEntity, Entity
     from db.session import get_session
 
     candidates: dict[str, set[str]] = {}
@@ -78,13 +112,19 @@ def known_person_fullname_map() -> dict[str, str]:
             names = session.scalars(
                 select(Entity.name).where(Entity.type == "PERSON").distinct()
             ).all()
+            canonical_names = session.scalars(
+                select(CanonicalEntity.name).where(CanonicalEntity.type == "PERSON")
+            ).all()
         finally:
             session.close()
     except Exception:
         log.warning("no se pudo leer entidades PERSON de la BD", exc_info=True)
         names = []
+        canonical_names = []
 
     for name in names:
+        _index(name)
+    for name in canonical_names:
         _index(name)
     for canonical, etype in alias_store.all_canonicals():
         if etype == "PERSON":
@@ -117,12 +157,27 @@ def _resolve_partial_persons(entities: list, person_map: dict[str, str]) -> None
             ent.name = full
 
 
+def _significant_words(nkey: str) -> set[str]:
+    return {w for w in nkey.split() if w not in _NAME_PARTICLES}
+
+
 def _merge_duplicates(entities: list) -> list:
     """Funde entidades con el mismo (nombre normalizado, tipo) y las que están
     contenidas por palabras en un nombre más largo del mismo tipo. Conserva el
-    sentimiento de la variante con más menciones y suma los conteos."""
+    sentimiento de la variante con más menciones y suma los conteos.
+
+    Para PERSON también funde por nombre parcial no contiguo ("Luis Abinader"
+    dentro de "Luis Rodolfo Abinader Corona"): el apellido materno que la
+    prensa omite queda al final del nombre legal, así que exigir subcadena
+    contigua (el chequeo de arriba) nunca conecta ambas formas. Se exige que
+    TODAS las palabras significativas del nombre corto aparezcan en el largo
+    (no solo una) y que el nombre largo sea la única coincidencia, para no
+    fundir por un solo nombre de pila compartido ("Juan Pablo Duarte" con
+    "Juan Pablo Pichardo")."""
     ordered = sorted(entities, key=lambda e: (len(_norm_key(e.name)), e.mentions_count), reverse=True)
-    merged: dict[tuple[str, str], object] = {}
+    # Any y no un tipo concreto: esto trabaja por duck typing sobre EntityResult
+    # (análisis) y EntityPayload (API), que comparten campos pero no jerarquía.
+    merged: dict[tuple[str, str], Any] = {}
     for ent in ordered:
         nkey = _norm_key(ent.name)
         if not nkey:
@@ -135,6 +190,17 @@ def _merge_duplicates(entities: list) -> list:
                 if mtype == ent.type and f" {nkey} " in f" {mkey} ":
                     target_key = (mkey, mtype)
                     break
+        if target_key is None and ent.type == "PERSON":
+            words = _significant_words(nkey)
+            if len(words) >= 2:
+                candidates = [
+                    (mkey, mtype)
+                    for mkey, mtype in merged
+                    if mtype == ent.type
+                    and words < _significant_words(mkey)  # subconjunto propio: mkey debe ser más largo
+                ]
+                if len(candidates) == 1:
+                    target_key = candidates[0]
         if target_key is None:
             merged[(nkey, ent.type)] = ent
         else:
@@ -145,6 +211,14 @@ def _merge_duplicates(entities: list) -> list:
                 dst.sentiment_score = ent.sentiment_score
             if dst.context is None:
                 dst.context = ent.context
+            # La fusión en sí es evidencia de que la identidad es correcta
+            # (dos variantes del mismo string apuntan a la misma persona):
+            # se queda con la confianza más alta entre las variantes, no la
+            # del nombre más largo por defecto.
+            dst_conf = getattr(dst, "extraction_confidence", 1.0)
+            src_conf = getattr(ent, "extraction_confidence", 1.0)
+            if src_conf > dst_conf:
+                dst.extraction_confidence = src_conf
     result = list(merged.values())
     result.sort(key=lambda e: e.mentions_count, reverse=True)
     return result
@@ -157,6 +231,8 @@ def canonicalize_entities(entities: list, person_map: dict[str, str] | None = No
     entities = [e for e in entities if (e.name or "").strip()]
     for ent in entities:
         ent.name = " ".join(ent.name.split())
+        if ent.type == "PERSON":
+            ent.name = _strip_title_prefix(ent.name)
     _apply_alias_catalog(entities)
     if person_map is None:
         person_map = known_person_fullname_map()

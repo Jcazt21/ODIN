@@ -1,10 +1,15 @@
+import { clearSession, getToken, notifyAuthExpired, setSession } from "@/lib/auth"
+
 export interface EntityAnalysis {
+  id?: number
   name: string
   type: "PERSON" | "ORG" | string
   mentions_count: number
   sentiment_toward: "POS" | "NEG" | "NEU" | null
   sentiment_score: number | null
   context: string | null
+  extraction_confidence?: number
+  canonical_entity_id?: number | null
 }
 
 export type Framing =
@@ -132,12 +137,70 @@ export interface AliasUpdatePayload {
   is_active?: boolean
 }
 
+// ── Entidades canónicas ──────────────────────────────────────────────────────
+
+export interface CanonicalEntity {
+  id: number
+  name: string
+  type: "PERSON" | "ORG"
+  description: string | null
+  created_at: string
+  updated_at: string
+  article_count: number
+  total_mentions: number
+}
+
+export interface CanonicalEntityDetail extends CanonicalEntity {
+  articles: {
+    article_id: number
+    title: string
+    url: string
+    source: string
+    published_at: string | null
+    sentiment_toward: "POS" | "NEG" | "NEU" | null
+    mentions_count: number
+  }[]
+}
+
+export interface CanonicalEntityListResponse {
+  total: number
+  limit: number
+  offset: number
+  items: CanonicalEntity[]
+}
+
+export interface CanonicalEntityListParams {
+  q?: string
+  type?: "ORG" | "PERSON"
+  limit?: number
+  offset?: number
+}
+
+export interface CanonicalEntityUpdatePayload {
+  name?: string
+  description?: string
+}
+
 export class OdinApiError extends Error {}
 
 const BASE = ""
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, init)
+  const headers = new Headers(init?.headers)
+  const token = getToken()
+  if (token) headers.set("Authorization", `Bearer ${token}`)
+
+  const res = await fetch(BASE + path, { ...init, headers })
+
+  // 401 = token ausente, inválido o vencido. Se limpia la sesión y App vuelve
+  // al login en vez de dejar la pantalla mostrando un error genérico.
+  if (res.status === 401) {
+    clearSession()
+    notifyAuthExpired()
+    const body = await res.json().catch(() => null)
+    throw new OdinApiError(body?.detail ?? "La sesión expiró.")
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => null)
     throw new OdinApiError(body?.detail ?? `Error ${res.status} en ${path}.`)
@@ -165,6 +228,40 @@ async function putJson<T>(path: string, payload: unknown): Promise<T> {
 async function del(path: string): Promise<void> {
   return request<void>(path, { method: "DELETE" })
 }
+
+// ── Autenticación ───────────────────────────────────────────────────────────
+
+export interface LoginResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+  username: string
+}
+
+/** Inicia sesión y guarda el token. No pasa por request(): un 401 aquí es una
+ *  contraseña equivocada, no una sesión vencida, y no debe disparar el evento
+ *  que devuelve la aplicación al login. */
+export async function login(username: string, password: string): Promise<LoginResponse> {
+  const res = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new OdinApiError(body?.detail ?? "No se pudo iniciar sesión.")
+  }
+  const data: LoginResponse = await res.json()
+  setSession(data.access_token, data.username)
+  return data
+}
+
+/** Valida el token guardado al abrir la aplicación. */
+export function getMe(): Promise<{ username: string }> {
+  return request<{ username: string }>("/api/auth/me")
+}
+
+// ── Análisis ────────────────────────────────────────────────────────────────
 
 export function analyzeUrl(url: string): Promise<ArticleAnalysis> {
   return postJson("/api/analyze", { url })
@@ -215,4 +312,36 @@ export function deleteAlias(id: number): Promise<void> {
 
 export function toggleAlias(alias: EntityAlias): Promise<EntityAlias> {
   return updateAlias(alias.id, { is_active: !alias.is_active })
+}
+
+// ── Entidades canónicas ──────────────────────────────────────────────────────
+
+export function listCanonicalEntities(
+  params: CanonicalEntityListParams = {}
+): Promise<CanonicalEntityListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return request<CanonicalEntityListResponse>(`/api/canonical-entities${s ? `?${s}` : ""}`)
+}
+
+export function getCanonicalEntity(id: number): Promise<CanonicalEntityDetail> {
+  return request<CanonicalEntityDetail>(`/api/canonical-entities/${id}`)
+}
+
+export function updateCanonicalEntity(
+  id: number,
+  payload: CanonicalEntityUpdatePayload
+): Promise<CanonicalEntity> {
+  return putJson(`/api/canonical-entities/${id}`, payload)
+}
+
+export function mergeCanonicalEntities(
+  targetId: number,
+  sourceId: number
+): Promise<CanonicalEntity> {
+  return postJson(`/api/canonical-entities/${targetId}/merge`, { source_id: sourceId })
 }

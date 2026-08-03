@@ -9,6 +9,7 @@ import logging
 
 from sqlalchemy import select
 
+import db.canonical_entities as canonical_entity_store
 from analysis.base import Analyzer
 from analysis.canonicalize import canonicalize_result, known_person_fullname_map
 from db.models import Article, Entity
@@ -56,6 +57,7 @@ def _persist(
         credited_actor=result.credited_actor,
     )
     for e in result.entities:
+        canonical = canonical_entity_store.get_or_create(session, e.name, e.type)
         article.entities.append(
             Entity(
                 name=e.name,
@@ -64,6 +66,8 @@ def _persist(
                 sentiment_toward=e.sentiment_toward,
                 sentiment_score=e.sentiment_score,
                 context=e.context,
+                extraction_confidence=e.extraction_confidence,
+                canonical_entity=canonical,
             )
         )
     session.add(article)

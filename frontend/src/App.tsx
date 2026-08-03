@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from "react"
-import { X } from "lucide-react"
+import { useEffect, useState, type FormEvent } from "react"
+import { LogOut, X, AlertTriangle } from "lucide-react"
 import { Aurora } from "@/components/Aurora"
 import { PillNav } from "@/components/PillNav"
 import { SentimentBadge } from "@/components/SentimentBadge"
 import { AliasManager } from "@/components/AliasManager"
+import { CanonicalEntityManager } from "@/components/CanonicalEntityManager"
 import { ReportsList } from "@/components/ReportsList"
+import { LoginScreen } from "@/components/LoginScreen"
 import { Button } from "@/components/ui/button"
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button"
 import { ShimmerText } from "@/components/ui/shimmer-text"
@@ -22,21 +24,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import {
   analyzeUrl,
+  getMe,
   saveArticle,
   OdinApiError,
   type ArticleAnalysis,
   type EntityAnalysis,
   type SaveArticlePayload,
 } from "@/lib/odin-api"
+import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername } from "@/lib/auth"
 
 const SENTIMENTS = ["POS", "NEG", "NEU"] as const
 
 // Fuera del componente: una referencia estable evita que el efecto de layout
 // de PillNav se re-ejecute en cada render de App.
 const NAV_ITEMS = [
-  { label: "Analizar", tab: "analyze" },
-  { label: "Reportes", tab: "reports" },
-  { label: "Siglas",   tab: "aliases" },
+  { label: "Analizar",   tab: "analyze" },
+  { label: "Reportes",   tab: "reports" },
+  { label: "Entidades",  tab: "entities" },
+  { label: "Siglas",     tab: "aliases" },
 ]
 
 // Etiquetas legibles para el análisis de encuadre (valores del backend)
@@ -81,13 +86,21 @@ function formatDate(value: string | null) {
   }
 }
 
+function isLowConfidence(e: EntityAnalysis) {
+  return typeof e.extraction_confidence === "number" && e.extraction_confidence < 0.9
+}
+
 function toDraft(a: ArticleAnalysis): SaveArticlePayload {
   const { id: _id, already_saved: _saved, ...rest } = a
   return { ...rest, entities: a.entities.map((e) => ({ ...e })) }
 }
 
-function App() {
-  const [tab, setTab] = useState<"analyze" | "reports" | "aliases">("analyze")
+interface WorkspaceProps {
+  onLogout: () => void
+}
+
+function Workspace({ onLogout }: WorkspaceProps) {
+  const [tab, setTab] = useState<"analyze" | "reports" | "entities" | "aliases">("analyze")
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -166,15 +179,28 @@ function App() {
       <PillNav
         wordmark="ODIN"
         activeTab={tab}
-        onTabChange={(t) => setTab(t as "analyze" | "reports" | "aliases")}
+        onTabChange={(t) => setTab(t as "analyze" | "reports" | "entities" | "aliases")}
         items={NAV_ITEMS}
         initialLoadAnimation
       />
 
+      {/* Cerrar sesión — alineado con la altura del PillNav (top: 1.1em) */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onLogout}
+        title="Cerrar sesión"
+        aria-label="Cerrar sesión"
+        className="fixed right-4 top-[1.1em] z-[99] size-11 rounded-full text-muted-foreground hover:text-foreground"
+      >
+        <LogOut />
+      </Button>
+
       <main
         className={cn(
           "mx-auto flex flex-col items-center gap-8 px-4 pt-28 pb-16",
-          tab === "reports" ? "max-w-5xl" : "max-w-3xl"
+          tab === "reports" || tab === "entities" ? "max-w-5xl" : "max-w-3xl"
         )}
       >
 
@@ -186,7 +212,7 @@ function App() {
                 ODIN
               </ShimmerText>
             </div>
-            
+
             <form onSubmit={handleSubmit} className="flex w-full max-w-2xl gap-2">
               <Input
                 type="url"
@@ -486,11 +512,30 @@ function App() {
                                   {ent.mentions_count}{" "}
                                   {ent.mentions_count === 1 ? "mención" : "menciones"}
                                 </span>
+                                {isLowConfidence(ent) && (
+                                  <span
+                                    className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                    title="Confianza de extracción baja: revisa si el nombre/tipo es correcto."
+                                  >
+                                    <AlertTriangle className="h-3 w-3" />
+                                    revisar
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ) : (
                             <div>
-                              <CardTitle className="text-base">{ent.name}</CardTitle>
+                              <CardTitle className="flex items-center gap-1.5 text-base">
+                                {ent.name}
+                                {isLowConfidence(ent) && (
+                                  <AlertTriangle
+                                    className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                    aria-label="Confianza de extracción baja"
+                                  >
+                                    <title>Confianza de extracción baja: revisa si el nombre/tipo es correcto.</title>
+                                  </AlertTriangle>
+                                )}
+                              </CardTitle>
                               <CardDescription>
                                 {ent.type === "PERSON" ? "Persona" : "Organización"}
                                 {" · "}
@@ -564,11 +609,67 @@ function App() {
         {/* ── Tab: Reportes ─────────────────────────────────────────── */}
         {tab === "reports" && <ReportsList />}
 
+        {/* ── Tab: Entidades canónicas ─────────────────────────────── */}
+        {tab === "entities" && <CanonicalEntityManager />}
+
         {/* ── Tab: Siglas ────────────────────────────────────────────── */}
         {tab === "aliases" && <AliasManager />}
       </main>
     </div>
   )
+}
+
+/**
+ * Puerta de entrada: sin sesión válida no se monta nada del workspace.
+ *
+ * Al abrir la aplicación con un token guardado lo validamos contra
+ * /api/auth/me — puede haber vencido o haber sido firmado con otro secreto
+ * (la API reinició sin ODIN_JWT_SECRET). Mientras tanto se muestra solo el
+ * fondo, para no parpadear entre login y workspace.
+ */
+function App() {
+  const [username, setUsername] = useState<string | null>(() =>
+    getToken() ? getUsername() : null
+  )
+  const [checking, setChecking] = useState(() => Boolean(getToken()))
+
+  // Cualquier 401 en cualquier llamada devuelve al login.
+  useEffect(() => {
+    const onExpired = () => setUsername(null)
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
+  }, [])
+
+  useEffect(() => {
+    if (!getToken()) return
+    let alive = true
+    getMe()
+      .then((me) => alive && setUsername(me.username))
+      .catch(() => alive && setUsername(null)) // el 401 ya limpió el token
+      .finally(() => alive && setChecking(false))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  function handleLogout() {
+    clearSession()
+    setUsername(null)
+  }
+
+  if (checking) {
+    return (
+      <div className="relative min-h-screen">
+        <Aurora />
+      </div>
+    )
+  }
+
+  if (!username) {
+    return <LoginScreen onSuccess={setUsername} />
+  }
+
+  return <Workspace onLogout={handleLogout} />
 }
 
 export default App

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { ChevronLeft, ChevronRight, RotateCcw, Search, X } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -71,6 +71,10 @@ function formatDate(value: string | null) {
   } catch {
     return value
   }
+}
+
+function isLowConfidence(ent: { extraction_confidence?: number }) {
+  return typeof ent.extraction_confidence === "number" && ent.extraction_confidence < 0.9
 }
 
 type HardDataFilter = "" | "true" | "false"
@@ -466,7 +470,17 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
                     <CardHeader className="px-4">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <CardTitle className="text-base">{ent.name}</CardTitle>
+                          <CardTitle className="flex items-center gap-1.5 text-base">
+                            {ent.name}
+                            {isLowConfidence(ent) && (
+                              <AlertTriangle
+                                className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+                                aria-label="Confianza de extracción baja"
+                              >
+                                <title>Confianza de extracción baja: revisa si el nombre/tipo es correcto.</title>
+                              </AlertTriangle>
+                            )}
+                          </CardTitle>
                           <CardDescription>
                             {ent.type === "PERSON" ? "Persona" : "Organización"}
                             {" · "}

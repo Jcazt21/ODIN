@@ -1,0 +1,51 @@
+# Ganchos de calidad que corren en cada commit.
+#
+# Instalación (una vez por clon):
+#   pip install -e ".[dev]"
+#   pre-commit install
+#
+# Correrlos a mano sobre todo el repo:
+#   pre-commit run --all-files
+
+exclude: '^(frontend/(node_modules|dist)/|\.venv/)'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      # Un .env con la llave de Gemini o el secreto del JWT no debe llegar
+      # nunca al historial, aunque .gitignore falle.
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      # `ruff-format` está deliberadamente apagado: reformatear todo el
+      # backend antes de tener pruebas (§12 #6) genera un diff enorme que
+      # esconde los cambios reales. Se activa después.
+
+  - repo: local
+    hooks:
+      # mypy corre desde el entorno del proyecto y no en uno aislado: necesita
+      # ver fastapi, sqlalchemy y compañía para decir algo útil. Se invoca
+      # con ruta explícita a .venv/bin/mypy (no solo "mypy") porque
+      # `language: system` depende del PATH del proceso que dispara el
+      # commit — en terminal el venv suele estar activado, pero el panel de
+      # Source Control de VSCode invoca git con su propio PATH, sin el
+      # venv, y "Executable mypy not found" aborta el commit entero.
+      - id: mypy
+        name: mypy
+        entry: .venv/bin/mypy
+        language: system
+        types: [python]
+        pass_filenames: false

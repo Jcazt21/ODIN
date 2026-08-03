@@ -1,13 +1,20 @@
-# Odin — Scraping y análisis de periódicos dominicanos
+# Odin — Análisis de artículos de prensa dominicana, a demanda
 
-Odin rastrea **Listín Diario** y **Diario Libre**, lee cada artículo, lo analiza
-y guarda en una base de datos:
+Odin analiza artículos de prensa dominicana **uno a uno y a petición tuya**: le
+pegas la URL de un artículo, él lo descarga y lo analiza, tú revisas el
+resultado y decides si se guarda en la base de datos.
 
 - **Autor**, **título**, **fecha**, **sección**, **cuerpo**, **URL**, **fuente**
 - **De qué se habla**: tema principal + palabras clave
 - **Sentimiento global**: `POS` / `NEG` / `NEU` (bueno / malo / neutro)
 - **Figuras públicas y empresas** mencionadas
 - **Opinión hacia cada figura/empresa**: si hablan bien, mal o neutro de ella
+
+> **No hay nada automático.** Odin no sale a buscar noticias por su cuenta, no
+> corre solo y no consulta feeds ni sitemaps en el flujo normal: procesa
+> únicamente las URLs que tú le pegas. Existe además un rastreo masivo por
+> consola, **opcional y de ejecución manual** — ver
+> [Rastreo masivo](#rastreo-masivo-opcional-y-manual).
 
 El análisis usa por defecto **modelos locales gratis** (spaCy + pysentimiento en
 español), sin API de pago.
@@ -87,28 +94,27 @@ funciona sin configuración extra con `docker compose build` / `docker compose u
 
 ## Cómo funciona
 
-Odin ejecuta un **pipeline de 5 pasos** encadenados. Le das una orden por
-consola y él hace todo el recorrido, de la web a la base de datos:
+El flujo normal —y el único que hace falta— arranca **siempre contigo pegando
+una URL**. Odin nunca decide por su cuenta qué analizar:
 
 ```mermaid
 flowchart LR
-    A[1. Descubrir<br/>qué artículos hay] --> B[2. Descargar<br/>el HTML]
+    A[1. Pegas la URL<br/>del artículo] --> B[2. Descargar<br/>el HTML]
     B --> C[3. Extraer<br/>título, autor, cuerpo]
     C --> D[4. Analizar<br/>tema, sentimiento, figuras]
-    D --> E[5. Guardar<br/>en la base de datos]
-    E --> F[(BD)]
+    D --> E[5. Revisas<br/>y corriges]
+    E --> F[6. Guardar<br/>si te convence]
+    F --> G[(BD)]
 ```
 
 Paso a paso, con palabras sencillas:
 
-1. **Descubrir** — Odin pregunta a cada periódico qué publicó hoy.
-   Diario Libre lo dice por **RSS** (9 secciones); Listín no tiene RSS, así que
-   Odin lee su **sitemap de Google News**. Resultado: una lista de URLs de
-   artículos.
+1. **Pegas la URL** — en la pestaña **Analizar** del frontend. Por debajo es un
+   `POST /api/analyze` con esa dirección y nada más: no se consulta ningún feed,
+   ningún sitemap, ni se pregunta qué publicó el periódico hoy.
 
-2. **Descargar** — baja el HTML de cada URL. Si la red falla, **reintenta** con
-   esperas crecientes; y descarga **varios artículos a la vez** (en paralelo)
-   para ir más rápido, sin saturar al periódico.
+2. **Descargar** — baja el HTML de esa única URL. Si la red falla, **reintenta**
+   con esperas crecientes.
 
 3. **Extraer** — de ese HTML saca los campos limpios (título, autor, fecha,
    sección, cuerpo) con `trafilatura`, que funciona en casi cualquier periódico
@@ -120,10 +126,30 @@ Paso a paso, con palabras sencillas:
    - encuentra las **figuras públicas y empresas** mencionadas y, para cada una,
      estima si el artículo **habla bien, mal o neutro** de ella.
 
-5. **Guardar** — escribe todo en la base de datos. Si un artículo ya estaba
-   guardado (misma URL), lo **omite** para no repetir trabajo.
+5. **Revisas** — el resultado se te muestra antes de tocar la base de datos.
+   Puedes corregir entidades y sentimientos.
 
-Después puedes **consultar** lo guardado con `report.py`.
+6. **Guardar** — solo si lo pides (`POST /api/articles`). Si esa URL ya estaba
+   guardada, no se duplica.
+
+Después puedes **consultar** lo guardado con `report.py` o en la pestaña
+**Reportes**.
+
+### Rastreo masivo (opcional y manual)
+
+Odin también trae un rastreador de lotes, **que no se usa en el alcance actual**
+y **nunca corre solo**: no hay cron, no hay scheduler, y el servicio `scraper` de
+`docker-compose.yml` está detrás del perfil `tools`, así que `docker compose up`
+no lo arranca. Solo se ejecuta si tú escribes `python main.py` a mano.
+
+Cuando se ejecuta, antepone un paso de **descubrimiento**: le pregunta a cada
+periódico qué publicó hoy —Diario Libre por **RSS**, Listín por su **sitemap de
+Google News**— y de ahí saca una lista de URLs que luego pasa por los mismos
+pasos 2-4, guardando sin revisión humana.
+
+> Está documentado porque el código existe, no porque haga falta usarlo. Si en
+> algún momento quieres monitoreo continuo en vez de análisis a demanda, este es
+> el punto de partida.
 
 > ¿Quieres el detalle técnico de cada paso, con diagramas de flujo, la máquina de
 > reintentos, el modelo de datos y el diagrama de secuencia completo? Está en
@@ -161,10 +187,28 @@ más:
 - **`GeminiAnalyzer`** (opcional, **de pago**): la **API de Google Gemini**,
   mucho más precisa para "¿hablan bien o mal de esta figura?".
 
-```python
-from analysis.gemini_analyzer import GeminiAnalyzer
-from pipeline import run
-run(analyzer=GeminiAnalyzer())   # requiere: pip install google-genai + GEMINI_API_KEY
+### Cuál se usa, y por qué nunca por accidente
+
+El motor se elige **siempre de forma explícita**. Tener `GEMINI_API_KEY` en el
+`.env` **no** activa el modo de pago: la llave puede estar ahí para el CLI, o
+simplemente olvidada. Una credencial no debe ser un interruptor de gasto.
+
+| Variable | Valor | Qué hace |
+|---|---|---|
+| `ODIN_ANALYZER` | `local` *(por defecto)* | spaCy + pysentimiento. **Gratis.** |
+| `ODIN_ANALYZER` | `gemini` | Una llamada **facturada** a Gemini por cada análisis. |
+| `ODIN_GEMINI_ARBITER` | `0` *(por defecto)* | Sin llamadas extra. |
+| `ODIN_GEMINI_ARBITER` | `1` | Llamada **facturada** adicional para desambiguar personas dudosas (solo aplica con `ODIN_ANALYZER=local`). |
+
+Un valor inválido (`ODIN_ANALYZER=gemeni`) **falla al arrancar** en vez de caer
+en un default silencioso. Y al iniciar, la API escribe en el log qué motor está
+usando, con aviso explícito si es el de pago.
+
+En la consola es el mismo criterio, con `--analyzer`:
+
+```bash
+python main.py                      # local, gratis (por defecto)
+python main.py --analyzer gemini    # de pago, explícito
 ```
 
 ---
@@ -172,23 +216,32 @@ run(analyzer=GeminiAnalyzer())   # requiere: pip install google-genai + GEMINI_A
 ## Estructura del código
 
 ```
-main.py              punto de entrada (CLI)
-pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
+api.py               API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
+auth.py              login de usuario único + JWT
+frontend/            React + Vite — pestañas Analizar / Reportes / Siglas
 config.py            configuración por variables de entorno (.env)
 scrapers/
-  base.py            lógica común: descarga (reintentos/concurrencia) + extracción
-  diario_libre.py    feeds RSS por sección
-  listin.py          sitemap de Google News (Listín no tiene RSS)
+  base.py            descarga (reintentos) + extracción con trafilatura
+  do_scrapers.py     las 8 fuentes dominicanas (descubrimiento por RSS/sitemap)
 analysis/
   base.py            interfaz Analyzer  <-- pieza intercambiable
   local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
   gemini_analyzer.py Google Gemini (opcional, de pago)
+  canonicalize.py    unificación de nombres de entidades
+  entity_arbiter.py  desambiguación puntual (solo flujo manual)
 db/
-  models.py          tablas: Article, Entity (SQLAlchemy)
+  models.py          tablas: Article, Entity, EntityAlias (SQLAlchemy)
   session.py         conexión (SQLite / PostgreSQL / SQL Server)
+  aliases.py         resolución de siglas
 report.py            consultas rápidas de resultados
+scripts/             utilidades sueltas (hash de contraseña, fusión de entidades)
+
+--- rastreo masivo, opcional y manual ---
+main.py              punto de entrada (CLI)
+pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
+
 docs/PROCESOS.md     documentación técnica de cada proceso
-docs/docker.md        cómo funciona la dockerización (servicios, cache, comandos)
+docs/docker.md       cómo funciona la dockerización (servicios, cache, comandos)
 ```
 
 ---
@@ -239,12 +292,13 @@ El modelo de datos es portable: **no hay que reescribir código**, solo esta lí
 > Guía completa paso a paso (instalación, BD, comandos, problemas comunes):
 > **[docs/GUIA_DE_USO.md](docs/GUIA_DE_USO.md)**.
 
+**Uso normal**: levantas el backend y el frontend, entras a la interfaz, y en la
+pestaña **Analizar** pegas la URL del artículo. Todo el flujo vive ahí.
+
 ```bash
-python main.py --list-sources          # ver fuentes disponibles
-python main.py --init-db               # crear las tablas
-python main.py                         # rastrear ambos periódicos
-python main.py --source diario_libre   # solo uno
-python main.py --limit 10              # máx. 10 artículos por fuente
+python main.py --init-db               # crear las tablas (una vez)
+uvicorn api:app --reload               # backend
+cd frontend && npm run dev             # frontend
 ```
 
 Revisar resultados:
@@ -252,6 +306,110 @@ Revisar resultados:
 python report.py                       # resumen general
 python report.py --entity "Abinader"   # opiniones hacia una figura/empresa
 ```
+
+**Rastreo masivo** (opcional, manual, fuera del alcance actual — ver
+[Rastreo masivo](#rastreo-masivo-opcional-y-manual)):
+```bash
+python main.py --list-sources          # ver fuentes disponibles
+python main.py                         # rastrear todas las fuentes
+python main.py --source diario_libre   # solo una
+python main.py --limit 10              # máx. 10 artículos por fuente
+```
+
+---
+
+## Acceso a la aplicación web
+
+La interfaz pide usuario y contraseña. **No hay registro**: es una herramienta
+interna con un único operador, definido por variables de entorno.
+
+```bash
+python scripts/hash_password.py    # pide la clave y devuelve la línea del .env
+```
+
+En `.env`:
+
+| Variable | Para qué |
+|---|---|
+| `ODIN_AUTH_USER` | Usuario (por defecto `admin`) |
+| `ODIN_AUTH_PASSWORD_HASH` | Hash PBKDF2 que genera el script de arriba |
+| `ODIN_AUTH_PASSWORD` | Alternativa en claro, **solo desarrollo** |
+| `ODIN_JWT_SECRET` | Firma de los tokens. Sin ella, las sesiones mueren al reiniciar |
+| `ODIN_JWT_TTL_HOURS` | Vigencia de la sesión (por defecto 12) |
+| `ODIN_CORS_ORIGINS` | Orígenes permitidos, separados por coma |
+
+El login devuelve un JWT que el frontend guarda y manda en `Authorization:
+Bearer`. **Exigen token**: `POST /api/analyze`, `POST /api/articles` y todas las
+escrituras de siglas (`POST`/`PUT`/`DELETE /api/aliases`). Las lecturas
+(`GET /api/articles`, `/api/aliases`, `/api/health`) siguen abiertas.
+
+Si no configuras ninguna contraseña, el login rechaza todo: el sistema queda
+cerrado, no abierto.
+
+---
+
+## Desarrollo: lint, tipos y ganchos de commit
+
+```bash
+pip install -e ".[dev]"     # ruff, mypy, pre-commit, pytest, uv
+pre-commit install          # una vez por clon
+```
+
+| Comando | Qué hace |
+|---|---|
+| `ruff check .` | Lint (errores reales, imports, modernización, trampas comunes) |
+| `ruff check . --fix` | Arregla lo que se puede automáticamente |
+| `mypy` | Tipos. Configuración en `pyproject.toml`, sin `strict` por ahora |
+| `pytest` | Pruebas (aún no hay: es el siguiente item del backlog) |
+| `pre-commit run --all-files` | Todo lo anterior sobre el repo completo |
+
+La configuración de las tres herramientas vive en [pyproject.toml](pyproject.toml).
+Las dependencias de ejecución siguen declarándose en `requirements.txt`, que
+`pyproject.toml` lee — una sola lista, sin copias que se desincronizan.
+
+**`ruff format` está apagado a propósito.** Reformatear todo el backend antes de
+tener pruebas produce un diff enorme que esconde los cambios reales; se activa
+cuando exista la red de seguridad.
+
+### requirements.lock
+
+[requirements.lock](requirements.lock) fija las **113 dependencias transitivas**
+con hash, para que dos instalaciones en fechas distintas den el mismo entorno.
+Se regenera cuando cambie `requirements.txt`:
+
+```bash
+uv pip compile requirements.txt --generate-hashes --python-version 3.13 -o requirements.lock
+```
+
+> Todavía **nada instala desde el lock**: el `Dockerfile.backend` sigue usando
+> `requirements.txt`, así que los builds aún no son reproducibles. Conectarlo
+> (Docker + CI) queda para cuando se monte el pipeline de CI — item #19 del
+> backlog.
+
+---
+
+## Qué URLs se pueden analizar
+
+`POST /api/analyze` descarga una URL que escribe el usuario y le devuelve el
+contenido. Sin control, eso convierte al servidor en un proxy de lectura hacia
+su propia red interna. [url_guard.py](url_guard.py) lo evita con tres capas:
+
+1. **Allowlist de dominios** (`ODIN_ALLOWED_DOMAINS`) — por defecto los 8 medios
+   dominicanos que Odin cubre, más sus subdominios. Todo lo demás: `400`.
+2. **Bloqueo de destinos internos** — el dominio se resuelve *antes* de conectar
+   y se rechaza si alguna de sus IPs es loopback, privada, link-local
+   (`169.254.0.0/16`, la metadata de AWS/GCP), CGNAT, multicast o reservada.
+   Se revalida en **cada redirección**, que se siguen a mano.
+3. **Límites de la respuesta** — máximo 5 MB (`ODIN_MAX_DOWNLOAD_BYTES`), solo
+   `Content-Type` de texto/HTML/XML, puertos 80 y 443, URLs de hasta 2048
+   caracteres y sin credenciales embebidas.
+
+**Para analizar un medio nuevo hay que agregar su dominio a
+`ODIN_ALLOWED_DOMAINS`.** Es a propósito: la allowlist es la defensa fuerte, y
+en este producto coincide exactamente con el alcance del negocio.
+
+El rastreo masivo (`main.py`) no pasa por este guard: sus URLs salen de los
+sitemaps y feeds de las fuentes ya configuradas en el código, no de un usuario.
 
 ---
 
@@ -273,7 +431,13 @@ entidad. Es el punto más difícil solo con código; para máxima precisión, us
 
 ## Cortesía / legalidad
 
-- Se respeta un retardo entre peticiones (`REQUEST_DELAY`) y se envía un
-  `User-Agent` identificable.
-- Se rastrean feeds/sitemaps públicos. Revisa los términos de uso de cada sitio
-  antes de un despliegue a gran escala.
+- En el flujo normal Odin hace **una petición por artículo que tú pegas**, así
+  que la carga sobre el periódico es la misma que si abrieras la página tú.
+- Se envía un `User-Agent` identificable (`config.py`).
+- `REQUEST_DELAY` **no** es un retardo entre peticiones exitosas: hoy solo se usa
+  como base del backoff cuando una descarga falla y se reintenta
+  ([scrapers/base.py](scrapers/base.py)). Si algún día se usa el rastreo masivo
+  de forma sostenida, hace falta un throttle real por dominio y respetar
+  `robots.txt` — nada de eso está implementado.
+- Se guarda el texto íntegro de artículos con copyright. Revisa los términos de
+  uso de cada sitio antes de un despliegue a gran escala.

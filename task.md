@@ -72,6 +72,37 @@ momento en que más fácil es no hacerlo.
 
 ---
 
+## 0.1 Alcance decidido (2026-08-02)
+
+**Decisión del dueño del producto**: por ahora Odin es una herramienta **a
+demanda**. Se pega la URL de un artículo, se analiza, se revisa y se guarda.
+**Nada automático**: sin cron, sin scheduler, sin rastreo periódico.
+
+Estado verificado del código a esta fecha — no hay nada que apagar:
+
+- No existe `.github/workflows/`.
+- No hay scheduler ni `BackgroundTasks`; `pipeline.run` se invoca **solo** desde
+  [main.py:71](main.py#L71), nunca desde la API.
+- El servicio `scraper` de [docker-compose.yml](docker-compose.yml) está bajo
+  `profiles: ["tools"]`, así que `docker compose up` no lo arranca.
+
+El rastreador masivo **se conserva** (es "por ahora", no un descarte), pero deja
+de ser el eje del roadmap. Consecuencias sobre la priorización:
+
+| Baja de prioridad (solo aplica al crawl masivo) | Sube de prioridad (es el producto) |
+|---|---|
+| §2.5 re-crawl con ETag / `article_revisions` | **§5.1 SSRF** — `POST /api/analyze` deja de ser un endpoint más: *es* el producto, y hoy es un proxy de lectura abierto |
+| §2.6 throttle por dominio + `robots.txt` | **§3.1 trabajo síncrono** — hasta 60 s de red bloqueando el request te afecta a ti, en cada uso |
+| §2.3 `fetch_log` / cobertura por fuente | §3.2 `ODIN_ANALYZER` explícito — cada análisis es una acción tuya y facturable |
+| §7.2 scheduler + corridas solapadas | §2.4 golden set — sigue siendo la única forma de saber si el análisis sirve |
+| §7.4 sesión de BD de larga vida | §2.1 linaje del análisis |
+
+Lo estructural **no cambia** con esta decisión: git, pruebas, autenticación,
+golden set, Alembic y el modelo canónico de entidad (§4.1) siguen valiendo igual,
+porque no dependen de cómo entren los artículos sino de qué se hace con ellos.
+
+---
+
 ## 1. Lo que está bien hecho (para no romperlo)
 
 Vale la pena nombrarlo porque son decisiones que hay que **preservar** en el
@@ -299,7 +330,32 @@ Cloud Run) cortará por timeout antes de que termine, dejando trabajo huérfano.
 Celery — o para empezar barato, `BackgroundTasks` + tabla `jobs`). De paso, el
 frontend gana progreso real.
 
-### 3.2 🔴 El analizador se elige por presencia de una credencial
+### 3.2 ✅ El analizador se elegía por presencia de una credencial — RESUELTO (2026-08-02)
+
+**Estado actual**: el motor se decide **solo** por configuración explícita.
+
+- `ODIN_ANALYZER=local|gemini`, default **`local`** ([config.py](config.py)),
+  consumido en [api.py](api.py). Mismo criterio que el CLI (`--analyzer`).
+- **Segunda ruta facturable que faltaba**: `_arbitrate_ambiguous_persons` también
+  se disparaba con solo tener la llave en el entorno, haciendo una llamada extra
+  a Gemini por análisis. Ahora exige `ODIN_GEMINI_ARBITER=1`, **apagado por
+  defecto**.
+- Un valor inválido (`ODIN_ANALYZER=gemeni`, `ODIN_GEMINI_ARBITER=quizas`)
+  **lanza `ValueError` al arrancar** en vez de caer a un default silencioso.
+- `GeminiAnalyzer` pasó a import perezoso: en modo local ni siquiera se importa
+  `google.genai`.
+- Al iniciar se registra en el log qué motor se usa, con `WARNING` explícito si
+  es el de pago.
+
+**Verificado 2026-08-02** (sin una sola llamada a la API, por CLAUDE.md):
+24 casos de configuración en verde, y arranque real de `api.py` con el `.env` del
+proyecto —que **sí** tiene `GEMINI_API_KEY`— dando `LocalAnalyzer`,
+`gemini_arbiter=False` y `google.genai` sin importar. La ruta de pago también se
+probó (`ODIN_ANALYZER=gemini` → `GeminiAnalyzer` con `_client is None`, es decir
+construido pero sin contactar a Google).
+
+<details>
+<summary>Diagnóstico original (histórico)</summary>
 
 **Evidencia**: [api.py:64-70](api.py#L64):
 ```python
@@ -311,8 +367,8 @@ else:
 Y [docker-compose.yml](docker-compose.yml) monta `env_file: .env` en `backend`,
 donde `GEMINI_API_KEY` **está definida** (verificado).
 
-**Impacto**: `docker compose up` arranca el backend en modo **de pago** sin que
-nadie lo pida. Contradice directamente la política de costo de
+**Impacto**: `docker compose up` arrancaba el backend en modo **de pago** sin que
+nadie lo pidiera. Contradice directamente la política de costo de
 [CLAUDE.md](CLAUDE.md). Y "tener la llave configurada" no es lo mismo que "quiero
 pagar por cada análisis": la llave puede estar ahí solo para el árbitro puntual,
 o para el CLI, o simplemente porque quedó en el `.env`.
@@ -320,6 +376,8 @@ o para el CLI, o simplemente porque quedó en el `.env`.
 **Acción**: variable explícita `ODIN_ANALYZER=local|gemini` (default `local`),
 igual que ya hace bien el CLI ([main.py:35-40](main.py#L35)). La presencia de una
 credencial nunca debe ser un interruptor de comportamiento facturable.
+
+</details>
 
 ### 3.3 🟠 `init_db()` en el camino caliente
 
@@ -476,10 +534,42 @@ retención, sin borrado, sin archivado. Ver también §8.
 
 ## 5. Seguridad
 
-### 5.1 🔴 SSRF en `POST /api/analyze`
+### 5.1 ✅ SSRF en `POST /api/analyze` — RESUELTO (2026-08-02)
+
+**Estado actual**: mitigado en [url_guard.py](url_guard.py), conectado en
+[api.py:141](api.py#L141) y [api.py:191](api.py#L191). Las tres capas que pedía
+la acción de abajo están puestas:
+
+1. **Allowlist de dominios** (`ODIN_ALLOWED_DOMAINS`, [config.py:37](config.py#L37))
+   con las 8 fuentes y sus subdominios.
+2. **Bloqueo de IPs no públicas** resolviendo el host antes de conectar —
+   exigiendo que **todas** sus IPs sean públicas— y **revalidando en cada salto
+   de redirección** (`allow_redirects=False` + bucle manual).
+3. **Límites**: tamaño (`ODIN_MAX_DOWNLOAD_BYTES`, 5 MB), `Content-Type`,
+   longitud de URL, puertos (solo 80/443), esquemas (solo http/https), rechazo de
+   credenciales en la URL y tope de redirecciones.
+
+Verificado 2026-08-02 con 41 casos (metadata de nube por IP y por nombre,
+`db:5432`, loopback, RFC1918, CGNAT, IPv6 mapeada `::ffff:169.254.169.254`,
+`file://`, `gopher://`, userinfo spoofing `https://listindiario.com@evil.com/`,
+sufijo engañoso `listindiario.com.evil.com`): **todos bloqueados**, y las 3 URLs
+legítimas pasan. Se confirmó además que `url_guard.fetch_html` es la **única**
+salida de red de la API.
+
+**Pendiente menor**: `POST /api/articles` ([api.py:592](api.py#L592)) guarda
+`req.url` sin pasarlo por `validate_url`. No es SSRF (no descarga nada) y está
+tras autenticación, pero permite persistir filas con una URL arbitraria. Nota de
+diseño: validar ahí añadiría una resolución DNS al guardado, que puede fallar
+después de que el usuario ya revisó el análisis — conviene una variante del guard
+**sin DNS** (solo esquema/puerto/allowlist) para ese punto.
+
+---
+
+<details>
+<summary>Diagnóstico original (histórico)</summary>
 
 **Evidencia**: [api.py:166-182](api.py#L166) — la única validación de la URL que
-suministra el usuario es:
+suministra el usuario era:
 ```python
 if not url.startswith(("http://", "https://")):
 ```
@@ -508,13 +598,29 @@ Y como no hay autenticación (§5.2), **cualquiera en internet** puede hacerlo.
   perfecto con el dominio del negocio.
 - Limitar tamaño de respuesta (`stream=True` + corte a N MB) y `Content-Type`.
 
-### 5.2 🔴 Cero autenticación y CORS totalmente abierto
+</details>
+
+### 5.2 ✅ Autenticación y CORS — RESUELTO (2026-08-02)
+
+**Estado actual**, verificado 2026-08-02:
+- CORS con orígenes explícitos desde `ODIN_CORS_ORIGINS`
+  ([api.py:66-71](api.py#L66)), métodos y cabeceras acotados. Ya no hay `"*"`.
+- `Depends(auth.require_auth)` en **todos** los endpoints que escriben y en el
+  caro: `POST /api/analyze` ([api.py:184](api.py#L184)),
+  `POST /api/articles` ([api.py:589](api.py#L589)),
+  `POST` / `PUT` / `DELETE /api/aliases` ([api.py:482](api.py#L482),
+  [api.py:528](api.py#L528), [api.py:566](api.py#L566)).
+- Las lecturas (`GET /api/articles`, `/api/aliases`, `/api/health`) siguen
+  abiertas — decisión consciente, documentada en el README.
+
+<details>
+<summary>Diagnóstico original (histórico)</summary>
 
 **Evidencia**: [api.py:56-61](api.py#L56):
 ```python
 allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 ```
-Ningún endpoint tiene dependencia de auth. Los que **escriben**:
+Ningún endpoint tenía dependencia de auth. Los que **escriben**:
 `POST /api/articles`, `POST /api/aliases`, `PUT /api/aliases/{id}`,
 `DELETE /api/aliases/{id}`.
 
@@ -527,6 +633,8 @@ escenario posible**: no rompe el sistema, lo hace mentir.
 
 **Acción**: API key o JWT en todos los endpoints de escritura y en `/api/analyze`
 (el caro). CORS restringido al origen real del frontend, por variable de entorno.
+
+</details>
 
 ### 5.3 🔴 Amplificación de costo hacia la API de pago
 
@@ -749,12 +857,12 @@ sensible.
 
 ```
 ❌ .git/                    ← inexistente (bloquea CI, historia, backup)
-❌ pyproject.toml           ← metadata, deps, config de ruff/mypy/pytest
-❌ requirements.lock        ← builds reproducibles (pip-tools o uv)
+✅ pyproject.toml           ← metadata, deps, config de ruff/mypy/pytest
+✅ requirements.lock        ← builds reproducibles (uv; nada instala desde él todavía)
 ❌ tests/                   ← unitarias, integración, fixtures HTML
 ❌ tests/eval/              ← golden set etiquetado + métricas
 ❌ .github/workflows/       ← CI (lint, types, tests) + cron del scraper
-❌ .pre-commit-config.yaml
+✅ .pre-commit-config.yaml
 ❌ alembic/                 ← migraciones versionadas
 ❌ LICENSE                  ← sin licencia = "todos los derechos reservados"
 ❌ CHANGELOG.md
@@ -807,10 +915,10 @@ El problema no es la cantidad. Es el **drift** y las audiencias que faltan.
 
 | Documento | Dice | Realidad |
 |---|---|---|
-| [README.md:3](README.md#L3) | "rastrea **Listín Diario** y **Diario Libre**" | Hay **8** scrapers registrados ([scrapers/\_\_init\_\_.py:14-23](scrapers/__init__.py#L14)) |
-| [README.md:174-192](README.md#L174) | Árbol del código | Faltan `api.py`, `analysis/canonicalize.py`, `analysis/entity_arbiter.py`, `db/aliases.py`, `db/seed_aliases.py`, `scripts/` y **todo** `frontend/` |
-| [README.md:276](README.md#L276) | "Se respeta un retardo entre peticiones" | `REQUEST_DELAY` solo se usa en el backoff de reintentos (§2.6) |
-| [README.md:260-266](README.md#L260) | Tabla de precisión | Sin evidencia reproducible (§2.4) |
+| ~~[README.md](README.md) — "rastrea Listín y Diario Libre"~~ | ~~2 fuentes~~ | ✅ Corregido 2026-08-02: el README ya describe el flujo a demanda (§0.1) |
+| ~~[README.md](README.md) — árbol del código~~ | ~~Faltaban `api.py`, `frontend/`, `auth.py`, `canonicalize.py`…~~ | ✅ Corregido 2026-08-02 |
+| ~~[README.md](README.md) — "se respeta un retardo entre peticiones"~~ | ~~`REQUEST_DELAY` solo se usa en el backoff~~ | ✅ Corregido 2026-08-02: el README ahora lo dice explícitamente |
+| [README.md](README.md) | Tabla de precisión | **Sigue sin evidencia reproducible** (§2.4) |
 | [docs/PROCESOS.md](docs/PROCESOS.md) | Pipeline de 5 pasos | No cubre el flujo de la API (analizar→revisar→guardar), que es **el flujo principal del producto hoy** |
 | [docs/scrapers_nuevas_fuentes.md](docs/scrapers_nuevas_fuentes.md) | El Caribe "en `_draft_do_scrapers.py`" | Ese archivo no existe; ya está en `do_scrapers.py` |
 
@@ -871,19 +979,19 @@ Cosas puntuales, ya presentes, arreglables en menos de una hora cada una:
 
 | # | Qué | Dónde |
 |---|---|---|
-| 1 | Código muerto tras el `finally` de `save_article` (`merged` ni existe) | [api.py:627](api.py#L627) |
-| 2 | `init_db()` en cada request de guardado | [api.py:573](api.py#L573) |
-| 3 | N+1 por `len(article.entities)` en el listado | [api.py:322](api.py#L322) |
-| 4 | `list_aliases` filtra en Python en vez de SQL, sin paginación | [api.py:436](api.py#L436) |
-| 5 | `%` y `_` del usuario no se escapan en los `ILIKE` de búsqueda | [api.py:285](api.py#L285) |
-| 6 | `resolve()` no quita acentos → "Policia" no matchea "Policía" | [db/aliases.py:77](db/aliases.py#L77) |
+| 1 | ✅ ~~Código muerto tras el `finally` de `save_article` (`merged` ni existe)~~ — eliminado; lo detectó ruff (F821) | [api.py:627](api.py#L627) |
+| 2 | ✅ ~~`init_db()` en cada request de guardado~~ — quitado de `save_article`; ya corre en el `lifespan` — hecho 2026-08-03 | [api.py:573](api.py#L573) |
+| 3 | ✅ ~~N+1 por `len(article.entities)` en el listado~~ — `selectinload(Article.entities)` en `list_articles` — hecho 2026-08-03 | [api.py:322](api.py#L322) |
+| 4 | ✅ ~~`list_aliases` filtra en Python en vez de SQL, sin paginación~~ — filtro `ILIKE` en SQL + `limit`/`offset` — hecho 2026-08-03 | [api.py:436](api.py#L436) |
+| 5 | ✅ ~~`%` y `_` del usuario no se escapan en los `ILIKE` de búsqueda~~ — `_escape_like()` en `q`, `entity` y el filtro de aliases — hecho 2026-08-03 | [api.py:285](api.py#L285) |
+| 6 | ✅ ~~`resolve()` no quita acentos → "Policia" no matchea "Policía"~~ — hecho 2026-08-03 | [db/aliases.py:77](db/aliases.py#L77) |
 | 7 | `_norm_key` duplicado en dos módulos | [canonicalize.py:45](analysis/canonicalize.py#L45), [local_analyzer.py:134](analysis/local_analyzer.py#L134) |
-| 8 | `import json` dentro de la función en vez de arriba | [api.py:131](api.py#L131) |
+| 8 | ✅ ~~`import json` dentro de la función en vez de arriba~~ — corregido al reescribir `_fetch_and_extract` | [api.py:131](api.py#L131) |
 | 9 | `if TYPE_CHECKING: pass` sin contenido | [db/aliases.py:29-30](db/aliases.py#L29) |
-| 10 | `/api/health` responde OK con la BD caída | [api.py:706](api.py#L706) |
+| 10 | ✅ ~~`/api/health` responde OK con la BD caída~~ — ahora hace `SELECT 1` y devuelve 503 si falla — hecho 2026-08-03 | [api.py:706](api.py#L706) |
 | 11 | Email personal en el `User-Agent` por defecto | [config.py:27](config.py#L27) |
 | 12 | `person_map` se calcula una vez por fuente y no se refresca durante la corrida | [pipeline.py:95](pipeline.py#L95) |
-| 13 | README dice 2 fuentes; hay 8 | [README.md:3](README.md#L3) |
+| 13 | ~~README dice 2 fuentes; hay 8~~ — corregido 2026-08-02 junto con el reencuadre a "análisis a demanda" (§0.1) | [README.md](README.md) |
 | 14 | Referencia a `_draft_do_scrapers.py`, archivo inexistente | [docs/scrapers_nuevas_fuentes.md](docs/scrapers_nuevas_fuentes.md) |
 
 ---
@@ -892,19 +1000,23 @@ Cosas puntuales, ya presentes, arreglables en menos de una hora cada una:
 
 Ordenado por **riesgo × costo de postergar**. Los P0 se encarecen cada día que pasan.
 
+> **Reordenado por el alcance de §0.1** (solo análisis a demanda). Los ítems
+> marcados 🕸️ existen únicamente para el rastreo masivo y quedan aparcados
+> mientras ese modo no se use.
+
 ### P0 — Fundamentos (1-2 semanas)
 
 | # | Tarea | Por qué ahora |
 |---|---|---|
-| 1 | **`git init`** + remoto privado + `.gitignore` verificado | Sin esto no hay red de seguridad ni nada de lo demás |
-| 2 | Auth (API key/JWT) en escritura + `/api/analyze`; CORS al origen real | El sistema es escribible por cualquiera |
-| 3 | Mitigar SSRF: allowlist de dominios + bloqueo de IPs privadas + límite de tamaño | Vector explotable el día que se despliegue |
-| 4 | `ODIN_ANALYZER` explícito; nunca elegir motor de pago por presencia de llave | Cobros silenciosos; contradice CLAUDE.md |
-| 5 | `pyproject.toml` + ruff + mypy + pre-commit + `requirements.lock` | Cada línea nueva sin esto es deuda |
-| 6 | `pytest` + pruebas de `canonicalize`, `_parse_date`, `_urls_from_sitemap`, filtros de API | Refactorizar sin pruebas es apostar |
-| 7 | **Golden set** (150-300 artículos) + `scripts/evaluate.py` | Sin esto no sabes si mejoras; hay números publicados sin respaldo |
-| 8 | Alembic + `alembic stamp head`; quitar el DDL automático | La BD tiene 7 filas — la ventana se cierra sola |
-| 9 | Quick wins #1-#5 y #10 de §11 | Horas de trabajo, riesgo real |
+| 1 | ✅ **`git init`** + remoto privado + `.gitignore` verificado | ~~Sin esto no hay red de seguridad ni nada de lo demás~~ — hecho 2026-08-02 (`e542ce4`) |
+| 2 | ✅ Auth (API key/JWT) en escritura + `/api/analyze`; CORS al origen real | ~~El sistema es escribible por cualquiera~~ — hecho 2026-08-02: JWT en [auth.py](auth.py), login de usuario único, CORS por `ODIN_CORS_ORIGINS` |
+| 3 | ✅ Mitigar SSRF: allowlist de dominios + bloqueo de IPs privadas + límite de tamaño | ~~Vector explotable el día que se despliegue~~ — hecho 2026-08-02 en [url_guard.py](url_guard.py), con revalidación en cada redirección |
+| 4 | ✅ **`ODIN_ANALYZER` explícito**; nunca elegir motor de pago por presencia de llave | ~~[api.py:73](api.py#L73) hacía `if os.getenv("GEMINI_API_KEY")`, y esa llave **está** en `.env`~~ — hecho 2026-08-02: `settings.analyzer` + `ODIN_GEMINI_ARBITER` como opt-in aparte; un valor inválido falla al arrancar en vez de caer a un default silencioso |
+| 5 | ✅ `pyproject.toml` + ruff + mypy + pre-commit + `requirements.lock` | ~~Cada línea nueva sin esto es deuda~~ — hecho 2026-08-02: ruff y mypy en verde, ganchos instalados, 113 deps fijadas con hash (uv, no pip-tools). `ruff format` queda apagado hasta que existan pruebas |
+| 6 | ✅ `pytest` + pruebas de `canonicalize`, `_parse_date`, `_urls_from_sitemap`, filtros de API — hecho 2026-08-03 (`tests/`, 96 casos) | Refactorizar sin pruebas es apostar |
+| 7 | 🟡 **Golden set** (150-300 artículos) + `scripts/evaluate.py` — herramienta y formato listos y probados (`tests/eval/`), sembrado con los **7** artículos reales de `odin.db` (etiquetado asistido, no revisado por un humano aparte). Faltan ~143-293 artículos más — ver `tests/eval/README.md` | Sin esto no sabes si mejoras; hay números publicados sin respaldo |
+| 8 | ✅ Alembic + `alembic stamp head`; quitar el DDL automático — hecho 2026-08-03: baseline en `alembic/versions/`, `odin.db` marcada en `head` sin tocar sus filas, `_add_missing_columns` eliminado de `db/session.py` | La BD tiene 7 filas — la ventana se cierra sola |
+| 9 | ✅ Quick wins #2-#5 y #10 de §11 (el #1 ya estaba hecho) — hecho 2026-08-03, con tests | Horas de trabajo, riesgo real |
 
 ### P1 — Sistema de datos de verdad (3-5 semanas)
 
@@ -912,23 +1024,23 @@ Ordenado por **riesgo × costo de postergar**. Los P0 se encarecen cada día que
 |---|---|
 | 10 | Linaje: `analyzer_name/model/version`, `analyzed_at`, `schema_version` (§2.1) |
 | 11 | Almacenamiento crudo + `content_hash` + deduplicación real (§2.2) |
-| 12 | `fetch_log` + dead-letter + métricas de cobertura por fuente (§2.3) |
+| 12 | 🕸️ `fetch_log` + dead-letter + métricas de cobertura por fuente (§2.3) |
 | 13 | **Dimensión canónica de entidad** + tabla de menciones + FKs de actores (§4.1) |
 | 14 | Índices + búsqueda full-text (§4.2) |
 | 15 | Cola de trabajos: `/api/analyze` → `202` + `job_id` + worker (§3.1) |
-| 16 | Throttle por dominio + `robots.txt` + corregir el README (§2.6) |
+| 16 | 🕸️ Throttle por dominio + `robots.txt` (§2.6) — README ya corregido |
 | 17 | Normalización de fechas a UTC aware (§2.7) |
 | 18 | Logs estructurados + `/metrics` + tabla `crawl_runs` + Sentry (§7.1) |
-| 19 | CI en GitHub Actions: lint + types + tests + `pip-audit` |
+| 19 | CI en GitHub Actions: lint + types + tests + `pip-audit`. **Incluye instalar desde `requirements.lock`** (existe desde el 2026-08-02, pero hoy nada lo usa: `Dockerfile.backend` sigue con `requirements.txt`, así que los builds aún no son reproducibles). Cambiar también la prosa de [docs/docker.md](docs/docker.md) |
 | 20 | Rate limiting + presupuesto de Gemini con cortacircuito (§5.3) |
-| 21 | Endpoints de borrado/rectificación de artículos y entidades (§8.2) |
+| 21 | ✅ ~~Endpoints de borrado/rectificación de artículos y entidades (§8.2)~~ — hecho 2026-08-03: `PUT`/`DELETE /api/articles/{id}` y `PUT`/`DELETE /api/entities/{id}` en [api.py:517](api.py#L517), con tests en `tests/test_article_entity_rectification.py`. Pendiente: base legal/retención y `docs/LEGAL.md` (siguen sin definirse) |
 
 ### P2 — Producto y escala (6+ semanas)
 
 | # | Tarea |
 |---|---|
-| 22 | Scheduler real del crawl + protección contra corridas solapadas (§7.2) |
-| 23 | Re-crawl con `ETag`/`If-Modified-Since` + `article_revisions` (§2.5) |
+| 22 | 🕸️ Scheduler real del crawl + protección contra corridas solapadas (§7.2) |
+| 23 | 🕸️ Re-crawl con `ETag`/`If-Modified-Since` + `article_revisions` (§2.5) |
 | 24 | Partir `api.py` en routers + capa de servicios (§9.2) |
 | 25 | Generar tipos TS desde OpenAPI; eliminar la triple duplicación de esquema |
 | 26 | Frontend: React Query, rutas, error boundary, Vitest, partir componentes grandes |
@@ -936,10 +1048,52 @@ Ordenado por **riesgo × costo de postergar**. Los P0 se encarecen cada día que
 | 28 | Backups automáticos + procedimiento de restauración probado (§7.5) |
 | 29 | Documentación faltante: ARQUITECTURA, ADRs, DATA_DICTIONARY, RUNBOOK, LEGAL, PRECISION, LICENSE (§10.2) |
 | 30 | Actualizar README y PROCESOS al estado real; checkpoint de docs en el flujo de cambios (§10.1) |
+| 31 | 🔧 **Búsqueda tolerante a errores tipográficos en Reportes** — reescrito 2026-08-03, ver diagnóstico abajo. Revisar `pg_trgm` en Postgres (`similarity()` + índice GIN) para `q`/`entity`, portable y coherente con §4.2; **no** Fuse.js en el cliente ni SQLite FTS5/`spellfix1`. Evaluar si vale la pena con el volumen real (hoy `ILIKE` cubre la mayoría de los casos con 7 filas). |
 
 > **Nota de secuenciación**: las respuestas del cliente (§15) pueden reordenar P1 y
 > P2, pero **no P0**. Nada de lo que diga el cliente hace innecesario tener git,
 > pruebas, autenticación o una forma de medir la precisión.
+
+### 12.1 Diagnóstico del ítem 31 (reescrito 2026-08-03)
+
+El texto original del ítem 31 describía un `ReportsList.tsx` que ya no existe:
+decía "reemplazar el filtro `includes()` literal" cuando el componente actual
+**no tiene ningún filtrado en el cliente** — `grep -rn "includes(\|Fuse\|fuzzy"
+frontend/src/` no encuentra nada. La búsqueda de `q`/`entity` es 100%
+server-side: cada tecleo (con debounce de 300 ms) llama a `GET
+/api/articles?q=...&entity=...`, que filtra con `ILIKE` en el backend. Es el
+mismo problema de *drift* que ya señala §10.1: el diagnóstico se escribió
+sobre una versión anterior del frontend y el código siguió.
+
+Además de la premisa desactualizada, la solución propuesta tenía tres
+problemas de diseño que no dependían de ese drift:
+
+- **Fuse.js en el cliente es incompatible con la paginación actual.** La
+  lista trae 12 filas por página desde el servidor (`limit`/`offset`,
+  `total` real). Una librería de fuzzy-matching en el navegador solo puede
+  buscar sobre lo que ya está cargado — nunca podría encontrar una
+  coincidencia con typo en la página 3 de 50 sin traer el corpus completo al
+  cliente, el mismo anti-patrón que este documento critica en `list_aliases`
+  (§4.4) y en el N+1 (§4.3).
+- **Los campos "entidades" y "fragmentos de texto" no viajan al frontend.**
+  `_serialize_summary` (api.py) no manda nombres de entidades ni el cuerpo
+  del artículo en el listado, solo `entity_count`. No hay nada sobre lo cual
+  hacer fuzzy-match en el cliente para esos dos campos sin rediseñar el
+  payload o pagar N llamadas extra por fila.
+- **SQLite FTS5 + `spellfix1` no es portable.** `spellfix1` es una extensión
+  cargable que no viene compilada por defecto y muchas builds de
+  `sqlite3`/Python no permiten cargarla sin flags adicionales. Es además
+  SQLite-only, y SQLite en este proyecto es solo el atajo de desarrollo — el
+  objetivo real es Postgres (`docker-compose.yml`, `psycopg2-binary`). Esto
+  duplica y contradice la propia recomendación de búsqueda de texto de §4.2
+  (`tsvector`/GIN o `pg_trgm` en Postgres).
+
+**Acción revisada**: si el volumen algún día lo justifica (hoy `ILIKE` sobre
+7 filas ya cubre la gran mayoría de los casos reales de typo — mayúsculas,
+tildes correctas, coincidencia parcial), implementarlo **server-side y
+Postgres-first** con `pg_trgm` (`similarity()` + índice GIN sobre
+`title`/`main_topic`/`Entity.name`), no en el cliente. Sin volumen real que
+lo justifique, este ítem se queda en el fondo de P2.
 
 ---
 
@@ -950,10 +1104,10 @@ Checklist de salida. Mientras alguno esté sin marcar, no está listo:
 - [ ] Código en git, con CI verde en cada push
 - [ ] Cobertura ≥70% en `analysis/`, `scrapers/`, `db/`
 - [ ] Golden set publicado + métricas de precisión reproducibles y fechadas
-- [ ] Autenticación en todos los endpoints de escritura y en `/api/analyze`
-- [ ] SSRF mitigado (allowlist + bloqueo de rangos privados), verificado con un test
+- [x] Autenticación en todos los endpoints de escritura y en `/api/analyze`
+- [x] SSRF mitigado (allowlist + bloqueo de rangos privados) — verificado 2026-08-02 con 41 casos; **falta portar esa verificación a `tests/` para que corra sola** (§6.1)
 - [ ] Rate limiting y presupuesto de Gemini con cortacircuito
-- [ ] Migraciones versionadas con Alembic
+- [x] Migraciones versionadas con Alembic — baseline + `alembic stamp head` (2026-08-03); DDL automático fuera del arranque
 - [ ] Linaje del análisis persistido (analizador, modelo, versión, fecha)
 - [ ] `fetch_log` + métricas de cobertura por fuente, con alerta si cae
 - [ ] Backup automático + restauración probada al menos una vez

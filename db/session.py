@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from typing import Any
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -25,7 +26,7 @@ log = logging.getLogger("odin.db")
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     """Crea (una sola vez) el engine a partir de DATABASE_URL."""
-    kwargs = {"pool_pre_ping": True, "future": True}
+    kwargs: dict[str, Any] = {"pool_pre_ping": True, "future": True}
     if not settings.database_url.startswith("sqlite"):
         # SQLite usa un pool propio (SingletonThreadPool) que no acepta estos
         # parámetros; solo aplican a Postgres/SQL Server (QueuePool).
@@ -39,37 +40,20 @@ def _get_sessionmaker() -> sessionmaker:
     return sessionmaker(bind=get_engine(), class_=Session, expire_on_commit=False)
 
 
-def _add_missing_columns(engine: Engine) -> None:
-    """Migración mínima sin Alembic: añade a las tablas existentes las columnas
-    que estén en los modelos pero falten en la BD (create_all crea tablas
-    nuevas, pero nunca altera las existentes). Solo AÑADE columnas nullables;
-    no renombra ni borra. El tipo se compila según el dialecto activo, así que
-    funciona igual en SQLite, Postgres y SQL Server."""
-    from sqlalchemy import inspect
-
-    inspector = inspect(engine)
-    with engine.begin() as conn:
-        for table in Base.metadata.sorted_tables:
-            if not inspector.has_table(table.name):
-                continue  # create_all la creará completa
-            existing = {c["name"] for c in inspector.get_columns(table.name)}
-            for column in table.columns:
-                if column.name in existing or not column.nullable:
-                    continue
-                ddl = (
-                    f"ALTER TABLE {table.name} ADD COLUMN {column.name} "
-                    f"{column.type.compile(dialect=engine.dialect)}"
-                )
-                log.info("migración: %s", ddl)
-                conn.exec_driver_sql(ddl)
-
-
 def init_db() -> None:
-    """Crea las tablas si no existen (y añade columnas nuevas a las que ya
-    existen). Da un mensaje claro si falla la conexión."""
+    """Crea las tablas que aún no existan (`create_all`, idempotente y sin
+    riesgo: nunca altera una tabla existente). Da un mensaje claro si falla
+    la conexión.
+
+    Los cambios de esquema sobre una BD que YA tiene tablas (nueva columna,
+    índice, etc.) van por Alembic (`alembic revision --autogenerate` +
+    `alembic upgrade head`), no aquí: antes esta función también hacía
+    `ALTER TABLE` automático y sin versionar en cada arranque (ver
+    task.md §3.4); Alembic ya tiene el baseline (`alembic stamp head`,
+    2026-08-03) y es reversible, versionado y revisable antes de aplicarse.
+    """
     try:
         engine = get_engine()
-        _add_missing_columns(engine)
         Base.metadata.create_all(engine)
     except Exception as exc:  # conexión/driver no disponible
         url = settings.database_url

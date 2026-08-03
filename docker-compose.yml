@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-odin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odin}
@@ -23,6 +24,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-odin}:${POSTGRES_PASSWORD:-odin}@db:5432/${POSTGRES_DB:-odin}
@@ -32,13 +34,21 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - hf_cache:/root/.cache/huggingface
+      - hf_cache:/home/appuser/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:
       context: ./frontend
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "3000:80"
 
@@ -54,7 +64,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - hf_cache:/root/.cache/huggingface
+      - hf_cache:/home/appuser/.cache/huggingface
     command: ["python", "main.py"]
 
 volumes:

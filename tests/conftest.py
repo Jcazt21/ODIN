@@ -1,0 +1,58 @@
+"""Fixtures compartidas.
+
+Todas las pruebas de BD/API usan SQLite en memoria, nunca la `DATABASE_URL`
+real del `.env` (que por defecto apunta a Postgres). Nada aquí toca la red ni
+la API de Gemini (ver CLAUDE.md).
+"""
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from db.models import Base
+
+
+@pytest.fixture
+def sqlite_sessionmaker():
+    """Sessionmaker ligado a una BD SQLite en memoria fresca, con el esquema
+    ya creado. StaticPool: una sola conexión compartida, para que las tablas
+    creadas sobrevivan entre sesiones dentro del mismo test."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine, expire_on_commit=False)
+    try:
+        yield Session
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
+def db_session(sqlite_sessionmaker):
+    session = sqlite_sessionmaker()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def api_client(monkeypatch, sqlite_sessionmaker):
+    """TestClient de la API con `get_session` apuntando a SQLite en memoria.
+
+    Se instancia `TestClient` SIN usar `with`: eso evita disparar el
+    `lifespan` de la app (que llama `init_db()` / `load_seed()` contra la
+    `DATABASE_URL` real), algo que no queremos ni necesitamos para probar
+    endpoints de solo lectura.
+    """
+    from fastapi.testclient import TestClient
+
+    import api as api_module
+
+    monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
+    return TestClient(api_module.app)

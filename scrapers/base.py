@@ -13,10 +13,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterator
 from xml.etree import ElementTree as ET
 
 import feedparser
@@ -111,7 +111,7 @@ class BaseScraper:
             if link and link not in seen:
                 seen.add(link)
                 urls.append(link)
-            return bool(limit) and len(urls) >= limit
+            return limit is not None and limit > 0 and len(urls) >= limit
 
         for sitemap_url in self.sitemaps:
             xml = self.fetch(sitemap_url)

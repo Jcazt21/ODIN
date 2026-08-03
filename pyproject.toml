@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odin"
+version = "0.1.0"
+description = "Análisis de artículos de prensa dominicana: extracción, NER y sentimiento"
+requires-python = ">=3.12,<3.14"
+# Las dependencias de ejecución siguen viviendo en requirements.txt: es lo que
+# copia Dockerfile.backend para aprovechar el cache de capas, y lo que citan el
+# README y docs/. Aquí se leen de ahí para no tener dos listas que se
+# desincronizan.
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    # Genera requirements.lock. Se usa uv y no pip-tools porque este último
+    # importa internos de pip y se rompe con las versiones recientes.
+    "uv>=0.5",
+]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+# Layout plano: módulos sueltos en la raíz + tres paquetes. Se declara explícito
+# porque el autodescubrimiento de setuptools no sabe qué hacer con esta mezcla.
+[tool.setuptools]
+py-modules = ["api", "auth", "config", "main", "pipeline", "report", "url_guard"]
+
+[tool.setuptools.packages.find]
+include = ["analysis*", "db*", "scrapers*"]
+
+# ── ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+# alembic/versions: boilerplate generado por `alembic revision --autogenerate`
+# con el estilo del template oficial (Union/Sequence, sin `from __future__
+# import annotations`); no vale la pena reescribir cada migración a mano.
+extend-exclude = ["frontend", ".venv", "__pycache__", "alembic/versions"]
+
+[tool.ruff.lint]
+# Conjunto deliberadamente moderado: errores reales (F), errores de sintaxis y
+# semántica (E4/E7/E9), orden de imports (I), modernización (UP) y trampas
+# comunes (B). Sin reglas de estilo subjetivo mientras no haya pruebas que
+# respalden un refactor masivo.
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+ignore = [
+    # FastAPI declara dependencias como valores por defecto (`= Depends(...)`,
+    # `= Query(None)`). Es el idioma del framework, no un bug.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Los __init__ reexportan a propósito.
+"__init__.py" = ["F401"]
+
+# ── mypy ──────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.13"
+files = [
+    "api.py", "auth.py", "config.py", "main.py", "pipeline.py",
+    "report.py", "url_guard.py", "analysis", "db", "scrapers", "scripts",
+    "alembic/env.py",
+]
+exclude = ["^\\.venv/", "^frontend/", "^alembic/versions/"]
+# Ni spacy, ni pysentimiento, ni trafilatura publican stubs.
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+# Sin `strict`: el objetivo hoy es que mypy corra en verde y atrape regresiones.
+# Apretar tuercas (disallow_untyped_defs, etc.) toca cuando existan pruebas.
+
+# ── pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
