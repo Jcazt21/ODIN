@@ -58,7 +58,9 @@ class Analyzer(Protocol):
     # qué esta fila dice NEG?" y decidir backfills selectivos sin adivinar por
     # la presencia/ausencia de campos de encuadre.
     name: str      # "local" | "gemini"
-    model: str     # p.ej. "es_core_news_lg-3.8.0" | "gemini-3.5-flash"
     version: str   # versión de la heurística/prompt de ESTE analizador
+
+    @property
+    def model(self) -> str: ...  # p.ej. "es_core_news_lg-3.8.0" | "gemini-3.5-flash"
 
     def analyze(self, title: str, body: str) -> AnalysisResult: ...

@@ -29,6 +29,7 @@ def _persist(
     session,
     scraped: ScrapedArticle,
     result,
+    analyzer: Analyzer,
     person_map: dict[str, str] | None = None,
 ) -> Article:
     # Unifica nombres antes de guardar ("Abinader" -> "Luis Abinader",
@@ -138,7 +139,7 @@ def run(
                 try:
                     if result is None:
                         result = analyzer.analyze(scraped.title, scraped.body or "")
-                    _persist(session, scraped, result, person_map=person_map)
+                    _persist(session, scraped, result, analyzer, person_map=person_map)
                     new_count += 1
                     log.info("  [%s] %s", scraper.source, scraped.title[:70])
                 except Exception:  # no dejar que un artículo tumbe la corrida
