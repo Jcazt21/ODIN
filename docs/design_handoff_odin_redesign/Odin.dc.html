@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="app">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family:'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing:antialiased; background:var(--bg); color:var(--text); }
+  * { box-sizing:border-box; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { color:var(--accent-hover); text-decoration:underline; }
+  [data-theme] {
+    --bg: oklch(0.975 0.003 262);
+    --surface: #ffffff;
+    --surface-2: oklch(0.965 0.005 262);
+    --surface-3: oklch(0.945 0.007 262);
+    --border: oklch(0.905 0.007 262);
+    --border-strong: oklch(0.84 0.01 262);
+    --text: oklch(0.24 0.016 265);
+    --muted: oklch(0.52 0.014 265);
+    --faint: oklch(0.65 0.012 265);
+    --accent: #6200EE;
+    --accent-hover: #3700B3;
+    --accent-fg: #ffffff;
+    --accent-soft: oklch(0.955 0.028 296);
+    --accent-border: oklch(0.86 0.07 296);
+    --pos: #1B873B;
+    --pos-soft: oklch(0.955 0.035 150);
+    --neg: #B00020;
+    --neg-soft: oklch(0.955 0.035 20);
+    --neu: oklch(0.5 0.012 265);
+    --neu-soft: oklch(0.955 0.004 265);
+    --warn: oklch(0.52 0.12 75);
+    --warn-soft: oklch(0.96 0.05 85);
+    --panel: oklch(1 0 0 / 0.8);
+    --panel-strong: oklch(1 0 0 / 0.9);
+    --shadow: 0 1px 2px oklch(0.24 0.02 265 / 0.06), 0 8px 24px -12px oklch(0.24 0.02 265 / 0.14);
+    --shadow-sm: 0 1px 2px oklch(0.24 0.02 265 / 0.07);
+  }
+  [data-theme="dark"] {
+    --bg: oklch(0.185 0.012 265);
+    --surface: oklch(0.225 0.013 265);
+    --surface-2: oklch(0.255 0.014 265);
+    --surface-3: oklch(0.285 0.015 265);
+    --border: oklch(0.315 0.014 265);
+    --border-strong: oklch(0.4 0.016 265);
+    --text: oklch(0.955 0.004 265);
+    --muted: oklch(0.71 0.012 265);
+    --faint: oklch(0.58 0.012 265);
+    --accent: #03DAC6;
+    --accent-hover: oklch(0.9 0.13 180);
+    --accent-fg: #000000;
+    --accent-soft: oklch(0.32 0.06 185);
+    --accent-border: oklch(0.45 0.08 185);
+    --pos: #4ADE80;
+    --pos-soft: oklch(0.32 0.07 150);
+    --neg: oklch(0.7 0.17 22);
+    --neg-soft: oklch(0.33 0.08 20);
+    --neu: oklch(0.72 0.012 265);
+    --neu-soft: oklch(0.3 0.008 265);
+    --warn: oklch(0.82 0.12 80);
+    --warn-soft: oklch(0.33 0.05 80);
+    --panel: oklch(0.225 0.013 265 / 0.78);
+    --panel-strong: oklch(0.225 0.013 265 / 0.9);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -14px oklch(0 0 0 / 0.6);
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.35);
+  }
+  [data-accent="indigo"] { --accent: #3700B3; --accent-hover: #24007a; --accent-soft: oklch(0.95 0.035 285); --accent-border: oklch(0.85 0.075 285); }
+  [data-accent="indigo"][data-theme="dark"] { --accent: oklch(0.64 0.2 288); --accent-hover: oklch(0.72 0.18 288); --accent-soft: oklch(0.31 0.09 288); --accent-border: oklch(0.44 0.13 288); }
+  [data-accent="teal"] { --accent: #018786; --accent-hover: oklch(0.44 0.08 185); --accent-fg:#ffffff; --accent-soft: oklch(0.955 0.03 185); --accent-border: oklch(0.86 0.055 185); }
+  [data-accent="teal"][data-theme="dark"] { --accent: #03DAC6; --accent-hover: oklch(0.9 0.13 180); --accent-fg: #000000; --accent-soft: oklch(0.32 0.06 185); --accent-border: oklch(0.44 0.08 185); }
+  input, select, textarea, button { font-family:inherit; font-size:inherit; color:inherit; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  input::placeholder { color:var(--faint); }
+  @keyframes odinDrift { 0% { transform:translate3d(-4%, -2%, 0) scale(1); } 100% { transform:translate3d(6%, 4%, 0) scale(1.15); } }
+  @keyframes odinPulse { 0%,100% { opacity:0.55; } 50% { opacity:1; } }
+  @keyframes odinShimmer { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+  @keyframes odinIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  @keyframes odinSpin { to { transform:rotate(360deg); } }
+</style>
+<script type="module">
+  import * as ogl from 'https://esm.sh/ogl@1.0.11';
+  window.ogl = ogl;
+</script>
+</helmet>
+
+<div data-theme="{{ theme }}" data-accent="{{ accent }}" style="min-height:100vh;background:var(--bg);color:var(--text)">
+
+  <div style="position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;padding:0 20px;height:44px;background:var(--surface);border-bottom:1px solid var(--border)">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint)">Odin · design system</span>
+    <div style="display:flex;gap:2px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px">
+      <button onClick="{{ goFundamentos }}" style="padding:4px 11px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ tabFundBg }};color:{{ tabFundFg }}">Fundamentos</button>
+      <button onClick="{{ goLogin }}" style="padding:4px 11px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ tabLoginBg }};color:{{ tabLoginFg }}">Login</button>
+      <button onClick="{{ goWorkspace }}" style="padding:4px 11px;border:0;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ tabWorkBg }};color:{{ tabWorkFg }}">Workspace</button>
+    </div>
+    <div style="flex:1"></div>
+    <button onClick="{{ toggleTheme }}" aria-label="Cambiar tema" style="display:flex;align-items:center;gap:7px;padding:5px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer">
+      <span style="font-family:'IBM Plex Mono',monospace">{{ themeLabel }}</span>
+    </button>
+  </div>
+
+  <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+    <div style="position:relative;min-height:calc(100vh - 44px);display:grid;place-items:center;overflow:hidden;background:var(--bg)">
+      <div style="position:absolute;inset:0;pointer-events:none">
+        <x-import component="Plasma" from="./Plasma.jsx" color="{{ plasmaColor }}" speed="{{ 0.5 }}" scale="{{ 1.9 }}" opacity="{{ plasmaLoginOpacity }}" direction="forward" hint-size="100%,100%" style="position:absolute;inset:0"></x-import>
+        <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, var(--bg) 78%)"></div>
+      </div>
+      <div style="position:relative;width:100%;max-width:396px;padding:0 24px 40px">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:26px">
+          <div style="font-size:44px;font-weight:600;letter-spacing:0.22em;padding-left:0.22em;background:linear-gradient(100deg, var(--text) 20%, var(--accent) 45%, var(--text) 70%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:odinShimmer 6s linear infinite">ODIN</div>
+          <div style="font-size:13px;color:var(--muted);letter-spacing:0.02em">Monitoreo y análisis de prensa dominicana</div>
+        </div>
+        <div style="background:var(--panel-strong);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:26px 24px">
+          <div style="font-size:15px;font-weight:600;margin-bottom:2px">Iniciar sesión</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:20px">Ingrese las credenciales del operador.</div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:12px;font-weight:500;color:var(--muted)">Usuario</span>
+              <input value="{{ loginUser }}" onChange="{{ setLoginUser }}" style="padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13.5px">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:12px;font-weight:500;color:var(--muted)">Contraseña</span>
+              <input type="password" value="{{ loginPass }}" onChange="{{ setLoginPass }}" placeholder="••••••••" style="padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13.5px">
+            </label>
+            <sc-if value="{{ loginError }}" hint-placeholder-val="{{ false }}">
+              <div role="alert" style="display:flex;gap:9px;padding:10px 12px;background:var(--neg-soft);border:1px solid var(--neg);border-radius:7px;font-size:12.5px;color:var(--neg)">
+                <span style="font-weight:600">Error</span>
+                <span>Credenciales inválidas o sin conexión con la API.</span>
+              </div>
+            </sc-if>
+            <button onClick="{{ doLogin }}" style="margin-top:2px;padding:11px 16px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:7px;font-size:13.5px;font-weight:600;cursor:pointer">{{ loginBtnLabel }}</button>
+          </div>
+          <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);font-size:11.5px;color:var(--faint);line-height:1.5">Acceso restringido a un operador. El sistema no permite crear cuentas ni recuperar contraseñas.</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isFundamentos }}" hint-placeholder-val="{{ false }}">
+    <div style="max-width:1080px;margin:0 auto;padding:44px 28px 90px;display:flex;flex-direction:column;gap:44px">
+      <div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px">Fundamentos</div>
+        <h1 style="margin:0 0 10px;font-size:34px;font-weight:600;letter-spacing:-0.02em">Sistema de diseño Odin</h1>
+        <p style="margin:0;max-width:62ch;font-size:14.5px;line-height:1.65;color:var(--muted);text-wrap:pretty">Herramienta interna de trabajo prolongado: la interfaz prioriza legibilidad, densidad media y jerarquía clara de datos. El color no decora — clasifica. Claro por defecto, oscuro disponible.</p>
+      </div>
+
+      <section style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <h2 style="margin:0;font-size:16px;font-weight:600">Color</h2>
+          <span style="font-size:12.5px;color:var(--faint)">Superficies neutras + acento de marca + escala semántica de datos</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">
+          <sc-for list="{{ swatches }}" as="s" hint-placeholder-count="8">
+            <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;background:var(--surface)">
+              <div style="height:56px;background:{{ s.value }};border-bottom:1px solid var(--border)"></div>
+              <div style="padding:9px 11px">
+                <div style="font-size:12.5px;font-weight:500">{{ s.name }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--faint);margin-top:2px">{{ s.token }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <h2 style="margin:0;font-size:16px;font-weight:600">Tipografía</h2>
+          <span style="font-size:12.5px;color:var(--faint)">IBM Plex Sans para interfaz · IBM Plex Mono para datos, siglas y URLs</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">34 / 600</span>
+            <div style="font-size:34px;font-weight:600;letter-spacing:-0.02em">Título de pantalla</div>
+          </div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">20 / 600</span>
+            <div style="font-size:20px;font-weight:600;letter-spacing:-0.01em">Titular de artículo analizado</div>
+          </div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">14.5 / 400</span>
+            <div style="font-size:14.5px;line-height:1.65;color:var(--muted)">Cuerpo y descripciones. Interlínea 1.65 para lectura de párrafos largos del artículo.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:120px 1fr;gap:16px;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">11 / mono</span>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--faint)">Etiqueta de sección</div>
+          </div>
+        </div>
+      </section>
+
+      <section style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <h2 style="margin:0;font-size:16px;font-weight:600">Componentes</h2>
+          <span style="font-size:12.5px;color:var(--faint)">Base shadcn reinterpretada: radios contenidos, bordes de 1px, sin sombras fuertes</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:14px">Botones</div>
+            <div style="display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+              <button style="padding:8px 14px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">Analizar</button>
+              <button style="padding:8px 14px;background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:7px;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--surface-3)">Secundario</button>
+              <button style="padding:8px 14px;background:transparent;color:var(--muted);border:0;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--surface-2);color:var(--text)">Fantasma</button>
+              <button style="padding:8px 14px;background:transparent;color:var(--neg);border:1px solid var(--neg);border-radius:7px;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:var(--neg-soft)">Eliminar</button>
+            </div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:14px">Badges de datos</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--pos-soft);color:var(--pos);border:1px solid var(--pos);border-radius:5px;font-size:11.5px;font-weight:600">Positivo · 78%</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--neg-soft);color:var(--neg);border:1px solid var(--neg);border-radius:5px;font-size:11.5px;font-weight:600">Negativo · 64%</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--neu-soft);color:var(--neu);border:1px solid var(--border-strong);border-radius:5px;font-size:11.5px;font-weight:600">Neutro</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border);border-radius:5px;font-size:11.5px;font-weight:500">Crisis / conflicto</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-border);border-radius:5px;font-size:11.5px;font-weight:600">Datos duros</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:5px;font-size:11.5px;font-weight:600">Revisar</span>
+            </div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:14px">Campos y selects propios</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <input placeholder="Buscar por título o tema…" style="padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px">
+              <div style="position:relative">
+                <select style="width:100%;appearance:none;padding:8px 30px 8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px;cursor:pointer">
+                  <option>Todas las fuentes</option>
+                  <option>Diario Libre</option>
+                </select>
+                <span aria-hidden="true" style="position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--faint);font-size:10px">▾</span>
+              </div>
+              <div style="display:flex;gap:2px;padding:3px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;width:fit-content">
+                <span style="padding:4px 11px;border-radius:5px;font-size:12.5px;font-weight:500;background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm)">Todos</span>
+                <span style="padding:4px 11px;border-radius:5px;font-size:12.5px;color:var(--muted)">Con datos</span>
+                <span style="padding:4px 11px;border-radius:5px;font-size:12.5px;color:var(--muted)">Sin datos</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:baseline;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+          <h2 style="margin:0;font-size:16px;font-weight:600">Estados unificados</h2>
+          <span style="font-size:12.5px;color:var(--faint)">Un mismo tratamiento en las cuatro áreas: cargando, error, vacío, con datos</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint)">Cargando</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="height:11px;width:70%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out infinite"></div>
+              <div style="height:11px;width:100%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out 0.15s infinite"></div>
+              <div style="height:11px;width:45%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out 0.3s infinite"></div>
+            </div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint)">Error</div>
+            <div style="display:flex;gap:10px;padding:11px 12px;background:var(--neg-soft);border:1px solid var(--neg);border-radius:7px">
+              <div style="width:3px;border-radius:2px;background:var(--neg)"></div>
+              <div>
+                <div style="font-size:12.5px;font-weight:600;color:var(--neg)">No se pudo analizar la URL</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px">El sitio bloqueó el scraping. Intente de nuevo.</div>
+              </div>
+            </div>
+          </div>
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint)">Vacío</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px;border:1px dashed var(--border-strong);border-radius:7px;text-align:center">
+              <div style="font-size:13px;font-weight:600">Sin reportes</div>
+              <div style="font-size:12px;color:var(--muted)">Ningún reporte coincide con los filtros aplicados.</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:10px">
+          <div style="font-size:12.5px;color:var(--muted);flex:1">Las confirmaciones destructivas usan diálogo propio, ya no <code style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text)">window.confirm()</code>.</div>
+          <button onClick="{{ openDemoDialog }}" style="padding:7px 13px;background:transparent;color:var(--neg);border:1px solid var(--neg);border-radius:7px;font-size:12.5px;font-weight:500;cursor:pointer" style-hover="background:var(--neg-soft)">Ver diálogo</button>
+        </div>
+      </section>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
+    <div style="position:relative;min-height:calc(100vh - 44px);padding:22px 24px 80px">
+      <sc-if value="{{ workspacePlasma }}" hint-placeholder-val="{{ true }}">
+        <div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:420px;pointer-events:none;overflow:hidden;z-index:0">
+          <x-import component="Plasma" from="./Plasma.jsx" color="{{ plasmaColor }}" speed="{{ 0.35 }}" scale="{{ 2.6 }}" opacity="{{ plasmaWorkOpacity }}" direction="forward" hint-size="100%,100%" style="position:absolute;inset:0"></x-import>
+          <div style="position:absolute;inset:0;background:linear-gradient(to bottom, transparent 0%, var(--bg) 88%)"></div>
+        </div>
+      </sc-if>
+      <div style="position:relative;z-index:1;max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px">
+
+        <div style="position:sticky;top:56px;z-index:40;display:flex;align-items:center;gap:14px;padding:7px 8px 7px 18px;background:var(--panel-strong);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:999px;box-shadow:var(--shadow)">
+          <span style="font-size:14px;font-weight:600;letter-spacing:0.16em;padding-right:6px">ODIN</span>
+          <nav style="display:flex;gap:2px;flex:1">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4">
+              <button onClick="{{ t.onClick }}" style="display:inline-flex;align-items:center;gap:7px;padding:7px 15px;border:0;border-radius:999px;font-size:13px;font-weight:{{ t.weight }};cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}<span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ t.countColor }}">{{ t.count }}</span></button>
+            </sc-for>
+          </nav>
+          <div style="display:flex;align-items:center;gap:6px;padding-right:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">operador</span>
+            <button onClick="{{ openLogoutDialog }}" aria-label="Cerrar sesión" style="width:30px;height:30px;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;color:var(--muted);cursor:pointer;font-size:12px" style-hover="color:var(--neg);border-color:var(--neg)">⏻</button>
+          </div>
+        </div>
+
+        <sc-if value="{{ paneAnalyzeInput }}" hint-placeholder-val="{{ true }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
+              <h1 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.01em">Analizar artículo</h1>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">POST /api/articles/analyze</span>
+            </div>
+            <p style="margin:0 0 16px;font-size:13px;color:var(--muted);max-width:70ch">Pegue la URL de la noticia. El sistema extrae el contenido y devuelve sentimiento, encuadre y actores para su revisión antes de guardar.</p>
+            <div style="display:flex;gap:9px;flex-wrap:wrap">
+              <input value="{{ url }}" onChange="{{ setUrl }}" placeholder="https://www.diariolibre.com/…" style="flex:1;min-width:260px;padding:11px 13px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:13px">
+              <button onClick="{{ analyze }}" style="display:inline-flex;align-items:center;gap:9px;padding:11px 20px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">{{ analyzeLabel }}</button>
+            </div>
+            <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px;padding-top:18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:12px">
+                <div style="display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted)">
+                  <span style="width:12px;height:12px;border:2px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:odinSpin 0.8s linear infinite"></span>
+                  Extrayendo y analizando con el modelo — puede tardar hasta un minuto.
+                </div>
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <div style="height:13px;width:55%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out infinite"></div>
+                  <div style="height:11px;width:100%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out 0.15s infinite"></div>
+                  <div style="height:11px;width:88%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out 0.3s infinite"></div>
+                  <div style="height:11px;width:40%;border-radius:4px;background:var(--surface-3);animation:odinPulse 1.6s ease-in-out 0.45s infinite"></div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ paneReportsList }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:var(--shadow-sm)">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                <h1 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.01em">Reportes</h1>
+                <span style="font-size:12.5px;color:var(--faint)">{{ resultCount }}</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ clearFilters }}" style="padding:6px 12px;background:transparent;border:1px solid var(--border-strong);border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="background:var(--surface-2);color:var(--text)">Limpiar filtros</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px">
+                <input value="{{ q }}" onChange="{{ setQ }}" placeholder="Título o tema…" style="padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px">
+                <input value="{{ qEntity }}" onChange="{{ setQEntity }}" placeholder="Entidad mencionada…" style="padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px">
+                <sc-for list="{{ filterSelects }}" as="f" hint-placeholder-count="6">
+                  <div style="position:relative">
+                    <select value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:100%;appearance:none;padding:8px 28px 8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px;cursor:pointer;color:var(--text)">
+                      <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                        <option value="{{ o.value }}">{{ o.label }}</option>
+                      </sc-for>
+                    </select>
+                    <span aria-hidden="true" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--faint);font-size:10px">▾</span>
+                  </div>
+                </sc-for>
+                <label style="display:flex;align-items:center;gap:8px;padding:3px 11px 3px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px">
+                  <span style="font-size:11.5px;color:var(--faint);white-space:nowrap">Desde</span>
+                  <input type="date" value="{{ dateFrom }}" onChange="{{ setDateFrom }}" style="flex:1;min-width:0;padding:4px 0;background:transparent;border:0;font-size:12.5px;color:var(--muted)">
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;padding:3px 11px 3px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px">
+                  <span style="font-size:11.5px;color:var(--faint);white-space:nowrap">Hasta</span>
+                  <input type="date" value="{{ dateTo }}" onChange="{{ setDateTo }}" style="flex:1;min-width:0;padding:4px 0;background:transparent;border:0;font-size:12.5px;color:var(--muted)">
+                </label>
+              </div>
+            </div>
+
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm)">
+              <sc-if value="{{ hasRows }}" hint-placeholder-val="{{ true }}">
+                <table style="width:100%;border-collapse:collapse;font-size:13px">
+                  <thead>
+                    <tr style="background:var(--surface-2)">
+                      <sc-for list="{{ columns }}" as="c" hint-placeholder-count="7">
+                        <th onClick="{{ c.onClick }}" style="padding:10px 14px;text-align:{{ c.align }};font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:{{ c.color }};border-bottom:1px solid var(--border);cursor:{{ c.cursor }};white-space:nowrap;user-select:none">{{ c.label }}{{ c.arrow }}</th>
+                      </sc-for>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+                      <tr onClick="{{ r.onClick }}" style="cursor:pointer;border-bottom:1px solid var(--border);background:{{ r.rowBg }}" style-hover="background:var(--surface-2)">
+                        <td style="padding:12px 14px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--faint);vertical-align:top">{{ r.date }}</td>
+                        <td style="padding:12px 14px;max-width:380px;vertical-align:top">
+                          <div style="font-weight:500;line-height:1.4;color:var(--text)">{{ r.title }}</div>
+                          <div style="font-size:12px;color:var(--muted);margin-top:3px">{{ r.topic }}</div>
+                        </td>
+                        <td style="padding:12px 14px;white-space:nowrap;color:var(--muted);vertical-align:top">{{ r.source }}</td>
+                        <td style="padding:12px 14px;white-space:nowrap;vertical-align:top">
+                          <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:5px;font-size:11.5px;font-weight:600;background:{{ r.sentBg }};color:{{ r.sentFg }};border:1px solid {{ r.sentBorder }}">{{ r.sentLabel }}</span>
+                        </td>
+                        <td style="padding:12px 14px;white-space:nowrap;vertical-align:top">
+                          <span style="display:inline-flex;padding:2px 8px;border-radius:5px;font-size:11.5px;background:var(--surface-2);color:var(--muted);border:1px solid var(--border)">{{ r.framing }}</span>
+                        </td>
+                        <td style="padding:12px 14px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);vertical-align:top">{{ r.entities }}</td>
+                        <td style="padding:12px 14px;text-align:center;vertical-align:top">
+                          <span style="font-size:12px;color:{{ r.hardColor }};font-weight:600">{{ r.hard }}</span>
+                        </td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </sc-if>
+              <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:56px 20px;text-align:center">
+                  <div style="font-size:14.5px;font-weight:600">Sin resultados</div>
+                  <div style="font-size:13px;color:var(--muted);max-width:38ch">Ningún reporte coincide con los filtros aplicados.</div>
+                  <button onClick="{{ clearFilters }}" style="margin-top:6px;padding:7px 14px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:7px;font-size:12.5px;cursor:pointer">Quitar filtros</button>
+                </div>
+              </sc-if>
+              <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;background:var(--surface-2);border-top:1px solid var(--border)">
+                <span style="font-size:12px;color:var(--faint)">{{ pageLabel }}</span>
+                <div style="flex:1"></div>
+                <button style="padding:5px 11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Anterior</button>
+                <button style="padding:5px 11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Siguiente</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ paneAnalysis }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:16px;animation:odinIn 0.24s ease both">
+
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <sc-if value="{{ showBack }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ backToList }}" style="padding:7px 13px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">← Volver a la lista</button>
+              </sc-if>
+              <span style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:12px;font-weight:600;background:{{ stateBadgeBg }};color:{{ stateBadgeFg }};border:1px solid {{ stateBadgeBorder }}">{{ stateBadgeLabel }}</span>
+              <div style="flex:1"></div>
+              <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                <button onClick="{{ discard }}" style="padding:8px 14px;background:transparent;border:1px solid var(--border-strong);border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Descartar</button>
+                <button onClick="{{ save }}" style="padding:8px 18px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">Guardar reporte</button>
+              </sc-if>
+            </div>
+
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+              <div style="padding:22px 24px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:10px">
+                  <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:5px;font-size:11.5px;font-weight:600;background:{{ sentBg }};color:{{ sentFg }};border:1px solid {{ sentBorder }}">{{ sentLabel }}</span>
+                  <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                    <div style="position:relative">
+                      <select value="{{ sentiment }}" onChange="{{ setSentiment }}" aria-label="Corregir sentimiento" style="appearance:none;padding:3px 26px 3px 9px;background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:5px;font-size:11.5px;color:var(--muted);cursor:pointer">
+                        <option value="POS">Positivo</option>
+                        <option value="NEU">Neutro</option>
+                        <option value="NEG">Negativo</option>
+                      </select>
+                      <span aria-hidden="true" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--faint);font-size:9px">▾</span>
+                    </div>
+                  </sc-if>
+                </div>
+                <h2 style="margin:0 0 10px;font-size:22px;font-weight:600;line-height:1.3;letter-spacing:-0.015em;text-wrap:pretty;max-width:52ch">{{ article.title }}</h2>
+                <div style="display:flex;flex-wrap:wrap;gap:0 18px;font-size:12.5px;color:var(--muted)">
+                  <span><span style="color:var(--faint)">Fuente</span> {{ article.source }}</span>
+                  <span><span style="color:var(--faint)">Autor</span> {{ article.author }}</span>
+                  <span><span style="color:var(--faint)">Sección</span> {{ article.section }}</span>
+                  <span><span style="color:var(--faint)">Publicado</span> {{ article.published }}</span>
+                  <a href="{{ article.url }}" target="_blank" rel="noreferrer" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">ver original ↗</a>
+                </div>
+              </div>
+
+              <div style="padding:20px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px">
+                <div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:7px">Tema principal</div>
+                  <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                    <input value="{{ topic }}" onChange="{{ setTopic }}" style="width:100%;padding:7px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:13.5px;font-weight:500">
+                  </sc-if>
+                  <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:13.5px;font-weight:500">{{ topic }}</div>
+                  </sc-if>
+                </div>
+                <div>
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:7px">Palabras clave</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    <sc-for list="{{ keywords }}" as="k" hint-placeholder-count="4">
+                      <span style="padding:2px 8px;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;font-size:11.5px;color:var(--muted)">{{ k }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+                  <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint)">Análisis de encuadre</div>
+                  <span style="font-size:12px;color:var(--faint)">Cómo el medio construye la historia</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+                  <sc-for list="{{ framingCards }}" as="f" hint-placeholder-count="4">
+                    <div style="padding:14px;background:{{ f.bg }};border:1px solid {{ f.border }};border-radius:9px">
+                      <div style="font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--faint);margin-bottom:8px">{{ f.label }}</div>
+                      <div style="font-size:15px;font-weight:600;line-height:1.25;color:{{ f.fg }};margin-bottom:10px">{{ f.value }}</div>
+                      <div style="height:3px;border-radius:2px;background:var(--border);overflow:hidden">
+                        <div style="height:100%;width:{{ f.weight }};background:{{ f.fg }};border-radius:2px"></div>
+                      </div>
+                      <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                        <div style="position:relative;margin-top:11px">
+                          <select value="{{ f.current }}" onChange="{{ f.onChange }}" aria-label="Corregir" style="width:100%;appearance:none;padding:5px 24px 5px 9px;background:var(--surface);border:1px dashed var(--border-strong);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer">
+                            <sc-for list="{{ f.options }}" as="o" hint-placeholder-count="3">
+                              <option value="{{ o.value }}">{{ o.label }}</option>
+                            </sc-for>
+                          </select>
+                          <span aria-hidden="true" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--faint);font-size:9px">▾</span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;align-items:end">
+                  <sc-for list="{{ actorFields }}" as="a" hint-placeholder-count="3">
+                    <div>
+                      <div style="font-size:11px;font-weight:500;color:var(--faint);margin-bottom:6px">{{ a.label }}</div>
+                      <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                        <input value="{{ a.value }}" onChange="{{ a.onChange }}" style="width:100%;padding:7px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:13px">
+                      </sc-if>
+                      <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+                        <div style="font-size:13px;font-weight:500">{{ a.value }}</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex;align-items:center;gap:9px;padding:8px 12px;background:{{ hardBg }};border:1px solid {{ hardBorder }};border-radius:7px">
+                    <span style="font-size:11px;color:var(--faint)">Datos duros</span>
+                    <span style="font-size:12.5px;font-weight:600;color:{{ hardFg }}">{{ hardLabel }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="padding:20px 24px">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--faint);margin-bottom:10px">Cuerpo del artículo</div>
+                <div style="max-height:230px;overflow:auto;padding:16px 18px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;font-size:13.5px;line-height:1.7;color:var(--muted);text-wrap:pretty">
+                  <sc-for list="{{ body }}" as="p" hint-placeholder-count="3">
+                    <p style="margin:0 0 12px">{{ p }}</p>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);padding:20px 24px">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+                <h3 style="margin:0;font-size:15px;font-weight:600">Figuras y empresas mencionadas</h3>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--faint)">{{ entityCount }}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+                <sc-for list="{{ entities }}" as="e" hint-placeholder-count="4">
+                  <div style="padding:14px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;display:flex;flex-direction:column;gap:9px">
+                    <div style="display:flex;align-items:flex-start;gap:9px">
+                      <div style="flex:1">
+                        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                          <span style="font-size:14px;font-weight:600">{{ e.name }}</span>
+                          <sc-if value="{{ e.lowConfidence }}" hint-placeholder-val="{{ false }}">
+                            <span title="Confianza de extracción baja — revisar" style="padding:1px 7px;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:4px;font-size:10.5px;font-weight:600">revisar</span>
+                          </sc-if>
+                        </div>
+                        <div style="display:flex;gap:9px;align-items:center;margin-top:4px;font-size:11.5px;color:var(--faint)">
+                          <span>{{ e.typeLabel }}</span>
+                          <span>·</span>
+                          <span style="font-family:'IBM Plex Mono',monospace">{{ e.mentions }} menciones</span>
+                        </div>
+                      </div>
+                      <span style="display:inline-flex;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:{{ e.sentBg }};color:{{ e.sentFg }};border:1px solid {{ e.sentBorder }};white-space:nowrap">{{ e.sentLabel }}</span>
+                    </div>
+                    <sc-if value="{{ e.context }}" hint-placeholder-val="{{ true }}">
+                      <div style="padding-left:11px;border-left:2px solid var(--border-strong);font-size:12.5px;font-style:italic;line-height:1.55;color:var(--muted)">{{ e.context }}</div>
+                    </sc-if>
+                    <sc-if value="{{ editable }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;gap:7px;padding-top:3px">
+                        <button style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Editar</button>
+                        <button onClick="{{ e.onRemove }}" style="padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--neg);border-color:var(--neg)">Quitar</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ paneEntities }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:18px 20px;border-bottom:1px solid var(--border)">
+              <h1 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.01em">Entidades canónicas</h1>
+              <span style="font-size:12.5px;color:var(--faint)">Catálogo deduplicado de figuras y organizaciones</span>
+              <div style="flex:1"></div>
+              <input placeholder="Buscar entidad…" style="padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px;width:200px">
+            </div>
+            <sc-for list="{{ canonEntities }}" as="e" hint-placeholder-count="5">
+              <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)" style-hover="background:var(--surface-2)">
+                <span style="color:var(--faint);font-size:11px">▸</span>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:14px;font-weight:600">{{ e.name }}</span>
+                    <span style="padding:1px 7px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;font-size:10.5px;color:var(--muted)">{{ e.typeLabel }}</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.desc }}</div>
+                </div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--faint);text-align:right;white-space:nowrap">{{ e.stats }}</div>
+                <div style="display:flex;gap:6px">
+                  <button aria-label="Fusionar" style="padding:5px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Fusionar</button>
+                  <button aria-label="Editar" style="padding:5px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Editar</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ paneAliases }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:18px 20px;border-bottom:1px solid var(--border)">
+              <h1 style="margin:0;font-size:19px;font-weight:600;letter-spacing:-0.01em">Siglas</h1>
+              <span style="font-size:12.5px;color:var(--faint)">{{ aliasCount }}</span>
+              <div style="flex:1"></div>
+              <input placeholder="Buscar sigla…" style="padding:8px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;font-size:13px;width:180px">
+              <button style="padding:8px 14px;background:var(--accent);color:var(--accent-fg);border:0;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-hover)">Nueva sigla</button>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="background:var(--surface-2)">
+                  <th style="padding:10px 20px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border)">Sigla</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border)">Nombre canónico</th>
+                  <th style="padding:10px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border)">Tipo</th>
+                  <th style="padding:10px 20px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;font-weight:500;color:var(--faint);border-bottom:1px solid var(--border)">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ aliases }}" as="a" hint-placeholder-count="5">
+                  <tr style="border-bottom:1px solid var(--border);opacity:{{ a.opacity }}">
+                    <td style="padding:12px 20px;font-family:'IBM Plex Mono',monospace;font-weight:500">{{ a.acronym }}</td>
+                    <td style="padding:12px 14px;color:var(--muted)">{{ a.canonical }}</td>
+                    <td style="padding:12px 14px"><span style="padding:1px 7px;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;font-size:10.5px;color:var(--muted)">{{ a.typeLabel }}</span></td>
+                    <td style="padding:12px 20px;text-align:right">
+                      <div style="display:inline-flex;gap:6px">
+                        <button style="padding:4px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:{{ a.toggleColor }};cursor:pointer">{{ a.toggleLabel }}</button>
+                        <button style="padding:4px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Editar</button>
+                        <button onClick="{{ a.onDelete }}" style="padding:4px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-size:11.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--neg);border-color:var(--neg)">Eliminar</button>
+                      </div>
+                    </td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ dialog }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeDialog }}" style="position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;background:oklch(0.2 0.02 265 / 0.5);backdrop-filter:blur(2px)">
+      <div style="width:100%;max-width:400px;background:var(--panel-strong);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:22px;animation:odinIn 0.16s ease both">
+        <div style="font-size:15.5px;font-weight:600;margin-bottom:6px">{{ dialogTitle }}</div>
+        <div style="font-size:13px;line-height:1.6;color:var(--muted)">{{ dialogBody }}</div>
+        <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:20px">
+          <button onClick="{{ closeDialog }}" style="padding:8px 14px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:7px;font-size:12.5px;color:var(--muted);cursor:pointer" style-hover="color:var(--text)">Cancelar</button>
+          <button onClick="{{ confirmDialog }}" style="padding:8px 16px;background:{{ dialogBtnBg }};color:{{ dialogBtnFg }};border:0;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer">{{ dialogConfirmLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;workspace&quot;,&quot;fundamentos&quot;,&quot;login&quot;],&quot;default&quot;:&quot;workspace&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;initialTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;morado&quot;,&quot;indigo&quot;,&quot;teal&quot;],&quot;default&quot;:&quot;morado&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Marca&quot;},&quot;workspacePlasma&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Marca&quot;}}">
+const FRAMING = { crisis_conflicto:'Crisis / conflicto', logro_institucional:'Logro institucional', negligencia:'Negligencia', crecimiento:'Crecimiento', denuncia:'Denuncia', neutro_informativo:'Neutro informativo' };
+const HEADLINE = { informativo:'Informativo', alarmista:'Alarmista', sensacionalista:'Sensacionalista' };
+const LEAD = { social:'Social', oficialista:'Oficialista', tecnico:'Técnico' };
+const SOURCEQ = { citas_directas:'Citas directas', testimonios_anonimos:'Testimonios anónimos', datos_duros:'Datos duros', mixtas:'Mixtas', sin_fuentes:'Sin fuentes' };
+
+const TONE = {
+  crisis_conflicto:'neg', negligencia:'neg', denuncia:'neg',
+  logro_institucional:'pos', crecimiento:'pos', neutro_informativo:'neu',
+  informativo:'pos', alarmista:'neg', sensacionalista:'neg',
+  social:'neu', oficialista:'warn', tecnico:'pos',
+  citas_directas:'pos', datos_duros:'pos', mixtas:'neu', testimonios_anonimos:'warn', sin_fuentes:'neg'
+};
+
+const REPORTS = [
+  { id:1, date:'2026-07-28', title:'Gobierno anuncia inversión de RD$4,200 millones en la red de acueductos del Cibao', topic:'Infraestructura hídrica', source:'Diario Libre', sent:'POS', score:0.74, framing:'logro_institucional', entities:6, hard:true },
+  { id:2, date:'2026-07-27', title:'Denuncian retrasos de seis meses en la entrega de aulas escolares en Santo Domingo Este', topic:'Educación pública', source:'Acento', sent:'NEG', score:0.81, framing:'negligencia', entities:4, hard:true },
+  { id:3, date:'2026-07-27', title:'Cámara de Comercio proyecta crecimiento de 5.1% para el sector turístico', topic:'Turismo y economía', source:'Listín Diario', sent:'POS', score:0.68, framing:'crecimiento', entities:3, hard:true },
+  { id:4, date:'2026-07-26', title:'Vecinos de Los Alcarrizos protestan por apagones prolongados', topic:'Servicio eléctrico', source:'El Caribe', sent:'NEG', score:0.77, framing:'crisis_conflicto', entities:5, hard:false },
+  { id:5, date:'2026-07-25', title:'MINERD presenta calendario escolar 2026-2027 con dos semanas adicionales de clases', topic:'Calendario escolar', source:'Diario Libre', sent:'NEU', score:0.12, framing:'neutro_informativo', entities:2, hard:true },
+  { id:6, date:'2026-07-24', title:'Informe señala irregularidades en contratos de la Corporación de Acueductos', topic:'Contrataciones públicas', source:'Acento', sent:'NEG', score:0.86, framing:'denuncia', entities:7, hard:true },
+  { id:7, date:'2026-07-23', title:'Puerto Multimodal Caucedo amplía su capacidad de contenedores en un 18%', topic:'Logística portuaria', source:'El Dinero', sent:'POS', score:0.7, framing:'crecimiento', entities:3, hard:true },
+  { id:8, date:'2026-07-22', title:'Salud Pública reporta descenso sostenido de casos de dengue en la capital', topic:'Salud pública', source:'Listín Diario', sent:'POS', score:0.63, framing:'logro_institucional', entities:4, hard:true },
+  { id:9, date:'2026-07-21', title:'Tensión entre ayuntamientos y recolectores de basura en la zona norte', topic:'Manejo de residuos', source:'El Caribe', sent:'NEG', score:0.72, framing:'crisis_conflicto', entities:5, hard:false },
+  { id:10, date:'2026-07-20', title:'Banco Central mantiene la tasa de política monetaria en 6.25%', topic:'Política monetaria', source:'El Dinero', sent:'NEU', score:0.08, framing:'neutro_informativo', entities:2, hard:true }
+];
+
+const ARTICLE = {
+  title:'Denuncian retrasos de seis meses en la entrega de aulas escolares en Santo Domingo Este',
+  url:'https://acento.com.do/actualidad/aulas-escolares-retraso',
+  source:'Acento', author:'M. Ramírez', section:'Actualidad', published:'27 jul 2026, 07:42',
+  body:[
+    'Padres y directores de cinco centros educativos de Santo Domingo Este denunciaron este domingo que las aulas prometidas para el inicio del año escolar acumulan un retraso de seis meses, lo que ha obligado a habilitar espacios provisionales en pasillos y canchas.',
+    'Según documentos de la propia institución, las obras fueron adjudicadas en octubre del año pasado con un plazo de ejecución de 180 días. A la fecha, tres de los cinco proyectos no superan el 40% de avance físico, mientras que los pagos ejecutados alcanzan el 62% del monto contratado.',
+    'El Ministerio de Educación atribuyó el retraso a la revisión de los estudios de suelo y a la reprogramación de partidas presupuestarias. La Asociación de Padres solicitó una auditoría independiente y una fecha de entrega verificable.'
+  ]
+};
+
+const ENTITIES = [
+  { name:'Ministerio de Educación', type:'ORG', mentions:7, sent:'NEG', score:0.79, context:'atribuyó el retraso a la revisión de los estudios de suelo', conf:0.97 },
+  { name:'Asociación de Padres y Amigos de la Escuela', type:'ORG', mentions:3, sent:'NEU', score:0.15, context:'solicitó una auditoría independiente y una fecha de entrega verificable', conf:0.82 },
+  { name:'M. Ramírez', type:'PERSON', mentions:1, sent:'NEU', score:0.05, context:'', conf:0.71 },
+  { name:'Ayuntamiento de Santo Domingo Este', type:'ORG', mentions:2, sent:'NEG', score:0.55, context:'habilitó espacios provisionales en canchas municipales', conf:0.94 }
+];
+
+const CANON = [
+  { name:'Ministerio de Educación', type:'ORG', desc:'MINERD — órgano rector del sistema educativo preuniversitario dominicano.', articles:48, mentions:214 },
+  { name:'Corporación de Acueductos y Alcantarillados', type:'ORG', desc:'CAASD — servicio de agua potable del Gran Santo Domingo.', articles:31, mentions:126 },
+  { name:'Banco Central de la República Dominicana', type:'ORG', desc:'Autoridad monetaria y cambiaria.', articles:27, mentions:98 },
+  { name:'Cámara de Comercio y Producción', type:'ORG', desc:'', articles:19, mentions:54 },
+  { name:'M. Ramírez', type:'PERSON', desc:'Periodista de Acento, cobertura de educación.', articles:12, mentions:12 }
+];
+
+const ALIASES = [
+  { acronym:'MINERD', canonical:'Ministerio de Educación de la República Dominicana', type:'ORG', active:true },
+  { acronym:'CAASD', canonical:'Corporación del Acueducto y Alcantarillado de Santo Domingo', type:'ORG', active:true },
+  { acronym:'BCRD', canonical:'Banco Central de la República Dominicana', type:'ORG', active:true },
+  { acronym:'INTRANT', canonical:'Instituto Nacional de Tránsito y Transporte Terrestre', type:'ORG', active:true },
+  { acronym:'CDEEE', canonical:'Corporación Dominicana de Empresas Eléctricas Estatales', type:'ORG', active:false }
+];
+
+class Component extends DCLogic {
+  state = {
+    view: 'workspace', theme: 'light', tab: 'analizar',
+    loginUser: 'operador', loginPass: '', loginError: false, loggingIn: false,
+    url: 'https://acento.com.do/actualidad/aulas-escolares-retraso',
+    stage: 'result', saved: false,
+    sentiment: 'NEG', topic: 'Educación pública', framing: 'negligencia',
+    headline: 'alarmista', lead: 'social', sourceq: 'testimonios_anonimos',
+    dominante: 'Ministerio de Educación', senalado: 'Ministerio de Educación', acreditado: 'Asociación de Padres',
+    entities: ENTITIES,
+    q: '', qEntity: '', fSource: '', fSent: '', fFraming: '', fHeadline: '', fLead: '', fSourceQ: '', fHard: '', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc',
+    selectedId: null, dialog: null
+  };
+
+  componentDidMount() {
+    if (this.props.initialTheme) this.setState({ theme: this.props.initialTheme });
+    if (this.props.initialView) this.setState({ view: this.props.initialView });
+  }
+
+  tone(key) {
+    const t = TONE[key] || 'neu';
+    if (t === 'pos') return { bg:'var(--pos-soft)', fg:'var(--pos)', border:'var(--pos)' };
+    if (t === 'neg') return { bg:'var(--neg-soft)', fg:'var(--neg)', border:'var(--neg)' };
+    if (t === 'warn') return { bg:'var(--warn-soft)', fg:'var(--warn)', border:'var(--warn)' };
+    return { bg:'var(--neu-soft)', fg:'var(--neu)', border:'var(--border-strong)' };
+  }
+
+  sent(code, score) {
+    const map = { POS:{ label:'Positivo', t:'pos' }, NEG:{ label:'Negativo', t:'neg' }, NEU:{ label:'Neutro', t:'neu' } };
+    const m = map[code] || map.NEU;
+    const c = this.tone(code === 'POS' ? 'crecimiento' : code === 'NEG' ? 'negligencia' : 'social');
+    const pct = score != null && code !== 'NEU' ? ' · ' + Math.round(score * 100) + '%' : '';
+    return { label: m.label + pct, bg:c.bg, fg:c.fg, border:c.border };
+  }
+
+  set(k) { return e => this.setState({ [k]: e.target.value }); }
+
+  filtered() {
+    const s = this.state;
+    let rows = REPORTS.filter(r => {
+      if (s.q && !(r.title + ' ' + r.topic).toLowerCase().includes(s.q.toLowerCase())) return false;
+      if (s.fSource && r.source !== s.fSource) return false;
+      if (s.fSent && r.sent !== s.fSent) return false;
+      if (s.fFraming && r.framing !== s.fFraming) return false;
+      if (s.fHard === 'si' && !r.hard) return false;
+      if (s.fHard === 'no' && r.hard) return false;
+      if (s.dateFrom && r.date < s.dateFrom) return false;
+      if (s.dateTo && r.date > s.dateTo) return false;
+      return true;
+    });
+    const dir = s.sortDir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      let av = a[s.sortKey], bv = b[s.sortKey];
+      if (s.sortKey === 'sent') { const o = { NEG:0, NEU:1, POS:2 }; av = o[a.sent]; bv = o[b.sent]; }
+      return av > bv ? dir : av < bv ? -dir : 0;
+    });
+    return rows;
+  }
+
+  fmtDate(d) {
+    const M = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const p = d.split('-');
+    return p[2] + ' ' + M[+p[1] - 1] + ' ' + p[0].slice(2);
+  }
+
+  selectOpts(map, all) {
+    return [{ value:'', label: all }].concat(Object.keys(map).map(k => ({ value:k, label:map[k] })));
+  }
+
+  sortCol(key) { return () => this.setState(s => ({ sortKey:key, sortDir: s.sortKey === key && s.sortDir === 'desc' ? 'asc' : 'desc' })); }
+
+  renderVals() {
+    const s = this.state;
+    const view = s.view, tab = s.tab;
+    const pill = (on) => ({ bg: on ? 'var(--accent)' : 'transparent', fg: on ? 'var(--accent-fg)' : 'var(--muted)' });
+    const topTab = (v) => ({ bg: view === v ? 'var(--surface)' : 'transparent', fg: view === v ? 'var(--text)' : 'var(--muted)' });
+    const rows = this.filtered();
+    const detail = s.selectedId ? REPORTS.find(r => r.id === s.selectedId) : null;
+    const editable = view === 'workspace' && tab === 'analizar' && s.stage === 'result' && !s.saved;
+    const showAnalysis = (tab === 'analizar' && s.stage === 'result') || (tab === 'reportes' && !!detail);
+    const art = detail ? Object.assign({}, ARTICLE, { title: detail.title, source: detail.source, published: this.fmtDate(detail.date) }) : ARTICLE;
+    const sentCode = detail ? detail.sent : s.sentiment;
+    const sentScore = detail ? detail.score : 0.81;
+    const sentInfo = this.sent(sentCode, sentScore);
+    const framingKey = detail ? detail.framing : s.framing;
+    const hard = detail ? detail.hard : true;
+    const hardTone = hard ? this.tone('crecimiento') : this.tone('social');
+
+    const fCard = (label, key, current, map, weight) => {
+      const t = this.tone(current);
+      return { label, value: map[current], current, bg:t.bg, border:t.border, fg:t.fg, weight,
+        options: Object.keys(map).map(k => ({ value:k, label:map[k] })),
+        onChange: e => this.setState({ [key]: e.target.value }) };
+    };
+
+    const cols = [
+      { key:'date', label:'Fecha', align:'left' },
+      { key:'title', label:'Artículo', align:'left' },
+      { key:'source', label:'Fuente', align:'left' },
+      { key:'sent', label:'Sentimiento', align:'left' },
+      { key:'framing', label:'Encuadre', align:'left' },
+      { key:'entities', label:'Ent.', align:'right' },
+      { key:'hard', label:'Datos', align:'center' }
+    ];
+
+    return {
+      theme: s.theme, accent: this.props.accent || 'morado',
+      themeLabel: s.theme === 'light' ? 'claro' : 'oscuro',
+      toggleTheme: () => this.setState(p => ({ theme: p.theme === 'light' ? 'dark' : 'light' })),
+      plasmaColor: s.theme === 'dark' ? '#03DAC6' : '#6200EE',
+      plasmaLoginOpacity: s.theme === 'dark' ? 0.55 : 0.4,
+      plasmaWorkOpacity: s.theme === 'dark' ? 0.2 : 0.14,
+      workspacePlasma: this.props.workspacePlasma !== false,
+      isLogin: view === 'login', isFundamentos: view === 'fundamentos', isWorkspace: view === 'workspace',
+      goLogin: () => this.setState({ view:'login' }), goFundamentos: () => this.setState({ view:'fundamentos' }), goWorkspace: () => this.setState({ view:'workspace' }),
+      tabFundBg: topTab('fundamentos').bg, tabFundFg: topTab('fundamentos').fg,
+      tabLoginBg: topTab('login').bg, tabLoginFg: topTab('login').fg,
+      tabWorkBg: topTab('workspace').bg, tabWorkFg: topTab('workspace').fg,
+
+      loginUser: s.loginUser, loginPass: s.loginPass, setLoginUser: this.set('loginUser'), setLoginPass: this.set('loginPass'),
+      loginError: s.loginError, loginBtnLabel: s.loggingIn ? 'Verificando…' : 'Entrar',
+      doLogin: () => {
+        if (!s.loginPass) { this.setState({ loginError:true }); return; }
+        this.setState({ loggingIn:true, loginError:false });
+        setTimeout(() => this.setState({ loggingIn:false, view:'workspace', tab:'analizar' }), 700);
+      },
+
+      tabs: [
+        { label:'Analizar', count:'', countColor:'transparent', onClick:() => this.setState({ tab:'analizar' }), bg:pill(tab==='analizar').bg, fg:pill(tab==='analizar').fg, weight: tab==='analizar'?600:500 },
+        { label:'Reportes', count: String(REPORTS.length), countColor: tab==='reportes'?'var(--accent-fg)':'var(--faint)', onClick:() => this.setState({ tab:'reportes', selectedId:null }), bg:pill(tab==='reportes').bg, fg:pill(tab==='reportes').fg, weight: tab==='reportes'?600:500 },
+        { label:'Entidades', count:'', countColor:'transparent', onClick:() => this.setState({ tab:'entidades' }), bg:pill(tab==='entidades').bg, fg:pill(tab==='entidades').fg, weight: tab==='entidades'?600:500 },
+        { label:'Siglas', count:'', countColor:'transparent', onClick:() => this.setState({ tab:'siglas' }), bg:pill(tab==='siglas').bg, fg:pill(tab==='siglas').fg, weight: tab==='siglas'?600:500 }
+      ],
+
+      paneAnalyzeInput: tab === 'analizar',
+      paneReportsList: tab === 'reportes' && !detail,
+      paneAnalysis: showAnalysis,
+      paneEntities: tab === 'entidades',
+      paneAliases: tab === 'siglas',
+
+      url: s.url, setUrl: this.set('url'),
+      isLoading: s.stage === 'loading',
+      analyzeLabel: s.stage === 'loading' ? 'Analizando…' : 'Analizar',
+      analyze: () => { this.setState({ stage:'loading', saved:false }); setTimeout(() => this.setState({ stage:'result' }), 1600); },
+      discard: () => this.setState({ stage:'idle' }),
+      save: () => this.setState({ saved:true }),
+      editable, readOnly: !editable,
+      showBack: !!detail, backToList: () => this.setState({ selectedId:null }),
+      stateBadgeLabel: detail ? 'Reporte guardado' : s.saved ? 'Guardado en el archivo' : 'Vista previa · sin guardar',
+      stateBadgeBg: (detail || s.saved) ? 'var(--pos-soft)' : 'var(--accent-soft)',
+      stateBadgeFg: (detail || s.saved) ? 'var(--pos)' : 'var(--accent)',
+      stateBadgeBorder: (detail || s.saved) ? 'var(--pos)' : 'var(--accent-border)',
+
+      article: art,
+      sentiment: sentCode, setSentiment: this.set('sentiment'),
+      sentLabel: sentInfo.label, sentBg: sentInfo.bg, sentFg: sentInfo.fg, sentBorder: sentInfo.border,
+      topic: detail ? detail.topic : s.topic, setTopic: this.set('topic'),
+      keywords: detail ? [detail.topic.toLowerCase(), detail.source.toLowerCase()] : ['aulas escolares','minerd','santo domingo este','ejecución de obras'],
+      body: ARTICLE.body,
+
+      framingCards: [
+        fCard('Marco narrativo', 'framing', framingKey, FRAMING, '82%'),
+        fCard('Intención del titular', 'headline', detail ? 'informativo' : s.headline, HEADLINE, '64%'),
+        fCard('Orientación del lead', 'lead', detail ? 'social' : s.lead, LEAD, '55%'),
+        fCard('Calidad de fuentes', 'sourceq', detail ? 'mixtas' : s.sourceq, SOURCEQ, '48%')
+      ],
+      actorFields: [
+        { label:'Actor dominante', value: s.dominante, onChange: this.set('dominante') },
+        { label:'Actor señalado', value: s.senalado, onChange: this.set('senalado') },
+        { label:'Actor acreditado', value: s.acreditado, onChange: this.set('acreditado') }
+      ],
+      hardLabel: hard ? 'Sí' : 'No', hardBg: hardTone.bg, hardFg: hardTone.fg, hardBorder: hardTone.border,
+
+      entities: s.entities.map((e, i) => {
+        const si = this.sent(e.sent, e.score);
+        return { name:e.name, typeLabel: e.type === 'PERSON' ? 'Persona' : 'Organización', mentions:e.mentions,
+          sentLabel:si.label, sentBg:si.bg, sentFg:si.fg, sentBorder:si.border,
+          context:e.context, lowConfidence: e.conf < 0.9,
+          onRemove: () => this.setState(p => ({ entities: p.entities.filter((_, j) => j !== i) })) };
+      }),
+      entityCount: s.entities.length + ' detectadas',
+
+      q: s.q, setQ: this.set('q'), qEntity: s.qEntity, setQEntity: this.set('qEntity'),
+      dateFrom: s.dateFrom, setDateFrom: this.set('dateFrom'), dateTo: s.dateTo, setDateTo: this.set('dateTo'),
+      filterSelects: [
+        { value:s.fSource, onChange:this.set('fSource'), options:[{value:'',label:'Todas las fuentes'}].concat([...new Set(REPORTS.map(r=>r.source))].map(v=>({value:v,label:v}))) },
+        { value:s.fSent, onChange:this.set('fSent'), options:[{value:'',label:'Todo sentimiento'},{value:'POS',label:'Positivo'},{value:'NEU',label:'Neutro'},{value:'NEG',label:'Negativo'}] },
+        { value:s.fFraming, onChange:this.set('fFraming'), options:this.selectOpts(FRAMING,'Todo encuadre') },
+        { value:s.fHeadline, onChange:this.set('fHeadline'), options:this.selectOpts(HEADLINE,'Todo titular') },
+        { value:s.fLead, onChange:this.set('fLead'), options:this.selectOpts(LEAD,'Todo lead') },
+        { value:s.fSourceQ, onChange:this.set('fSourceQ'), options:this.selectOpts(SOURCEQ,'Toda calidad de fuente') },
+        { value:s.fHard, onChange:this.set('fHard'), options:[{value:'',label:'Datos duros: todos'},{value:'si',label:'Con datos duros'},{value:'no',label:'Sin datos duros'}] },
+        { value:s.sortDir, onChange:e=>this.setState({ sortKey:'date', sortDir:e.target.value }), options:[{value:'desc',label:'Más recientes'},{value:'asc',label:'Más antiguos'}] }
+      ],
+      clearFilters: () => this.setState({ q:'', qEntity:'', fSource:'', fSent:'', fFraming:'', fHeadline:'', fLead:'', fSourceQ:'', fHard:'', dateFrom:'', dateTo:'' }),
+      resultCount: rows.length + ' de ' + REPORTS.length + ' reportes',
+      pageLabel: 'Página 1 de 1 · ' + rows.length + ' visibles',
+      hasRows: rows.length > 0, isEmpty: rows.length === 0,
+      columns: cols.map(c => ({ label:c.label, align:c.align, cursor:'pointer', color: s.sortKey === c.key ? 'var(--accent)' : 'var(--faint)',
+        arrow: s.sortKey === c.key ? (s.sortDir === 'asc' ? ' ↑' : ' ↓') : '', onClick: this.sortCol(c.key) })),
+      rows: rows.map(r => {
+        const si = this.sent(r.sent, r.score);
+        return { date:this.fmtDate(r.date), title:r.title, topic:r.topic, source:r.source,
+          sentLabel:si.label, sentBg:si.bg, sentFg:si.fg, sentBorder:si.border,
+          framing: FRAMING[r.framing], entities: r.entities, hard: r.hard ? '●' : '—',
+          hardColor: r.hard ? 'var(--accent)' : 'var(--faint)',
+          rowBg: 'transparent', onClick: () => this.setState({ selectedId: r.id }) };
+      }),
+
+      canonEntities: CANON.map(e => ({ name:e.name, typeLabel: e.type === 'PERSON' ? 'Persona' : 'Organización',
+        desc: e.desc || 'Sin descripción', stats: e.articles + ' art. · ' + e.mentions + ' menc.' })),
+      aliases: ALIASES.map(a => ({ acronym:a.acronym, canonical:a.canonical, typeLabel: a.type === 'PERSON' ? 'Persona' : 'Organización',
+        opacity: a.active ? 1 : 0.45, toggleLabel: a.active ? 'Activa' : 'Inactiva',
+        toggleColor: a.active ? 'var(--pos)' : 'var(--faint)',
+        onDelete: () => this.setState({ dialog:{ kind:'alias', title:'Eliminar la sigla ' + a.acronym + '?', body:'El backend dejará de resolver esta sigla en próximos análisis. Los reportes ya guardados no cambian.', confirm:'Eliminar', danger:true } }) })),
+      aliasCount: ALIASES.length + ' siglas · ' + ALIASES.filter(a => a.active).length + ' activas',
+
+      swatches: [
+        { name:'Fondo', token:'--bg', value:'var(--bg)' },
+        { name:'Superficie', token:'--surface', value:'var(--surface)' },
+        { name:'Superficie 2', token:'--surface-2', value:'var(--surface-2)' },
+        { name:'Borde', token:'--border', value:'var(--border)' },
+        { name:'Texto', token:'--text', value:'var(--text)' },
+        { name:'Acento', token:'--accent', value:'var(--accent)' },
+        { name:'Positivo', token:'--pos', value:'var(--pos)' },
+        { name:'Negativo', token:'--neg', value:'var(--neg)' },
+        { name:'Advertencia', token:'--warn', value:'var(--warn)' },
+        { name:'Neutro', token:'--neu', value:'var(--neu)' }
+      ],
+
+      dialog: !!s.dialog,
+      dialogTitle: s.dialog ? s.dialog.title : '',
+      dialogBody: s.dialog ? s.dialog.body : '',
+      dialogConfirmLabel: s.dialog ? s.dialog.confirm : '',
+      dialogBtnBg: s.dialog && s.dialog.danger ? 'var(--neg)' : 'var(--accent)',
+      dialogBtnFg: s.dialog && s.dialog.danger ? '#fff' : 'var(--accent-fg)',
+      openDemoDialog: () => this.setState({ dialog:{ title:'Fusionar “MINERD” con “Ministerio de Educación”?', body:'Las 7 menciones de la entidad origen pasarán a la entidad destino y la origen dejará de existir. La acción no se puede deshacer.', confirm:'Fusionar', danger:true } }),
+      openLogoutDialog: () => this.setState({ dialog:{ kind:'logout', title:'Cerrar sesión?', body:'Se descartará cualquier análisis en vista previa que no haya guardado.', confirm:'Cerrar sesión', danger:false } }),
+      closeDialog: () => this.setState({ dialog:null }),
+      confirmDialog: () => {
+        const d = s.dialog;
+        if (d && d.kind === 'logout') this.setState({ dialog:null, view:'login', loginPass:'' });
+        else this.setState({ dialog:null });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>
