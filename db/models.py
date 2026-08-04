@@ -66,20 +66,44 @@ class Article(Base):
     overall_sentiment: Mapped[str | None] = mapped_column(String(10)) # "POS" | "NEG" | "NEU"
     sentiment_score: Mapped[float | None] = mapped_column(Float)      # confianza 0..1
 
+    # --- Linaje del análisis (§2.1 de task.md): quién lo produjo, con qué
+    # modelo exacto y qué versión, para poder explicar un resultado meses
+    # después y decidir backfill selectivo en vez de re-analizar a ciegas.
+    # Nulos en filas guardadas antes de esta columna (no hay forma de
+    # reconstruir el linaje retroactivamente).
+    analyzer_name: Mapped[str | None] = mapped_column(String(40))      # "local" | "gemini"
+    analyzer_model: Mapped[str | None] = mapped_column(String(80))     # "es_es_core_news_lg-3.8.0" | "gemini-3.5-flash"
+    analyzer_version: Mapped[str | None] = mapped_column(String(20))   # versión de la heurística/prompt
+    analysis_schema_version: Mapped[int | None] = mapped_column(Integer)  # versión de AnalysisResult
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     # --- Análisis de encuadre (solo GeminiAnalyzer; NULL con LocalAnalyzer) ---
     framing: Mapped[str | None] = mapped_column(String(40))           # crisis_conflicto | logro_institucional | ...
     headline_intent: Mapped[str | None] = mapped_column(String(20))   # informativo | alarmista | sensacionalista
     lead_orientation: Mapped[str | None] = mapped_column(String(20))  # social | oficialista | tecnico
-    dominant_actor: Mapped[str | None] = mapped_column(String(300))   # entidad con más peso en la nota
     source_quality: Mapped[str | None] = mapped_column(String(30))    # citas_directas | testimonios_anonimos | ...
     has_hard_data: Mapped[bool | None] = mapped_column(Boolean)       # ¿hay cifras verificables?
-    blamed_actor: Mapped[str | None] = mapped_column(String(300))     # señalado como causante
-    credited_actor: Mapped[str | None] = mapped_column(String(300))   # presentado como solución
+
+    # --- Actores del encuadre, como identidad canónica (no string suelto) ---
+    # Nula cuando el análisis no señala actor, o cuando el nombre no resolvió
+    # a ninguna entidad canónica de las ya vinculadas a este artículo.
+    dominant_actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    blamed_actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    credited_actor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("canonical_entities.id", ondelete="SET NULL"), index=True, nullable=True
+    )
 
     entities: Mapped[list[Entity]] = relationship(
         back_populates="article",
         cascade="all, delete-orphan",
     )
+    dominant_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[dominant_actor_id])
+    blamed_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[blamed_actor_id])
+    credited_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[credited_actor_id])
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Article {self.source}: {self.title[:40]!r}>"

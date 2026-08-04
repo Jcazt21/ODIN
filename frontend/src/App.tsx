@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { LogOut, X, AlertTriangle } from "lucide-react"
+import { LogOut, X } from "lucide-react"
 import { Aurora } from "@/components/Aurora"
 import { PillNav } from "@/components/PillNav"
 import { SentimentBadge } from "@/components/SentimentBadge"
+import { SentimentSegmented } from "@/components/SentimentSegmented"
 import { AliasManager } from "@/components/AliasManager"
 import { CanonicalEntityManager } from "@/components/CanonicalEntityManager"
 import { ReportsList } from "@/components/ReportsList"
@@ -11,13 +12,7 @@ import { Button } from "@/components/ui/button"
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button"
 import { ShimmerText } from "@/components/ui/shimmer-text"
 import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -32,8 +27,6 @@ import {
   type SaveArticlePayload,
 } from "@/lib/odin-api"
 import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername } from "@/lib/auth"
-
-const SENTIMENTS = ["POS", "NEG", "NEU"] as const
 
 // Fuera del componente: una referencia estable evita que el efecto de layout
 // de PillNav se re-ejecute en cada render de App.
@@ -91,8 +84,124 @@ function isLowConfidence(e: EntityAnalysis) {
 }
 
 function toDraft(a: ArticleAnalysis): SaveArticlePayload {
-  const { id: _id, already_saved: _saved, ...rest } = a
+  const {
+    id: _id,
+    already_saved: _saved,
+    analyzer_name: _an,
+    analyzer_model: _am,
+    analyzer_version: _av,
+    analysis_schema_version: _asv,
+    analyzed_at: _at,
+    ...rest
+  } = a
   return { ...rest, entities: a.entities.map((e) => ({ ...e })) }
+}
+
+function EntityGroup({
+  label,
+  count,
+  items,
+  isDraft,
+  onUpdate,
+  onRemove,
+}: {
+  label: string
+  count: number
+  items: { e: EntityAnalysis; i: number }[]
+  isDraft: boolean
+  onUpdate: (index: number, patch: Partial<EntityAnalysis>) => void
+  onRemove: (index: number) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2.5">
+        <span className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+          {label}
+        </span>
+        <span className="h-px flex-1 bg-border" />
+        <span className="font-mono text-xs text-muted-foreground">{count}</span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map(({ e: ent, i }) => (
+          <Card
+            key={isDraft ? i : `${ent.type}-${ent.name}`}
+            className={cn(
+              "gap-0 overflow-hidden py-0",
+              isDraft && isLowConfidence(ent) && "border-warning/45"
+            )}
+          >
+            {isDraft && isLowConfidence(ent) && (
+              <div className="flex items-center gap-1.5 border-b border-warning/25 bg-warning/10 px-4 py-1.5 text-[11.5px] font-semibold text-warning">
+                <span className="size-1.5 rounded-full bg-warning" />
+                Revisar — baja confianza en la clasificación
+              </div>
+            )}
+            <div className="space-y-3 p-4">
+              <div className="flex items-center gap-2">
+                {isDraft ? (
+                  <Input
+                    value={ent.name}
+                    onChange={(e) => onUpdate(i, { name: e.target.value })}
+                    className="h-8 flex-1 font-medium"
+                  />
+                ) : (
+                  <span className="flex-1 text-[15px] font-semibold">{ent.name}</span>
+                )}
+                {isDraft && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Eliminar entidad"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => onRemove(i)}
+                  >
+                    <X />
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {isDraft ? (
+                  <select
+                    className={cn(selectClass, "h-7 text-xs")}
+                    value={ent.type}
+                    onChange={(e) => onUpdate(i, { type: e.target.value })}
+                  >
+                    <option value="PERSON">Persona</option>
+                    <option value="ORG">Organización</option>
+                  </select>
+                ) : (
+                  <span className="rounded-md border border-border bg-muted px-2 py-0.5 text-[11.5px] text-muted-foreground">
+                    {ent.type === "PERSON" ? "Persona" : "Organización"}
+                  </span>
+                )}
+                <span className="font-mono text-[11.5px] text-muted-foreground">
+                  {ent.mentions_count} {ent.mentions_count === 1 ? "menc." : "menc."}
+                </span>
+                <span className="flex-1" />
+                {isDraft ? (
+                  <SentimentSegmented
+                    value={ent.sentiment_toward ?? "NEU"}
+                    onChange={(v) => onUpdate(i, { sentiment_toward: v })}
+                    size="sm"
+                  />
+                ) : (
+                  <SentimentBadge sentiment={ent.sentiment_toward} score={ent.sentiment_score} />
+                )}
+              </div>
+
+              {ent.context && (
+                <blockquote className="border-l-2 border-border pl-3 font-serif text-[13.5px] leading-snug text-muted-foreground italic text-pretty">
+                  “{ent.context}”
+                </blockquote>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 interface WorkspaceProps {
@@ -107,6 +216,7 @@ function Workspace({ onLogout }: WorkspaceProps) {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ArticleAnalysis | null>(null)
   const [draft, setDraft] = useState<SaveArticlePayload | null>(null)
+  const [entityFilter, setEntityFilter] = useState<"all" | "PERSON" | "ORG">("all")
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -115,6 +225,7 @@ function Workspace({ onLogout }: WorkspaceProps) {
     setError(null)
     setResult(null)
     setDraft(null)
+    setEntityFilter("all")
     try {
       const data = await analyzeUrl(url.trim())
       setResult(data)
@@ -162,6 +273,32 @@ function Workspace({ onLogout }: WorkspaceProps) {
     })
   }
 
+  function removeKeyword(index: number) {
+    setDraft((d) => {
+      if (!d) return d
+      const kws = (d.topic_keywords ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)
+      kws.splice(index, 1)
+      return { ...d, topic_keywords: kws.join(", ") || null }
+    })
+  }
+
+  function addKeyword(text: string) {
+    const v = text.trim()
+    if (!v) return
+    setDraft((d) => {
+      if (!d) return d
+      const kws = (d.topic_keywords ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean)
+      kws.push(v)
+      return { ...d, topic_keywords: kws.join(", ") }
+    })
+  }
+
   const view = result
   const isDraft = draft !== null
   const keywordsText = isDraft ? draft.topic_keywords ?? "" : view?.topic_keywords ?? ""
@@ -170,6 +307,10 @@ function Workspace({ onLogout }: WorkspaceProps) {
     .map((k) => k.trim())
     .filter(Boolean)
   const entities = isDraft ? draft.entities : view?.entities ?? []
+  const entitiesWithIndex = entities.map((e, i) => ({ e, i }))
+  const personEntities = entitiesWithIndex.filter(({ e }) => e.type === "PERSON")
+  const orgEntities = entitiesWithIndex.filter(({ e }) => e.type !== "PERSON")
+  const lowConfidenceCount = entities.filter(isLowConfidence).length
 
   return (
     <div className="relative min-h-screen">
@@ -252,118 +393,151 @@ function Workspace({ onLogout }: WorkspaceProps) {
         )}
 
         {view && (
-          <div className="w-full space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-center gap-2">
-                  <SentimentBadge
-                    sentiment={view.overall_sentiment}
-                    score={view.sentiment_score}
-                  />
-                  {view.already_saved ? (
-                    <span className="text-xs text-muted-foreground">
-                      ya estaba guardada en la base de datos
-                    </span>
-                  ) : (
-                    <span className="text-xs text-warning">
-                      vista previa · revisa y guarda para persistirla
-                    </span>
-                  )}
+          <div className="w-full space-y-5">
+            <Card className="gap-0 overflow-hidden py-0">
+              {!view.already_saved && (
+                <div className="flex flex-wrap items-center gap-2.5 border-b border-warning/25 bg-warning/10 px-6 py-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/15 px-2 py-0.5 font-mono text-[11px] font-bold tracking-wider text-warning">
+                    VISTA PREVIA
+                  </span>
+                  <span className="text-[13px] text-muted-foreground">
+                    Aún no guardado — revisa, corrige y guarda para persistir en la base de
+                    datos.
+                  </span>
                 </div>
-                <CardTitle className="text-2xl leading-snug">
-                  <a
-                    href={view.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline"
-                  >
-                    {view.title}
-                  </a>
-                </CardTitle>
-                <CardDescription className="flex flex-wrap gap-x-3 gap-y-1">
-                  <span>{view.source}</span>
-                  {view.authors && <span>· {view.authors}</span>}
-                  {view.section && <span>· {view.section}</span>}
-                  <span>· {formatDate(view.published_at)}</span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-                  <div>
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">
-                      Tema principal
+              )}
+
+              <CardContent className="space-y-6 p-6">
+                {/* Título + sentimiento global */}
+                <div className="flex flex-wrap items-start justify-between gap-6">
+                  <div className="min-w-0 flex-1 space-y-3">
+                    <h1 className="text-2xl leading-tight font-semibold text-balance font-serif">
+                      <a href={view.url} target="_blank" rel="noreferrer" className="hover:underline">
+                        {view.title}
+                      </a>
+                    </h1>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[12.5px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="size-1.5 rounded-full bg-muted-foreground/60" />
+                        {view.source}
+                      </span>
+                      {view.authors && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span>{view.authors}</span>
+                        </>
+                      )}
+                      {view.section && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span>{view.section}</span>
+                        </>
+                      )}
+                      <span className="text-muted-foreground/40">·</span>
+                      <span>{formatDate(view.published_at)}</span>
+                    </div>
+                  </div>
+
+                  <div className="w-full flex-none space-y-2.5 rounded-xl border border-border bg-muted/30 p-4 sm:w-48">
+                    <p className="text-[10.5px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Sentimiento global
                     </p>
+                    {isDraft ? (
+                      <SentimentSegmented
+                        value={draft.overall_sentiment ?? "NEU"}
+                        onChange={(v) =>
+                          setDraft((d) => (d ? { ...d, overall_sentiment: v } : d))
+                        }
+                      />
+                    ) : (
+                      <SentimentBadge sentiment={view.overall_sentiment} />
+                    )}
+                    {typeof view.sentiment_score === "number" && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span>Confianza</span>
+                          <span className="font-mono text-foreground/80">
+                            {Math.round(view.sentiment_score * 100)}%
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-muted-foreground/70"
+                            style={{ width: `${Math.round(view.sentiment_score * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Campos editables / encuadre */}
+                <div className="space-y-4 border-t border-border pt-5">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Tema principal
+                    </label>
                     {isDraft ? (
                       <Input
                         value={draft.main_topic ?? ""}
                         onChange={(e) =>
-                          setDraft((d) =>
-                            d ? { ...d, main_topic: e.target.value || null } : d
-                          )
+                          setDraft((d) => (d ? { ...d, main_topic: e.target.value || null } : d))
                         }
                       />
                     ) : (
                       <p className="text-lg">{view.main_topic ?? "—"}</p>
                     )}
                   </div>
-                  {isDraft && (
-                    <div>
-                      <p className="mb-1 text-sm font-medium text-muted-foreground">
-                        Sentimiento global
-                      </p>
-                      <select
-                        className={selectClass}
-                        value={draft.overall_sentiment ?? "NEU"}
-                        onChange={(e) =>
-                          setDraft((d) =>
-                            d
-                              ? {
-                                  ...d,
-                                  overall_sentiment:
-                                    e.target.value as (typeof SENTIMENTS)[number],
-                                }
-                              : d
-                          )
-                        }
-                      >
-                        {SENTIMENTS.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
 
-                {isDraft ? (
-                  <div>
-                    <p className="mb-1 text-sm font-medium text-muted-foreground">
-                      Palabras clave (separadas por coma)
-                    </p>
-                    <Input
-                      value={draft.topic_keywords ?? ""}
-                      onChange={(e) =>
-                        setDraft((d) =>
-                          d ? { ...d, topic_keywords: e.target.value || null } : d
-                        )
-                      }
-                    />
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Palabras clave
+                    </label>
+                    {isDraft ? (
+                      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-input bg-muted/30 p-2">
+                        {keywords.map((kw, i) => (
+                          <span
+                            key={`${kw}-${i}`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-background py-1 pr-1 pl-2.5 text-[13px]"
+                          >
+                            {kw}
+                            <button
+                              type="button"
+                              onClick={() => removeKeyword(i)}
+                              aria-label={`Quitar ${kw}`}
+                              className="inline-flex size-4 items-center justify-center rounded text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </span>
+                        ))}
+                        <input
+                          placeholder="añadir…"
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return
+                            e.preventDefault()
+                            addKeyword(e.currentTarget.value)
+                            e.currentTarget.value = ""
+                          }}
+                          className="min-w-[90px] flex-1 bg-transparent px-1 py-1 text-[13px] outline-none"
+                        />
+                      </div>
+                    ) : (
+                      keywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {keywords.map((kw) => (
+                            <span
+                              key={kw}
+                              className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
+                            >
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      )
+                    )}
                   </div>
-                ) : (
-                  keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {keywords.map((kw) => (
-                        <span
-                          key={kw}
-                          className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
-                        >
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
-                  )
-                )}
+                </div>
 
                 {(isDraft ? draft.framing : view.framing) != null && (
                   <>
@@ -454,153 +628,121 @@ function Workspace({ onLogout }: WorkspaceProps) {
                 )}
 
                 <Separator />
-                <div>
-                  <p className="mb-1 text-sm font-medium text-muted-foreground">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                     Cuerpo del artículo
-                  </p>
-                  <p className="max-h-64 overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-foreground/90">
-                    {view.body}
-                  </p>
+                  </label>
+                  <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-muted/20 p-4">
+                    {view.body
+                      .split(/\n+/)
+                      .map((p) => p.trim())
+                      .filter(Boolean)
+                      .map((p, i) => (
+                        <p
+                          key={i}
+                          className="font-serif text-[15px] leading-relaxed text-foreground/85 text-pretty last:mb-0"
+                          style={{ marginBottom: "0.8em" }}
+                        >
+                          {p}
+                        </p>
+                      ))}
+                  </div>
                 </div>
               </CardContent>
+
+              {isDraft && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
+                  <span className="text-[12.5px] text-muted-foreground">
+                    Los cambios se guardan tal como los edites.
+                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        setResult(null)
+                        setDraft(null)
+                      }}
+                    >
+                      Descartar
+                    </Button>
+                    <Button type="button" disabled={saving} onClick={handleSave}>
+                      {saving ? "Guardando…" : "Guardar en base de datos"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Card>
 
-            <div>
-              <h2 className="mb-3 text-lg font-medium">
-                Figuras y empresas mencionadas
-                {entities.length > 0 && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">
-                    ({entities.length})
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-baseline gap-3">
+                  <h2 className="text-lg font-semibold">Entidades mencionadas</h2>
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {entities.length}
                   </span>
-                )}
-              </h2>
+                  {isDraft && lowConfidenceCount > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/15 px-2.5 py-0.5 text-xs font-semibold text-warning">
+                      <span className="size-1.5 rounded-full bg-warning" />
+                      {lowConfidenceCount} por revisar
+                    </span>
+                  )}
+                </div>
+                <div className="inline-flex gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5">
+                  {(
+                    [
+                      ["all", "Todas"],
+                      ["PERSON", "Personas"],
+                      ["ORG", "Organizaciones"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setEntityFilter(value)}
+                      className={cn(
+                        "rounded-[7px] px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+                        entityFilter === value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {entities.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No se detectaron figuras públicas ni empresas en este artículo.
                 </p>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {entities.map((ent, i) => (
-                    <Card
-                      key={isDraft ? i : `${ent.type}-${ent.name}`}
-                      className="gap-3 py-4"
-                    >
-                      <CardHeader className="px-4">
-                        <div className="flex items-start justify-between gap-2">
-                          {isDraft ? (
-                            <div className="flex-1 space-y-1.5">
-                              <Input
-                                value={ent.name}
-                                onChange={(e) =>
-                                  updateEntity(i, { name: e.target.value })
-                                }
-                                className="font-medium"
-                              />
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  className={cn(selectClass, "h-7 text-xs")}
-                                  value={ent.type}
-                                  onChange={(e) =>
-                                    updateEntity(i, { type: e.target.value })
-                                  }
-                                >
-                                  <option value="PERSON">Persona</option>
-                                  <option value="ORG">Organización</option>
-                                </select>
-                                <span className="text-xs text-muted-foreground">
-                                  {ent.mentions_count}{" "}
-                                  {ent.mentions_count === 1 ? "mención" : "menciones"}
-                                </span>
-                                {isLowConfidence(ent) && (
-                                  <span
-                                    className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
-                                    title="Confianza de extracción baja: revisa si el nombre/tipo es correcto."
-                                  >
-                                    <AlertTriangle className="h-3 w-3" />
-                                    revisar
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <CardTitle className="flex items-center gap-1.5 text-base">
-                                {ent.name}
-                                {isLowConfidence(ent) && (
-                                  <AlertTriangle
-                                    className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-                                    aria-label="Confianza de extracción baja"
-                                  >
-                                    <title>Confianza de extracción baja: revisa si el nombre/tipo es correcto.</title>
-                                  </AlertTriangle>
-                                )}
-                              </CardTitle>
-                              <CardDescription>
-                                {ent.type === "PERSON" ? "Persona" : "Organización"}
-                                {" · "}
-                                {ent.mentions_count}{" "}
-                                {ent.mentions_count === 1 ? "mención" : "menciones"}
-                              </CardDescription>
-                            </div>
-                          )}
-
-                          {isDraft ? (
-                            <div className="flex items-center gap-1">
-                              <select
-                                className={cn(selectClass, "h-7 text-xs")}
-                                value={ent.sentiment_toward ?? "NEU"}
-                                onChange={(e) =>
-                                  updateEntity(i, {
-                                    sentiment_toward:
-                                      e.target.value as EntityAnalysis["sentiment_toward"],
-                                  })
-                                }
-                              >
-                                {SENTIMENTS.map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Eliminar entidad"
-                                onClick={() => removeEntity(i)}
-                              >
-                                <X />
-                              </Button>
-                            </div>
-                          ) : (
-                            <SentimentBadge
-                              sentiment={ent.sentiment_toward}
-                              score={ent.sentiment_score}
-                            />
-                          )}
-                        </div>
-                      </CardHeader>
-                      {ent.context && (
-                        <CardContent className="px-4">
-                          <p className="text-xs text-muted-foreground italic">
-                            “{ent.context}”
-                          </p>
-                        </CardContent>
-                      )}
-                    </Card>
-                  ))}
-                </div>
+                <>
+                  {personEntities.length > 0 && entityFilter !== "ORG" && (
+                    <EntityGroup
+                      label="Personas"
+                      count={personEntities.length}
+                      items={personEntities}
+                      isDraft={isDraft}
+                      onUpdate={updateEntity}
+                      onRemove={removeEntity}
+                    />
+                  )}
+                  {orgEntities.length > 0 && entityFilter !== "PERSON" && (
+                    <EntityGroup
+                      label="Empresas y organizaciones"
+                      count={orgEntities.length}
+                      items={orgEntities}
+                      isDraft={isDraft}
+                      onUpdate={updateEntity}
+                      onRemove={removeEntity}
+                    />
+                  )}
+                </>
               )}
             </div>
-
-            {isDraft && (
-              <div className="flex justify-end">
-                <Button type="button" size="lg" disabled={saving} onClick={handleSave}>
-                  {saving ? "Guardando…" : "Guardar cambios"}
-                </Button>
-              </div>
-            )}
           </div>
         )}
           </div>

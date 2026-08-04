@@ -297,3 +297,29 @@ class TestSaveArticleLinksCanonicalEntity:
         mentions = session.query(Entity).filter_by(name="Luis Abinader").all()
         assert len(mentions) == 2
         assert mentions[0].canonical_entity_id == mentions[1].canonical_entity_id
+
+    def test_stamps_analyzer_lineage(self, monkeypatch, api_client, sqlite_sessionmaker):
+        import analysis.canonicalize as canonicalize
+        import db.session as db_session_module
+
+        monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
+        monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
+        monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
+
+        resp = api_client.post(
+            "/api/articles",
+            json={
+                "source": "manual",
+                "url": "https://diariolibre.com/canon-lineage",
+                "title": "Título",
+                "body": "cuerpo",
+            },
+            headers=_auth_headers(),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["analyzer_name"] == "local"
+        assert body["analyzer_model"]
+        assert body["analyzer_version"]
+        assert body["analysis_schema_version"] == 1
+        assert body["analyzed_at"] is not None

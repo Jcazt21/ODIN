@@ -101,6 +101,11 @@ class _Analysis(BaseModel):
     )
 
 
+# Versión del prompt/esquema de salida (§2.1 de task.md): subirla cuando
+# cambie _SYSTEM o los campos/descripciones de _Analysis/_Entity, para poder
+# distinguir en la BD qué filas se generaron con qué versión del prompt.
+_PROMPT_VERSION = "1"
+
 _SYSTEM = (
     "Eres un analista de prensa dominicana. Analizas artículos en español y "
     "extraes: tema principal, palabras clave, sentimiento global, y las figuras "
@@ -142,6 +147,9 @@ def _norm_sentiment(value: str) -> str:
 
 
 class GeminiAnalyzer:
+    name = "gemini"
+    version = _PROMPT_VERSION
+
     def __init__(self, model: str = "gemini-3.5-flash", thinking_budget: int = 0) -> None:
         # gemini-3.5-flash: buen equilibrio calidad/coste. Usa "gemini-3.5-pro"
         # para máxima precisión (más caro).

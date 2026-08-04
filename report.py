@@ -10,7 +10,7 @@ import argparse
 
 from sqlalchemy import func, select
 
-from db.models import Article, Entity
+from db.models import Article, CanonicalEntity, Entity
 from db.session import get_session
 
 
@@ -33,9 +33,17 @@ def summary(session) -> None:
         print(f"  {sent or '-':4s}: {count}")
 
     print("\nFiguras/empresas más mencionadas:")
+    # Agrupa por identidad canónica (no por string): así "Luis Abinader" y
+    # "Presidente Abinader" cuentan como una sola fila. Las menciones sin
+    # vincular (guardadas antes de canonical_entity_id, ver models.py) caen
+    # con COALESCE al nombre/tipo crudo de Entity, para no perderlas del reporte.
+    name_col = func.coalesce(CanonicalEntity.name, Entity.name)
+    type_col = func.coalesce(CanonicalEntity.type, Entity.type)
     rows = session.execute(
-        select(Entity.name, Entity.type, func.count(Entity.id).label("n"))
-        .group_by(Entity.name, Entity.type)
+        select(name_col, type_col, func.count(Entity.id).label("n"))
+        .select_from(Entity)
+        .outerjoin(CanonicalEntity, Entity.canonical_entity_id == CanonicalEntity.id)
+        .group_by(name_col, type_col)
         .order_by(func.count(Entity.id).desc())
         .limit(15)
     )

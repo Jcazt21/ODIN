@@ -464,42 +464,39 @@ backend en Cloud Run: orígenes distintos).
 
 ## 4. Modelo de datos
 
-### 4.1 🔴 No existe una dimensión canónica de entidad
+### 4.1 ✅ No existe una dimensión canónica de entidad — RESUELTO (2026-08-03)
 
-**Evidencia**: [db/models.py:78-103](db/models.py#L78) — la tabla `entities` es en
-realidad una tabla de **menciones** (`article_id` + `name` como string).
-`entity_aliases` mapea sigla→string canónico, pero tampoco apunta a una entidad.
+**Estado actual**: el modelo estrella ya existe, con `Entity` funcionando como
+la tabla de menciones (no hizo falta una tabla `entity_mention` nueva):
 
-**Impacto**: toda la analítica que justifica el producto agrupa por **cadena de
-texto**:
-- [report.py:36-41](report.py#L36) hace `GROUP BY Entity.name, Entity.type`.
-- Filtrar por entidad en la API es `ILIKE '%texto%'` ([api.py:293-296](api.py#L293)).
+- `CanonicalEntity` ([db/models.py:128](db/models.py#L128)) es la dimensión: una
+  fila por figura/empresa real, con `get_or_create`/`merge` en
+  [db/canonical_entities.py](db/canonical_entities.py) y CRUD completo en la API
+  (`GET/PUT /api/canonical-entities/{id}`, `POST .../merge`).
+- `Entity.canonical_entity_id` ([db/models.py:117](db/models.py#L117)) vincula
+  cada mención a su fila canónica — poblado en los dos puntos de escritura
+  (`pipeline.py::_persist`, `api.py::save_article`).
+- **`report.py`** agrupa ahora por `CanonicalEntity` (join + `COALESCE` a
+  `Entity.name` para menciones antiguas sin vincular), no por string crudo.
+- **`article.dominant_actor` / `blamed_actor` / `credited_actor`** pasaron de
+  `String(300)` a FKs (`dominant_actor_id` etc., `ondelete=SET NULL`) hacia
+  `canonical_entities.id` — migración Alembic `bedd70abc693`, verificada con
+  upgrade/downgrade contra SQLite y un smoke test end-to-end del ORM.
+  `match_actor_name` (en `canonicalize.py`) sigue reapuntando el string por
+  comparación textual como antes; lo nuevo es `resolve_actor_id()` en
+  `db/canonical_entities.py`, que traduce ese string ya resuelto al `id` de la
+  `CanonicalEntity` correspondiente en el momento de persistir (usa el mapa
+  nombre→canónica ya construido al crear las menciones del mismo artículo, sin
+  tocar la BD de nuevo).
+- Serializers de la API actualizados para leer `.name` de la relación, con
+  `selectinload` de los 3 actores en `list_articles` para no introducir N+1.
+- Suite completa (`pytest tests/`) en verde tras el cambio: 117 passed, 3 skipped.
 
-Consecuencias: "Luis Abinader" y "Presidente Abinader" son dos entidades distintas
-en los reportes; el filtro `entity=Fernández` mezcla a Leonel, Omar y César; no
-puedes adjuntar atributos a una entidad (partido, cargo, sector, si es figura
-pública o privada); y todo el aparato de canonicalización —que es sofisticado y
-está bien hecho— es un parche sobre un modelo que no tiene dónde guardar la
-identidad.
-
-Además esto bloquea directamente lo que el cliente probablemente va a pedir
-(§15, pregunta 3): una **lista de entidades vigiladas** necesita que la entidad
-sea una fila con identidad, no un string repetido en 500 menciones.
-
-**Acción**: modelo estrella real.
-```
-entity          (id, canonical_name, type, slug, created_at, notes)   ← dimensión
-entity_alias    (id, entity_id FK, alias, alias_key, is_active)       ← ya casi existe
-entity_mention  (id, article_id FK, entity_id FK, surface_form,
-                 mentions_count, sentiment_toward, sentiment_score, context)
-```
-`article.dominant_actor` / `blamed_actor` / `credited_actor` pasan a ser FKs a
-`entity.id` en vez de strings sueltos — hoy son `String(300)` con un
-`match_actor_name` que "reapunta" por comparación textual
-([canonicalize.py:167-182](analysis/canonicalize.py#L167)).
-
-Es **la** refactorización que hay que hacer antes de acumular volumen. Con 7
-artículos cuesta una tarde; con 50.000 cuesta un proyecto.
+**Pendiente, no bloqueante**: filtrar por entidad en la API sigue siendo
+`ILIKE '%texto%'` sobre `Entity.name` ([api.py:390-392](api.py#L390)) en vez de
+por `canonical_entity_id` — sirve para la búsqueda libre actual, pero no permite
+filtrar por la identidad canónica exacta (p.ej. un link "ver todos los artículos
+de esta persona" que use el id en vez de un `ILIKE` del nombre mostrado).
 
 ### 4.2 🟠 Índices ausentes en las columnas que realmente se consultan
 
@@ -536,7 +533,23 @@ o mejor: columna denormalizada `entity_count` mantenida en la escritura.
 
 **Acción**: filtrar en SQL con `ILIKE` y paginar.
 
-### 4.5 🟡 Normalización inconsistente entre módulos
+### 4.5 ✅ `_norm_key` duplicado en dos módulos — RESUELTO (2026-08-03)
+
+**Estado actual**: la duplicación literal de `_norm_key` entre `canonicalize.py`
+y `local_analyzer.py` se eliminó — ambas ahora importan `norm_key`/`strip_accents`
+desde el nuevo `analysis/text_norm.py`. Verificado con `py_compile` y una
+comprobación directa de los casos (`Jean-Claude`, `P.R.M.`, mayúsculas, tildes,
+espacios) — comportamiento idéntico al de antes.
+
+**Fuera de alcance de este fix, pendiente por separado**: `db/aliases.py:77`
+(`resolve()` usa `name.strip().lower()`, sin quitar acentos) no está unificado
+con `analysis/text_norm.norm_key()` — el caso "Policía Nacional" vs "Policia
+Nacional" sin tilde descrito abajo **sigue sin resolverse**, igual que
+`scripts/evaluate.py`, que tiene su propia copia independiente de
+`_norm_key`/`_strip_accents`.
+
+<details>
+<summary>Diagnóstico original (histórico)</summary>
 
 **Evidencia**:
 - [db/aliases.py:77](db/aliases.py#L77) — `resolve()` usa `name.strip().lower()`.
@@ -553,6 +566,8 @@ dos de ellas duplicadas literalmente.
 **Acción**: un único `analysis/normalize.py` con `norm_key()`, usado por todos
 (incluido el cálculo de `alias_key` al insertar). Migración para recalcular
 `alias_key` de las 119 filas existentes.
+
+</details>
 
 ### 4.6 🟡 Sin retención ni ciclo de vida
 

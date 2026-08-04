@@ -9,6 +9,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+# Versión del esquema de `AnalysisResult` (§2.1 de task.md): incrementar cuando
+# se agregue, quite o cambie de significado un campo del análisis, para poder
+# distinguir en la BD qué filas usan qué forma del esquema y decidir un
+# backfill selectivo en vez de re-analizar todo el corpus a ciegas.
+ANALYSIS_SCHEMA_VERSION = 1
+
 
 @dataclass
 class EntityResult:
@@ -47,4 +53,12 @@ class AnalysisResult:
 
 
 class Analyzer(Protocol):
+    # Metadatos de linaje (§2.1): quién produjo el análisis, con qué modelo
+    # exacto y qué versión de heurística/prompt — para poder responder "¿por
+    # qué esta fila dice NEG?" y decidir backfills selectivos sin adivinar por
+    # la presencia/ausencia de campos de encuadre.
+    name: str      # "local" | "gemini"
+    model: str     # p.ej. "es_core_news_lg-3.8.0" | "gemini-3.5-flash"
+    version: str   # versión de la heurística/prompt de ESTE analizador
+
     def analyze(self, title: str, body: str) -> AnalysisResult: ...

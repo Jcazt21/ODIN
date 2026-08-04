@@ -22,10 +22,17 @@ interfaz Analyzer); ver analysis/gemini_analyzer.py.
 """
 from __future__ import annotations
 
-import unicodedata
 from collections import Counter, defaultdict
 
 from analysis.base import AnalysisResult, EntityResult
+from analysis.text_norm import norm_key as _norm_key
+from analysis.text_norm import strip_accents as _strip_accents
+
+# Versión de la heurística de LocalAnalyzer (§2.1 de task.md): subirla cuando
+# cambie una regla que afecta el resultado (_VENUE_WORDS, _is_named_after_place,
+# _merge_aliases, umbrales de _extraction_confidence...), para poder distinguir
+# en la BD qué filas se analizaron con qué versión del código.
+_LOCAL_ANALYZER_VERSION = "1"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
@@ -127,24 +134,6 @@ def _is_proper_span(ent) -> bool:
     return True
 
 
-def _strip_accents(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
-    )
-
-
-def _norm_key(name: str) -> str:
-    """Clave de comparación: sin acentos, minúsculas, espacios colapsados.
-
-    Guiones -> espacio ("Jean-Claude" == "Jean Claude") y puntos fuera
-    ("P.R.M." == "PRM"); debe coincidir con `canonicalize._norm_key`, que
-    aplica la misma normalización sobre estas mismas claves más adelante en
-    el pipeline.
-    """
-    name = name.replace("-", " ").replace(".", "")
-    return " ".join(_strip_accents(name).lower().split())
-
-
 def _extraction_confidence(display_name: str, etype: str, count: int) -> float:
     """Qué tan segura estuvo la extracción de que esta es una mención real,
     no ruido. Señales baratas, disponibles ya en este punto del pipeline:
@@ -186,6 +175,9 @@ def _aggregate(probas_list: list[dict | None]) -> tuple[str, float]:
 
 
 class LocalAnalyzer:
+    name = "local"
+    version = _LOCAL_ANALYZER_VERSION
+
     def __init__(self, spacy_model: str = "es_core_news_lg") -> None:
         self._spacy_model = spacy_model
         self._nlp = None
@@ -206,6 +198,19 @@ class LocalAnalyzer:
                 ) from exc
             self._nlp.max_length = 2_000_000
         return self._nlp
+
+    @property
+    def model(self) -> str:
+        # Nombre y versión reales SI el modelo ya está cargado (nlp.meta); si
+        # no, el nombre del paquete configurado sin versión. Deliberadamente
+        # NO fuerza la carga perezosa de spaCy solo para leer esta propiedad
+        # (analyze() la lee para cada guardado): eso rompería cualquier
+        # análisis ya hecho por otro medio (Gemini, un Analyzer de prueba) que
+        # solo necesita registrar linaje, no re-cargar spaCy de paso.
+        if self._nlp is not None:
+            meta = self._nlp.meta
+            return f"{meta.get('lang', '?')}_{meta.get('name', self._spacy_model)}-{meta.get('version', '?')}"
+        return self._spacy_model
 
     @property
     def sent(self):

@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import requests
 import trafilatura
@@ -36,9 +36,10 @@ import db.aliases as alias_store
 import db.canonical_entities as canonical_entity_store
 import url_guard
 from analysis import LocalAnalyzer
-from analysis.base import Analyzer
+from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_entities, canonicalize_result, match_actor_name
 from analysis.local_analyzer import sentence_mentions_venue_word
+from analysis.text_norm import norm_key as _norm_key
 from config import settings
 from db.models import Article, CanonicalEntity, Entity, EntityAlias
 from db.session import get_session, init_db
@@ -262,6 +263,11 @@ class ArticleDetail(_ResponseModel):
     has_hard_data: bool | None = None
     blamed_actor: str | None = None
     credited_actor: str | None = None
+    analyzer_name: str | None = None
+    analyzer_model: str | None = None
+    analyzer_version: str | None = None
+    analysis_schema_version: int | None = None
+    analyzed_at: datetime | None = None
     entities: list[EntityMention] = []
 
 
@@ -445,6 +451,11 @@ def analyze(req: AnalyzeRequest):
         has_hard_data=result.has_hard_data,
         blamed_actor=result.blamed_actor,
         credited_actor=result.credited_actor,
+        analyzer_name=_analyzer.name,
+        analyzer_model=_analyzer.model,
+        analyzer_version=_analyzer.version,
+        analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
+        analyzed_at=datetime.now(UTC),
         entities=[EntityMention.model_validate(e) for e in result.entities],
     )
 
@@ -537,8 +548,26 @@ def _apply_article_filters(
 
 
 def _serialize_summary(article: Article) -> ArticleSummary:
-    return ArticleSummary.model_validate(article).model_copy(
-        update={"entity_count": len(article.entities)}
+    return ArticleSummary(
+        id=article.id,
+        source=article.source,
+        url=article.url,
+        title=article.title,
+        section=article.section,
+        published_at=article.published_at,
+        scraped_at=article.scraped_at,
+        main_topic=article.main_topic,
+        overall_sentiment=article.overall_sentiment,
+        sentiment_score=article.sentiment_score,
+        framing=article.framing,
+        headline_intent=article.headline_intent,
+        lead_orientation=article.lead_orientation,
+        source_quality=article.source_quality,
+        has_hard_data=article.has_hard_data,
+        dominant_actor=article.dominant_actor.name if article.dominant_actor else None,
+        blamed_actor=article.blamed_actor.name if article.blamed_actor else None,
+        credited_actor=article.credited_actor.name if article.credited_actor else None,
+        entity_count=len(article.entities),
     )
 
 
@@ -587,11 +616,16 @@ def list_articles(
         total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
 
         order_col = Article.published_at.asc() if sort == "oldest" else Article.published_at.desc()
-        # selectinload: una segunda query con IN(...) para todas las entidades
-        # de la página, en vez de una lazy-load por artículo (N+1) al pedir
-        # `len(article.entities)` en _serialize_summary.
+        # selectinload: una query con IN(...) por relación para toda la página,
+        # en vez de lazy-load por artículo (N+1) al pedir `len(article.entities)`
+        # y `article.dominant_actor.name` (+blamed/credited) en _serialize_summary.
         rows = session.scalars(
-            base.options(selectinload(Article.entities))
+            base.options(
+                selectinload(Article.entities),
+                selectinload(Article.dominant_actor),
+                selectinload(Article.blamed_actor),
+                selectinload(Article.credited_actor),
+            )
             .order_by(order_col, Article.id.desc())
             .limit(limit)
             .offset(offset)
@@ -654,6 +688,30 @@ def get_article(article_id: int):
         session.close()
 
 
+_ACTOR_FIELDS = {
+    "dominant_actor": "dominant_actor_id",
+    "blamed_actor": "blamed_actor_id",
+    "credited_actor": "credited_actor_id",
+}
+
+
+def _resolve_actor_field(article: Article, name: str | None) -> int | None:
+    """Resuelve el string de actor enviado en la rectificación a la
+    `CanonicalEntity.id` de una mención YA vinculada a este artículo — igual
+    criterio conservador que `resolve_actor_id` al guardar (§4.1): si el
+    nombre no coincide con ninguna entidad del propio artículo, no se crea una
+    fila nueva ni se adivina, queda en NULL."""
+    if not name:
+        return None
+    nkey = _norm_key(name)
+    for ent in article.entities:
+        if ent.canonical_entity and _norm_key(ent.canonical_entity.name) == nkey:
+            return ent.canonical_entity_id
+        if _norm_key(ent.name) == nkey:
+            return ent.canonical_entity_id
+    return None
+
+
 @app.put(
     "/api/articles/{article_id}",
     dependencies=[Depends(auth.require_auth)],
@@ -672,7 +730,10 @@ def update_article(article_id: int, payload: ArticleUpdatePayload):
             raise HTTPException(status_code=404, detail="Reporte no encontrado.")
         data = payload.model_dump(exclude_unset=True)
         for field, value in data.items():
-            setattr(article, field, value)
+            if field in _ACTOR_FIELDS:
+                setattr(article, _ACTOR_FIELDS[field], _resolve_actor_field(article, value))
+            else:
+                setattr(article, field, value)
         session.commit()
         return _serialize(article, already_saved=True)
     except HTTPException:
@@ -1149,14 +1210,18 @@ def save_article(req: SaveArticleRequest):
             framing=req.framing,
             headline_intent=req.headline_intent,
             lead_orientation=req.lead_orientation,
-            dominant_actor=match_actor_name(req.dominant_actor, entities),
             source_quality=req.source_quality,
             has_hard_data=req.has_hard_data,
-            blamed_actor=match_actor_name(req.blamed_actor, entities),
-            credited_actor=match_actor_name(req.credited_actor, entities),
+            analyzer_name=_analyzer.name,
+            analyzer_model=_analyzer.model,
+            analyzer_version=_analyzer.version,
+            analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
+            analyzed_at=datetime.now(UTC),
         )
+        canonical_by_name: dict[str, CanonicalEntity] = {}
         for e in entities:
             canonical = canonical_entity_store.get_or_create(session, e.name, e.type)
+            canonical_by_name[e.name] = canonical
             article.entities.append(
                 Entity(
                     name=e.name,
@@ -1169,6 +1234,15 @@ def save_article(req: SaveArticleRequest):
                     canonical_entity=canonical,
                 )
             )
+        article.dominant_actor_id = canonical_entity_store.resolve_actor_id(
+            match_actor_name(req.dominant_actor, entities), canonical_by_name
+        )
+        article.blamed_actor_id = canonical_entity_store.resolve_actor_id(
+            match_actor_name(req.blamed_actor, entities), canonical_by_name
+        )
+        article.credited_actor_id = canonical_entity_store.resolve_actor_id(
+            match_actor_name(req.credited_actor, entities), canonical_by_name
+        )
         session.add(article)
         session.commit()
         return _serialize(article, already_saved=False)
@@ -1221,8 +1295,34 @@ def _arbitrate_ambiguous_persons(result) -> None:
 
 
 def _serialize(article: Article, already_saved: bool) -> ArticleDetail:
-    return ArticleDetail.model_validate(article).model_copy(
-        update={"already_saved": already_saved}
+    return ArticleDetail(
+        already_saved=already_saved,
+        id=article.id,
+        source=article.source,
+        url=article.url,
+        title=article.title,
+        authors=article.authors,
+        section=article.section,
+        published_at=article.published_at,
+        body=article.body,
+        main_topic=article.main_topic,
+        topic_keywords=article.topic_keywords,
+        overall_sentiment=article.overall_sentiment,
+        sentiment_score=article.sentiment_score,
+        framing=article.framing,
+        headline_intent=article.headline_intent,
+        lead_orientation=article.lead_orientation,
+        dominant_actor=article.dominant_actor.name if article.dominant_actor else None,
+        source_quality=article.source_quality,
+        has_hard_data=article.has_hard_data,
+        blamed_actor=article.blamed_actor.name if article.blamed_actor else None,
+        credited_actor=article.credited_actor.name if article.credited_actor else None,
+        analyzer_name=article.analyzer_name,
+        analyzer_model=article.analyzer_model,
+        analyzer_version=article.analyzer_version,
+        analysis_schema_version=article.analysis_schema_version,
+        analyzed_at=article.analyzed_at,
+        entities=[EntityMention.model_validate(e) for e in article.entities],
     )
 
 

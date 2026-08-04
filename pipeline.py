@@ -6,13 +6,14 @@ Evita duplicados por URL (no re-analiza artículos ya guardados).
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 
 import db.canonical_entities as canonical_entity_store
-from analysis.base import Analyzer
+from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_result, known_person_fullname_map
-from db.models import Article, Entity
+from db.models import Article, CanonicalEntity, Entity
 from db.session import get_session, init_db
 from scrapers import SCRAPERS
 from scrapers.base import BaseScraper, ScrapedArticle
@@ -49,14 +50,18 @@ def _persist(
         framing=result.framing,
         headline_intent=result.headline_intent,
         lead_orientation=result.lead_orientation,
-        dominant_actor=result.dominant_actor,
         source_quality=result.source_quality,
         has_hard_data=result.has_hard_data,
-        blamed_actor=result.blamed_actor,
-        credited_actor=result.credited_actor,
+        analyzer_name=analyzer.name,
+        analyzer_model=analyzer.model,
+        analyzer_version=analyzer.version,
+        analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
+        analyzed_at=datetime.now(UTC),
     )
+    canonical_by_name: dict[str, CanonicalEntity] = {}
     for e in result.entities:
         canonical = canonical_entity_store.get_or_create(session, e.name, e.type)
+        canonical_by_name[e.name] = canonical
         article.entities.append(
             Entity(
                 name=e.name,
@@ -69,6 +74,15 @@ def _persist(
                 canonical_entity=canonical,
             )
         )
+    article.dominant_actor_id = canonical_entity_store.resolve_actor_id(
+        result.dominant_actor, canonical_by_name
+    )
+    article.blamed_actor_id = canonical_entity_store.resolve_actor_id(
+        result.blamed_actor, canonical_by_name
+    )
+    article.credited_actor_id = canonical_entity_store.resolve_actor_id(
+        result.credited_actor, canonical_by_name
+    )
     session.add(article)
     session.commit()
     return article

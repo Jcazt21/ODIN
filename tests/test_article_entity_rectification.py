@@ -4,7 +4,7 @@ atender un pedido de corrección o de borrado sobre una persona nombrada."""
 from __future__ import annotations
 
 from auth import create_token
-from db.models import Article, Entity
+from db.models import Article, CanonicalEntity, Entity
 
 
 def _auth_headers() -> dict[str, str]:
@@ -79,6 +79,45 @@ class TestUpdateArticle:
             "/api/articles/999", json={"overall_sentiment": "POS"}, headers=_auth_headers()
         )
         assert resp.status_code == 404
+
+    def test_sets_dominant_actor_to_an_existing_mention(self, api_client, sqlite_sessionmaker):
+        session = sqlite_sessionmaker()
+        article = _seed_article(session)
+        canonical = CanonicalEntity(name="Luis Abinader", type="PERSON")
+        session.add(canonical)
+        session.commit()
+        _seed_entity(
+            session, article, name="Luis Abinader", type="PERSON",
+            canonical_entity_id=canonical.id,
+        )
+        session.close()
+
+        resp = api_client.put(
+            f"/api/articles/{article.id}",
+            json={"dominant_actor": "Luis Abinader"},
+            headers=_auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["dominant_actor"] == "Luis Abinader"
+
+        session = sqlite_sessionmaker()
+        refreshed = session.get(Article, article.id)
+        assert refreshed.dominant_actor_id == canonical.id
+
+    def test_clears_dominant_actor_when_name_matches_no_mention(
+        self, api_client, sqlite_sessionmaker
+    ):
+        session = sqlite_sessionmaker()
+        article = _seed_article(session)
+        session.close()
+
+        resp = api_client.put(
+            f"/api/articles/{article.id}",
+            json={"dominant_actor": "Alguien Sin Mencion"},
+            headers=_auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["dominant_actor"] is None
 
 
 class TestDeleteArticle:

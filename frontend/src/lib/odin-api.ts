@@ -32,7 +32,39 @@ export type SourceQuality =
 
 export type ArticleAnalysis = components["schemas"]["ArticleDetail"]
 
-export type SaveArticlePayload = Omit<ArticleAnalysis, "id" | "already_saved">
+export type SaveArticlePayload = Omit<
+  ArticleAnalysis,
+  | "id"
+  | "already_saved"
+  | "analyzer_name"
+  | "analyzer_model"
+  | "analyzer_version"
+  | "analysis_schema_version"
+  | "analyzed_at"
+>
+
+export interface ArticleUpdatePayload {
+  main_topic?: string | null
+  topic_keywords?: string | null
+  overall_sentiment?: "POS" | "NEG" | "NEU" | null
+  sentiment_score?: number | null
+  framing?: Framing | null
+  headline_intent?: HeadlineIntent | null
+  lead_orientation?: LeadOrientation | null
+  dominant_actor?: string | null
+  source_quality?: SourceQuality | null
+  has_hard_data?: boolean | null
+  blamed_actor?: string | null
+  credited_actor?: string | null
+}
+
+export interface EntityUpdatePayload {
+  name?: string
+  type?: "PERSON" | "ORG"
+  sentiment_toward?: "POS" | "NEG" | "NEU" | null
+  sentiment_score?: number | null
+  context?: string | null
+}
 
 export type ArticleSummary = components["schemas"]["ArticleSummary"]
 
@@ -183,6 +215,25 @@ export function getArticle(id: number): Promise<ArticleAnalysis> {
 
 export function getArticleFilterOptions(): Promise<ArticleFilterOptions> {
   return request<ArticleFilterOptions>("/api/articles/filters")
+}
+
+export function updateArticle(
+  id: number,
+  payload: ArticleUpdatePayload
+): Promise<ArticleAnalysis> {
+  return putJson(`/api/articles/${id}`, payload)
+}
+
+export function deleteArticle(id: number): Promise<void> {
+  return del(`/api/articles/${id}`)
+}
+
+export function updateEntity(id: number, payload: EntityUpdatePayload): Promise<EntityAnalysis> {
+  return putJson(`/api/entities/${id}`, payload)
+}
+
+export function deleteEntity(id: number): Promise<void> {
+  return del(`/api/entities/${id}`)
 }
 
 // ── Alias CRUD ──────────────────────────────────────────────────────────────

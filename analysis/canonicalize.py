@@ -24,12 +24,13 @@ Funciona con cualquier objeto que tenga los atributos `name`, `type`,
 from __future__ import annotations
 
 import logging
-import unicodedata
 from typing import Any
 
 from sqlalchemy import select
 
 import db.aliases as alias_store
+from analysis.text_norm import norm_key as _norm_key
+from analysis.text_norm import strip_accents as _strip_accents
 
 log = logging.getLogger("odin.canonicalize")
 
@@ -55,23 +56,6 @@ def _strip_title_prefix(name: str) -> str:
     if len(words) > 1 and _strip_accents(words[0].lower()) in _TITLE_WORDS:
         return " ".join(words[1:])
     return name
-
-
-def _strip_accents(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
-    )
-
-
-def _norm_key(name: str) -> str:
-    """Clave de comparación: sin acentos, minúsculas, espacios colapsados.
-
-    Guiones -> espacio ("Jean-Claude" == "Jean Claude") y puntos fuera
-    ("P.R.M." == "PRM"), para que variantes tipográficas de la misma sigla o
-    nombre compuesto no generen entidades duplicadas.
-    """
-    name = name.replace("-", " ").replace(".", "")
-    return " ".join(_strip_accents(name).lower().split())
 
 
 def known_person_fullname_map() -> dict[str, str]:

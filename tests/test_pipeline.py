@@ -3,13 +3,17 @@ fila de canonical_entities, igual que save_article en api.py. Usa un Analyzer
 falso (sin spaCy/pysentimiento/Gemini) y SQLite en memoria."""
 from __future__ import annotations
 
-from analysis.base import AnalysisResult, EntityResult
+from analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult
 from db.models import CanonicalEntity, Entity
 from pipeline import _persist
 from scrapers.base import ScrapedArticle
 
 
 class _FakeAnalyzer:
+    name = "fake"
+    model = "fake-model"
+    version = "0"
+
     def analyze(self, title: str, body: str) -> AnalysisResult:
         return AnalysisResult(
             main_topic="tema",
@@ -52,3 +56,20 @@ class TestPersistLinksCanonicalEntity:
         mentions = session.query(Entity).filter_by(name="Luis Abinader").all()
         assert len(mentions) == 2
         assert mentions[0].canonical_entity_id == mentions[1].canonical_entity_id
+
+
+class TestPersistRecordsLineage:
+    def test_stamps_analyzer_lineage(self, sqlite_sessionmaker, monkeypatch):
+        import analysis.canonicalize as canonicalize
+
+        monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
+        monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
+
+        session = sqlite_sessionmaker()
+        article = _persist(session, _scraped("https://diariolibre.com/pipeline-lineage"), _FakeAnalyzer())
+
+        assert article.analyzer_name == "fake"
+        assert article.analyzer_model == "fake-model"
+        assert article.analyzer_version == "0"
+        assert article.analysis_schema_version == ANALYSIS_SCHEMA_VERSION
+        assert article.analyzed_at is not None

@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
-import { AlertTriangle, ChevronLeft, ChevronRight, RotateCcw, Search, X } from "lucide-react"
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -18,11 +27,14 @@ import {
   listArticles,
   getArticle,
   getArticleFilterOptions,
+  updateArticle,
+  deleteArticle,
   OdinApiError,
   type ArticleAnalysis,
   type ArticleFilterOptions,
   type ArticleListParams,
   type ArticleSummary,
+  type ArticleUpdatePayload,
 } from "@/lib/odin-api"
 
 const PAGE_SIZE = 12
@@ -75,6 +87,29 @@ function formatDate(value: string | null) {
 
 function isLowConfidence(ent: { extraction_confidence?: number }) {
   return typeof ent.extraction_confidence === "number" && ent.extraction_confidence < 0.9
+}
+
+const SENTIMENT_BAR_COLOR: Record<string, string> = {
+  POS: "bg-success",
+  NEG: "bg-destructive",
+  NEU: "bg-muted-foreground/50",
+}
+
+function toEditForm(article: ArticleAnalysis): ArticleUpdatePayload {
+  return {
+    main_topic: article.main_topic,
+    topic_keywords: article.topic_keywords,
+    overall_sentiment: article.overall_sentiment,
+    sentiment_score: article.sentiment_score,
+    framing: article.framing,
+    headline_intent: article.headline_intent,
+    lead_orientation: article.lead_orientation,
+    dominant_actor: article.dominant_actor,
+    source_quality: article.source_quality,
+    has_hard_data: article.has_hard_data,
+    blamed_actor: article.blamed_actor,
+    credited_actor: article.credited_actor,
+  }
 }
 
 type HardDataFilter = "" | "true" | "false"
@@ -253,40 +288,282 @@ function FilterBar({
 function ReportRow({ article, onOpen }: { article: ArticleSummary; onOpen: (id: number) => void }) {
   return (
     <Card
-      className="cursor-pointer gap-2 py-4 transition-colors hover:border-primary/40"
+      className="cursor-pointer flex-row gap-0 overflow-hidden py-0 transition-colors hover:border-primary/40"
       onClick={() => onOpen(article.id)}
     >
-      <CardHeader className="px-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <span
+        className={cn(
+          "w-1 flex-none",
+          SENTIMENT_BAR_COLOR[article.overall_sentiment ?? "NEU"]
+        )}
+      />
+      <div className="min-w-0 flex-1 space-y-1.5 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <SentimentBadge sentiment={article.overall_sentiment} score={article.sentiment_score} />
-          {article.framing && (
-            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-              {FRAMING_LABELS[article.framing] ?? article.framing}
-            </span>
-          )}
-          {article.has_hard_data && (
-            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
-              Datos duros
-            </span>
-          )}
+          <span>· {formatDate(article.published_at)}</span>
         </div>
-        <CardTitle className="text-lg leading-snug">{article.title}</CardTitle>
-        <CardDescription className="flex flex-wrap gap-x-3 gap-y-1">
+        <p className="truncate text-[15px] font-semibold leading-snug">{article.title}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{article.source}</span>
           {article.section && <span>· {article.section}</span>}
-          <span>· {formatDate(article.published_at)}</span>
           {article.entity_count > 0 && (
             <span>
               · {article.entity_count} {article.entity_count === 1 ? "entidad" : "entidades"}
             </span>
           )}
+          {article.main_topic && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+              {article.main_topic}
+            </span>
+          )}
+          {article.framing && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+              {FRAMING_LABELS[article.framing] ?? article.framing}
+            </span>
+          )}
+          {article.has_hard_data && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+              Datos duros
+            </span>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Formulario de edición (rectificación §8.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ArticleEditForm({
+  article,
+  onSaved,
+  onCancel,
+}: {
+  article: ArticleAnalysis
+  onSaved: (updated: ArticleAnalysis) => void
+  onCancel: () => void
+}) {
+  const [form, setForm] = useState<ArticleUpdatePayload>(() => toEditForm(article))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  function patch(p: Partial<ArticleUpdatePayload>) {
+    setForm((f) => ({ ...f, ...p }))
+  }
+
+  async function handleSave() {
+    setBusy(true)
+    setErr(null)
+    try {
+      const updated = await updateArticle(article.id as number, form)
+      onSaved(updated)
+    } catch (e) {
+      setErr(e instanceof OdinApiError ? e.message : "Error guardando la rectificación.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Rectificar análisis</CardTitle>
+        <CardDescription>
+          Solo se corrige el análisis (tema, sentimiento, encuadre); título, cuerpo y URL no se
+          pueden editar aquí.
         </CardDescription>
       </CardHeader>
-      {article.main_topic && (
-        <CardContent className="px-4 text-sm text-muted-foreground">
-          {article.main_topic}
-        </CardContent>
-      )}
+      <CardContent className="space-y-4">
+        {err && (
+          <Alert variant="destructive">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Tema principal</label>
+            <Input
+              value={form.main_topic ?? ""}
+              onChange={(e) => patch({ main_topic: e.target.value || null })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">
+              Palabras clave (separadas por coma)
+            </label>
+            <Input
+              value={form.topic_keywords ?? ""}
+              onChange={(e) => patch({ topic_keywords: e.target.value || null })}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Sentimiento global</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.overall_sentiment ?? ""}
+              onChange={(e) =>
+                patch({ overall_sentiment: (e.target.value || null) as ArticleUpdatePayload["overall_sentiment"] })
+              }
+            >
+              <option value="">—</option>
+              {Object.entries(SENTIMENT_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Confianza (0–1)</label>
+            <Input
+              type="number"
+              min={0}
+              max={1}
+              step={0.01}
+              value={form.sentiment_score ?? ""}
+              onChange={(e) =>
+                patch({ sentiment_score: e.target.value === "" ? null : Number(e.target.value) })
+              }
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Datos duros</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.has_hard_data == null ? "" : String(form.has_hard_data)}
+              onChange={(e) =>
+                patch({ has_hard_data: e.target.value === "" ? null : e.target.value === "true" })
+              }
+            >
+              <option value="">—</option>
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Encuadre (marco)</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.framing ?? ""}
+              onChange={(e) =>
+                patch({ framing: (e.target.value || null) as ArticleUpdatePayload["framing"] })
+              }
+            >
+              <option value="">—</option>
+              {Object.entries(FRAMING_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Titular</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.headline_intent ?? ""}
+              onChange={(e) =>
+                patch({
+                  headline_intent: (e.target.value || null) as ArticleUpdatePayload["headline_intent"],
+                })
+              }
+            >
+              <option value="">—</option>
+              {Object.entries(HEADLINE_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Lead</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.lead_orientation ?? ""}
+              onChange={(e) =>
+                patch({
+                  lead_orientation: (e.target.value || null) as ArticleUpdatePayload["lead_orientation"],
+                })
+              }
+            >
+              <option value="">—</option>
+              {Object.entries(LEAD_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Calidad de fuentes</label>
+            <select
+              className={cn(selectClass, "w-full")}
+              value={form.source_quality ?? ""}
+              onChange={(e) =>
+                patch({
+                  source_quality: (e.target.value || null) as ArticleUpdatePayload["source_quality"],
+                })
+              }
+            >
+              <option value="">—</option>
+              {Object.entries(SOURCE_LABELS).map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Actor dominante</label>
+            <Input
+              value={form.dominant_actor ?? ""}
+              onChange={(e) => patch({ dominant_actor: e.target.value || null })}
+              placeholder="Debe coincidir con una figura/empresa ya mencionada"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">Señalado (culpa)</label>
+            <Input
+              value={form.blamed_actor ?? ""}
+              onChange={(e) => patch({ blamed_actor: e.target.value || null })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">
+              Acreditado (solución)
+            </label>
+            <Input
+              value={form.credited_actor ?? ""}
+              onChange={(e) => patch({ credited_actor: e.target.value || null })}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" onClick={handleSave} disabled={busy}>
+            {busy ? "Guardando…" : "Guardar cambios"}
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   )
 }
@@ -299,6 +576,9 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [article, setArticle] = useState<ArticleAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -321,6 +601,22 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
   }, [id])
 
+  async function handleDelete() {
+    if (!article) return
+    if (!confirm(`¿Eliminar permanentemente el reporte "${article.title}"? No se puede deshacer.`)) {
+      return
+    }
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteArticle(article.id as number)
+      onBack()
+    } catch (e) {
+      setDeleteError(e instanceof OdinApiError ? e.message : "Error eliminando el reporte.")
+      setDeleting(false)
+    }
+  }
+
   const keywords = (article?.topic_keywords ?? "")
     .split(",")
     .map((k) => k.trim())
@@ -328,16 +624,61 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
   return (
     <div className="w-full space-y-4">
-      <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onBack}>
-        <ChevronLeft className="h-3.5 w-3.5" />
-        Volver a la lista
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onBack}>
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Volver a la lista
+        </Button>
+        {article && !editing && (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditing(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Editar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-destructive hover:text-destructive"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {deleting ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {deleteError && (
+        <Alert variant="destructive">
+          <AlertTitle>No se pudo eliminar</AlertTitle>
+          <AlertDescription>{deleteError}</AlertDescription>
+        </Alert>
+      )}
 
       {error && (
         <Alert variant="destructive">
           <AlertTitle>No se pudo cargar</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      )}
+
+      {article && editing && (
+        <ArticleEditForm
+          article={article}
+          onCancel={() => setEditing(false)}
+          onSaved={(updated) => {
+            setArticle(updated)
+            setEditing(false)
+          }}
+        />
       )}
 
       {loading && (
@@ -354,7 +695,7 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
         </Card>
       )}
 
-      {article && (
+      {article && !editing && (
         <>
           <Card>
             <CardHeader>
