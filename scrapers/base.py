@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
+from urllib import robotparser
+from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 import feedparser
@@ -48,22 +51,124 @@ def _urls_from_sitemap(xml: str) -> list[str]:
     ]
 
 
+# Los periódicos rastreados publican en hora de República Dominicana, que no
+# observa horario de verano (UTC-4 todo el año) — a diferencia de otros países
+# de la región, aquí un offset fijo es exacto, no una aproximación.
+_SANTO_DOMINGO = timezone(timedelta(hours=-4))
+
+
 def _parse_date(value: str | None) -> datetime | None:
-    """Parsea la fecha que devuelve trafilatura (ISO 8601 o solo fecha)."""
+    """Parsea la fecha que devuelve trafilatura (ISO 8601 o solo fecha) y la
+    normaliza a UTC aware (§2.7 de task.md): sin esto, una fecha con offset
+    ("...-04:00") y otra sin hora ("2026-01-15") llegaban una aware y otra
+    naive a la misma columna `DateTime(timezone=True)`, con lo que Postgres y
+    SQLite las interpretaban de forma distinta y los filtros de fecha de la
+    API perdían artículos en los bordes del día.
+
+    Cuando la fuente no da offset (fecha sola, o fecha+hora sin zona) se
+    asume hora de Santo Domingo, que es de donde vienen todos los artículos.
+    """
     if not value:
         return None
     value = value.strip()
     # datetime.fromisoformat (Py 3.11+) cubre ISO con hora, offset y 'Z'.
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        pass
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.strptime(value[:19], fmt)
-        except ValueError:
-            continue
-    return None
+        parsed = None
+    if parsed is None:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                parsed = datetime.strptime(value[:19], fmt)
+                break
+            except ValueError:
+                continue
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_SANTO_DOMINGO)
+    return parsed.astimezone(UTC)
+
+
+class _DomainThrottle:
+    """Cortesía real por dominio (§2.6 de task.md): garantiza al menos
+    `settings.request_delay` segundos entre dos peticiones exitosas al mismo
+    host, sin importar cuántos workers concurrentes las disparen.
+
+    Antes `REQUEST_DELAY` solo se usaba como base del backoff en reintentos;
+    con `fetch_workers` concurrentes contra el mismo dominio, el camino feliz
+    no tenía ningún límite de tasa. Un lock por instancia (no un semáforo por
+    dominio) es suficiente aquí: solo serializa el pequeño tramo "esperar mi
+    turno", no la descarga en sí, así que sigue habiendo paralelismo real
+    entre dominios distintos y con el resto de la descarga/extracción.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._last_request_at: dict[str, float] = {}
+
+    def wait(self, domain: str, min_interval: float) -> None:
+        if min_interval <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            last = self._last_request_at.get(domain)
+            wait_for = 0.0 if last is None else (last + min_interval) - now
+            # Reserva el turno ANTES de dormir (no después de la petición): así
+            # dos threads que llegan casi a la vez para el mismo dominio se
+            # espacian entre sí en vez de ambos ver "nadie ha pedido todavía".
+            self._last_request_at[domain] = max(now, last or 0.0) + min_interval
+        if wait_for > 0:
+            time.sleep(wait_for)
+
+
+class _RobotsCache:
+    """`robots.txt` por dominio, descargado una vez y cacheado.
+
+    Un dominio que no sirve robots.txt (404, timeout, sin conexión) se trata
+    como "todo permitido" — es el comportamiento estándar del protocolo, y
+    fallar cerrado dejaría de rastrear una fuente entera por un problema de
+    red transitorio en un archivo opcional.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._parsers: dict[str, robotparser.RobotFileParser] = {}
+
+    def _get_parser(self, domain: str) -> robotparser.RobotFileParser:
+        with self._lock:
+            parser = self._parsers.get(domain)
+            if parser is not None:
+                return parser
+            parser = robotparser.RobotFileParser()
+            parser.set_url(f"https://{domain}/robots.txt")
+            try:
+                parser.read()
+            except Exception:
+                # Sin robots.txt legible, se asume permitido (ver docstring).
+                parser.allow_all = True
+            self._parsers[domain] = parser
+            return parser
+
+    def can_fetch(self, url: str, user_agent: str) -> bool:
+        domain = urlparse(url).netloc
+        if not domain:
+            return True
+        return self._get_parser(domain).can_fetch(user_agent, url)
+
+    def crawl_delay(self, url: str, user_agent: str) -> float | None:
+        domain = urlparse(url).netloc
+        if not domain:
+            return None
+        delay = self._get_parser(domain).crawl_delay(user_agent)
+        return float(delay) if delay is not None else None
+
+
+# Compartidos entre TODAS las instancias de scraper del proceso: el throttle
+# solo tiene sentido si todo el mundo que le pega a un dominio pasa por el
+# mismo reloj, y el cache de robots.txt evita re-descargarlo por instancia.
+_domain_throttle = _DomainThrottle()
+_robots_cache = _RobotsCache()
 
 
 @dataclass
@@ -130,9 +235,27 @@ class BaseScraper:
 
     # ---- Descarga + extracción --------------------------------------------------
     def fetch(self, url: str) -> str | None:
-        """Descarga con reintentos y backoff exponencial ante errores de red."""
+        """Descarga con reintentos y backoff exponencial ante errores de red.
+
+        Antes de cada intento: respeta `robots.txt` (si el sitio nos excluye
+        esa ruta, no se pide) y espera el turno del throttle por dominio
+        (§2.6 de task.md) — el mismo intervalo, esté esto llamado desde un
+        solo hilo o desde varios workers concurrentes contra el mismo host.
+        """
+        if settings.respect_robots_txt and not _robots_cache.can_fetch(url, settings.user_agent):
+            log.info("bloqueado por robots.txt: %s", url)
+            return None
+
+        domain = urlparse(url).netloc
+        min_interval = settings.request_delay
+        if settings.respect_robots_txt:
+            crawl_delay = _robots_cache.crawl_delay(url, settings.user_agent)
+            if crawl_delay is not None:
+                min_interval = max(min_interval, crawl_delay)
+
         retries = max(1, settings.fetch_retries)
         for attempt in range(retries):
+            _domain_throttle.wait(domain, min_interval)
             try:
                 resp = self.session.get(url, timeout=20)
                 resp.raise_for_status()

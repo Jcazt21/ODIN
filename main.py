@@ -10,11 +10,13 @@ Ejemplos:
 from __future__ import annotations
 
 import argparse
-import logging
 from typing import TYPE_CHECKING
 
 from config import settings
+from observability import configure_logging, get_logger, init_sentry
 from scrapers import SCRAPERS
+
+log = get_logger("odin.main")
 
 if TYPE_CHECKING:
     # Solo para tipos: importarlo de verdad arrastraría `analysis/__init__.py`
@@ -50,7 +52,8 @@ def main() -> None:
     parser.add_argument("--list-sources", action="store_true", help="Listar fuentes y salir.")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
+    init_sentry()
 
     if args.list_sources:
         for key, cls in SCRAPERS.items():

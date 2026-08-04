@@ -5,7 +5,9 @@ Evita duplicados por URL (no re-analiza artículos ya guardados).
 """
 from __future__ import annotations
 
-import logging
+import json
+import time
+import traceback
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -13,12 +15,20 @@ from sqlalchemy import select
 import db.canonical_entities as canonical_entity_store
 from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_result, known_person_fullname_map
-from db.models import Article, CanonicalEntity, Entity
+from db.models import Article, CanonicalEntity, CrawlRun, Entity
 from db.session import get_session, init_db
+from observability import (
+    CRAWL_RUN_IN_PROGRESS,
+    PIPELINE_ARTICLES_TOTAL,
+    PIPELINE_RUN_DURATION_SECONDS,
+    PIPELINE_RUNS_TOTAL,
+    correlation_scope,
+    get_logger,
+)
 from scrapers import SCRAPERS
 from scrapers.base import BaseScraper, ScrapedArticle
 
-log = logging.getLogger("odin.pipeline")
+log = get_logger("odin.pipeline")
 
 
 def _already_stored(session, url: str) -> bool:
@@ -94,7 +104,13 @@ def run(
     sources: list[str] | None = None,
     limit: int | None = None,
 ) -> dict[str, int]:
-    """Ejecuta el pipeline. Devuelve conteo de artículos nuevos por fuente."""
+    """Ejecuta el pipeline. Devuelve conteo de artículos nuevos por fuente.
+
+    Cada corrida queda registrada en `crawl_runs` (§7.1 de task.md): antes el
+    resumen solo se imprimía por consola y se perdía. El `correlation_id` de
+    la fila es el mismo que decora cada línea de log de la corrida, para
+    poder cruzar logs y BD.
+    """
     init_db()
 
     if sources:
@@ -102,50 +118,140 @@ def run(
     else:
         selected = dict(SCRAPERS)
 
-    stats: dict[str, int] = {}
+    with correlation_scope() as run_id:
+        run_started = time.perf_counter()
+        crawl_run_session = get_session()
+        crawl_run = CrawlRun(
+            correlation_id=run_id,
+            sources=", ".join(selected.keys()),
+            analyzer_name=analyzer.name,
+        )
+        crawl_run_session.add(crawl_run)
+        crawl_run_session.commit()
+        crawl_run_id = crawl_run.id
+        crawl_run_session.close()
+        CRAWL_RUN_IN_PROGRESS.set(1)
+
+        stats: dict[str, int] = {}
+        discovered_total = 0
+        saved_total = 0
+        failed_total = 0
+        session = get_session()
+        try:
+            for key, scraper_cls in selected.items():
+                scraper: BaseScraper = scraper_cls()
+                log.info("crawl_source_started", source=scraper.name)
+                source_started = time.perf_counter()
+                # Una consulta por fuente (no por artículo) para el mapa de
+                # nombres completos conocidos usado en la canonicalización.
+                person_map = known_person_fullname_map()
+                new_count = 0
+
+                scraped_articles = list(scraper.scrape(limit=limit))
+                discovered_total += len(scraped_articles)
+                PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="discovered").inc(
+                    len(scraped_articles)
+                )
+                pending = [a for a in scraped_articles if not _already_stored(session, a.url)]
+
+                # Si el analizador soporta lote (LocalAnalyzer), una sola pasada de
+                # spaCy sobre todos los artículos de la fuente es más eficiente que
+                # analizar uno por uno. Si el lote falla, se cae a analizar artículo
+                # por artículo para no perder toda la fuente por un solo texto malo.
+                results: list | None = None
+                analyze_batch = getattr(analyzer, "analyze_batch", None)
+                if analyze_batch is not None and pending:
+                    try:
+                        results = analyze_batch([(a.title, a.body or "") for a in pending])
+                    except Exception:
+                        log.exception(
+                            "batch_analysis_failed",
+                            source=scraper.name,
+                        )
+                        results = None
+                if results is None:
+                    results = [None] * len(pending)
+
+                for scraped, result in zip(pending, results, strict=True):
+                    try:
+                        if result is None:
+                            result = analyzer.analyze(scraped.title, scraped.body or "")
+                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="analyzed").inc()
+                        _persist(session, scraped, result, analyzer, person_map=person_map)
+                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="saved").inc()
+                        new_count += 1
+                        log.info("article_saved", source=scraper.source, title=scraped.title[:70])
+                    except Exception:  # no dejar que un artículo tumbe la corrida
+                        session.rollback()
+                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="failed").inc()
+                        failed_total += 1
+                        log.exception("article_processing_failed", url=scraped.url)
+                stats[key] = new_count
+                saved_total += new_count
+                PIPELINE_RUN_DURATION_SECONDS.labels(source=key).observe(
+                    time.perf_counter() - source_started
+                )
+                log.info(
+                    "crawl_source_finished",
+                    source=scraper.name,
+                    new_articles=new_count,
+                )
+        except Exception:
+            _finish_crawl_run(
+                crawl_run_id,
+                status="failed",
+                discovered=discovered_total,
+                saved=saved_total,
+                failed=failed_total,
+                stats_by_source=stats,
+                error=traceback.format_exc(),
+            )
+            PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status="failed").inc()
+            raise
+        else:
+            _finish_crawl_run(
+                crawl_run_id,
+                status="success",
+                discovered=discovered_total,
+                saved=saved_total,
+                failed=failed_total,
+                stats_by_source=stats,
+            )
+            PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status="success").inc()
+        finally:
+            session.close()
+            CRAWL_RUN_IN_PROGRESS.set(0)
+            log.info(
+                "crawl_run_finished",
+                duration_seconds=round(time.perf_counter() - run_started, 2),
+                articles_saved=saved_total,
+                articles_failed=failed_total,
+            )
+        return stats
+
+
+def _finish_crawl_run(
+    crawl_run_id: int,
+    *,
+    status: str,
+    discovered: int,
+    saved: int,
+    failed: int,
+    stats_by_source: dict[str, int],
+    error: str | None = None,
+) -> None:
     session = get_session()
     try:
-        for key, scraper_cls in selected.items():
-            scraper: BaseScraper = scraper_cls()
-            log.info("Rastreando %s ...", scraper.name)
-            # Una consulta por fuente (no por artículo) para el mapa de
-            # nombres completos conocidos usado en la canonicalización.
-            person_map = known_person_fullname_map()
-            new_count = 0
-
-            pending = [
-                a for a in scraper.scrape(limit=limit) if not _already_stored(session, a.url)
-            ]
-
-            # Si el analizador soporta lote (LocalAnalyzer), una sola pasada de
-            # spaCy sobre todos los artículos de la fuente es más eficiente que
-            # analizar uno por uno. Si el lote falla, se cae a analizar artículo
-            # por artículo para no perder toda la fuente por un solo texto malo.
-            results: list | None = None
-            analyze_batch = getattr(analyzer, "analyze_batch", None)
-            if analyze_batch is not None and pending:
-                try:
-                    results = analyze_batch([(a.title, a.body or "") for a in pending])
-                except Exception:
-                    log.exception(
-                        "  Falló el análisis en lote de %s, se analiza artículo por artículo",
-                        scraper.name,
-                    )
-                    results = None
-            if results is None:
-                results = [None] * len(pending)
-
-            for scraped, result in zip(pending, results, strict=True):
-                try:
-                    if result is None:
-                        result = analyzer.analyze(scraped.title, scraped.body or "")
-                    _persist(session, scraped, result, analyzer, person_map=person_map)
-                    new_count += 1
-                    log.info("  [%s] %s", scraper.source, scraped.title[:70])
-                except Exception:  # no dejar que un artículo tumbe la corrida
-                    session.rollback()
-                    log.exception("  Error procesando %s", scraped.url)
-            stats[key] = new_count
+        crawl_run = session.get(CrawlRun, crawl_run_id)
+        if crawl_run is None:  # no debería pasar; no tumbar la corrida por esto
+            return
+        crawl_run.finished_at = datetime.now(UTC)
+        crawl_run.status = status
+        crawl_run.articles_discovered = discovered
+        crawl_run.articles_saved = saved
+        crawl_run.articles_failed = failed
+        crawl_run.stats_by_source = json.dumps(stats_by_source)
+        crawl_run.error = error
+        session.commit()
     finally:
         session.close()
-    return stats

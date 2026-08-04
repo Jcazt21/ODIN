@@ -181,6 +181,78 @@ class CanonicalEntity(Base):
         return f"<CanonicalEntity {self.name} ({self.type})>"
 
 
+class AnalyzeJob(Base):
+    """Trabajo asíncrono de `POST /api/analyze` (§3.1 de task.md).
+
+    Antes ese endpoint hacía, dentro del ciclo request/response: fetch HTTP
+    externo (hasta 60s solo de red con reintentos), extracción, inferencia
+    NLP y opcionalmente una llamada a Gemini — todo síncrono, sin timeout de
+    proxy que lo sobreviva y sin forma de cancelar. Ahora el endpoint solo
+    valida la URL y encola esta fila; el trabajo pesado corre en
+    `BackgroundTasks` y el cliente hace polling de `GET /api/jobs/{job_id}`.
+    """
+
+    __tablename__ = "analyze_jobs"
+
+    # UUID como clave pública (no el id autoincremental): un job_id no debe
+    # dejar adivinar cuántos análisis se han pedido en total.
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|running|done|failed
+    url: Mapped[str] = mapped_column(String(2048))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Resultado serializado como JSON de texto (el shape de ArticleDetail):
+    # no amerita columnas propias por ser de solo un consumidor (el propio
+    # endpoint que lo produjo) y de vida corta.
+    result_json: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<AnalyzeJob {self.id} {self.status}>"
+
+
+class CrawlRun(Base):
+    """Resumen de una corrida del pipeline (§7.1 de task.md).
+
+    Antes este resumen se calculaba en `pipeline.py` y solo se imprimía por
+    consola: se perdía en cuanto terminaba el proceso. Persistirlo permite
+    ver el historial de corridas (¿cuántos artículos nuevos por fuente?
+    ¿cuánto duró? ¿falló algo?) sin depender de logs efímeros.
+    """
+
+    __tablename__ = "crawl_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Mismo ID que el correlation_id de los logs de esta corrida (ver
+    # observability.py), para poder cruzar la fila con sus líneas de log.
+    correlation_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | success | failed
+
+    # Fuentes pedidas en esta corrida ("diario_libre, listin_diario"); None = todas.
+    sources: Mapped[str | None] = mapped_column(String(300))
+    analyzer_name: Mapped[str | None] = mapped_column(String(40))
+
+    articles_discovered: Mapped[int] = mapped_column(Integer, default=0)
+    articles_saved: Mapped[int] = mapped_column(Integer, default=0)
+    articles_failed: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Detalle por fuente como JSON de texto ({"diario_libre": 5, ...}); no
+    # amerita una tabla propia por lo pequeño y de solo-lectura que es.
+    stats_by_source: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)  # traceback si status == "failed"
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<CrawlRun {self.correlation_id} {self.status}>"
+
+
 class EntityAlias(Base):
     """Sigla de una organización y el nombre completo al que equivale.
 

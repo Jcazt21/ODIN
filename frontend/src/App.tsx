@@ -15,6 +15,7 @@ import {
   OdinApiError,
   type ArticleAnalysis,
   type EntityAnalysis,
+  type JobStatus,
   type SaveArticlePayload,
 } from "@/lib/odin-api"
 import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername } from "@/lib/auth"
@@ -71,6 +72,7 @@ interface WorkspaceProps {
 function AnalyzeTab() {
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(false)
+  const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ArticleAnalysis | null>(null)
@@ -80,11 +82,12 @@ function AnalyzeTab() {
     e.preventDefault()
     if (!url.trim() || loading) return
     setLoading(true)
+    setJobStatus(null)
     setError(null)
     setResult(null)
     setDraft(null)
     try {
-      const data = await analyzeUrl(url.trim())
+      const data = await analyzeUrl(url.trim(), setJobStatus)
       setResult(data)
       if (!data.already_saved) setDraft(toDraft(data))
     } catch (err) {
@@ -95,6 +98,7 @@ function AnalyzeTab() {
       )
     } finally {
       setLoading(false)
+      setJobStatus(null)
     }
   }
 
@@ -192,7 +196,9 @@ function AnalyzeTab() {
                   animation: "odinSpin 0.8s linear infinite",
                 }}
               />
-              Extrayendo y analizando con el modelo — puede tardar hasta un minuto.
+              {jobStatus === "running"
+                ? "Extrayendo y analizando con el modelo — puede tardar hasta un minuto."
+                : "Encolando el análisis…"}
             </div>
             {[
               { h: 13, w: "55%", delay: "0s" },

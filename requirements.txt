@@ -26,6 +26,11 @@ groq>=0.13          # API de Groq; requiere GROQ_API_KEY
 # --- Utilidades ---
 python-dotenv>=1.0
 
+# --- Observabilidad (§7.1 de task.md) ---
+structlog>=24.4          # logs estructurados (JSON) con correlation ID
+prometheus-client>=0.21  # métricas /metrics (formato Prometheus)
+sentry-sdk>=2.18         # seguimiento de errores; opt-in vía ODIN_SENTRY_DSN
+
 # --- API (frontend) ---
 fastapi>=0.115
 uvicorn[standard]>=0.32

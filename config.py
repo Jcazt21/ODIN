@@ -57,6 +57,10 @@ class Settings:
         "postgresql+psycopg2://odin:odin@localhost:5432/odin",
     )
     max_articles_per_source: int = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "25"))
+    # Cortesía real (§2.6 de task.md): intervalo mínimo entre dos peticiones
+    # EXITOSAS al mismo dominio, sin importar cuántos workers concurrentes
+    # haya. Antes solo se usaba como base del backoff en reintentos; ahora
+    # también gobierna el throttle de `_DomainThrottle` en scrapers/base.py.
     request_delay: float = float(os.getenv("REQUEST_DELAY", "1.5"))
     fetch_workers: int = int(os.getenv("FETCH_WORKERS", "4"))
     fetch_retries: int = int(os.getenv("FETCH_RETRIES", "3"))
@@ -64,6 +68,9 @@ class Settings:
         "USER_AGENT",
         "OdinNewsBot/1.0 (+contacto: jeancarlosazar@gmail.com)",
     )
+    # Apagar solo para pruebas locales contra un servidor propio; en producción
+    # respetar robots.txt no es opcional.
+    respect_robots_txt: bool = _flag("ODIN_RESPECT_ROBOTS_TXT", default=True)
 
     # --- Motor de análisis (decide el GASTO) ---
     # Se elige SIEMPRE de forma explícita, nunca por la presencia de
@@ -103,6 +110,15 @@ class Settings:
         "ODIN_CORS_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
     )
+
+    # --- Observabilidad (§7.1 de task.md) ---
+    # Sentry es opt-in: sin DSN configurado, sentry_sdk.init nunca se llama.
+    sentry_dsn: str = os.getenv("ODIN_SENTRY_DSN", "")
+    sentry_environment: str = os.getenv("ODIN_SENTRY_ENVIRONMENT", "development")
+    # Formato de logs: "json" en producción (para agregadores), "console"
+    # (texto legible con color) para desarrollo local. Ver observability.py.
+    log_format: str = _choice("ODIN_LOG_FORMAT", "console", ("json", "console"))
+    log_level: str = os.getenv("ODIN_LOG_LEVEL", "INFO").upper()
 
 
 settings = Settings()

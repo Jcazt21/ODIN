@@ -455,10 +455,14 @@ entidad. Es el punto más difícil solo con código; para máxima precisión, us
 - En el flujo normal Odin hace **una petición por artículo que tú pegas**, así
   que la carga sobre el periódico es la misma que si abrieras la página tú.
 - Se envía un `User-Agent` identificable (`config.py`).
-- `REQUEST_DELAY` **no** es un retardo entre peticiones exitosas: hoy solo se usa
-  como base del backoff cuando una descarga falla y se reintenta
-  ([scrapers/base.py](scrapers/base.py)). Si algún día se usa el rastreo masivo
-  de forma sostenida, hace falta un throttle real por dominio y respetar
-  `robots.txt` — nada de eso está implementado.
+- El rastreo masivo (`main.py`, `pipeline.py`) respeta un throttle real **por
+  dominio**: `REQUEST_DELAY` es el intervalo mínimo entre dos peticiones
+  exitosas al mismo host, sin importar cuántos `FETCH_WORKERS` concurrentes
+  haya — antes solo se usaba como base del backoff en reintentos
+  ([scrapers/base.py](scrapers/base.py)).
+- También se lee y respeta `robots.txt` de cada dominio (`urllib.robotparser`,
+  cacheado por proceso): las rutas que excluye no se piden, y si declara
+  `Crawl-delay` se usa ese valor cuando es mayor que `REQUEST_DELAY`.
+  Desactivable solo para pruebas locales con `ODIN_RESPECT_ROBOTS_TXT=0`.
 - Se guarda el texto íntegro de artículos con copyright. Revisa los términos de
   uso de cada sitio antes de un despliegue a gran escala.

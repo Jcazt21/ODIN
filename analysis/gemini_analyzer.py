@@ -239,39 +239,57 @@ class GeminiAnalyzer:
         return self._client
 
     def analyze(self, title: str, body: str) -> AnalysisResult:
+        from observability import GEMINI_REQUESTS_TOTAL, GEMINI_TOKENS_TOTAL
+
         body = (body or "")[:_MAX_BODY_CHARS]
         prompt = f"Analiza este artículo de periódico.\n\nTITULAR: {title}\n\nCUERPO:\n{body}"
 
         # Salida estructurada: Gemini valida la respuesta contra el esquema Pydantic.
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config={
-                "system_instruction": _SYSTEM,
-                "response_mime_type": "application/json",
-                "response_schema": _Analysis,
-                "temperature": 0.0,
-                # Evita gastar tokens de salida en "thinking" para una tarea
-                # de extracción con schema fijo (ver comentario en __init__).
-                "thinking_config": {"thinking_budget": self.thinking_budget},
-                # Tope de seguridad: el JSON esperado (tema + hasta ~15
-                # entidades, cada una con context+confidence_reason) no
-                # debería superar esto salvo que el modelo se desvíe. 4096 y
-                # no 2048: con confidence/confidence_reason por entidad (ver
-                # _Entity) un artículo con muchas entidades se acerca al
-                # límite anterior y el análisis termina truncado a mitad de
-                # JSON (data is None abajo, finish_reason="MAX_TOKENS").
-                "max_output_tokens": 4096,
-            },
-        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config={
+                    "system_instruction": _SYSTEM,
+                    "response_mime_type": "application/json",
+                    "response_schema": _Analysis,
+                    "temperature": 0.0,
+                    # Evita gastar tokens de salida en "thinking" para una tarea
+                    # de extracción con schema fijo (ver comentario en __init__).
+                    "thinking_config": {"thinking_budget": self.thinking_budget},
+                    # Tope de seguridad: el JSON esperado (tema + hasta ~15
+                    # entidades, cada una con context+confidence_reason) no
+                    # debería superar esto salvo que el modelo se desvíe. 4096 y
+                    # no 2048: con confidence/confidence_reason por entidad (ver
+                    # _Entity) un artículo con muchas entidades se acerca al
+                    # límite anterior y el análisis termina truncado a mitad de
+                    # JSON (data is None abajo, finish_reason="MAX_TOKENS").
+                    "max_output_tokens": 4096,
+                },
+            )
+        except Exception:
+            GEMINI_REQUESTS_TOTAL.labels(model=self.model, status="error").inc()
+            raise
+
+        usage = getattr(response, "usage_metadata", None)
+        if usage is not None:
+            GEMINI_TOKENS_TOTAL.labels(model=self.model, kind="prompt").inc(
+                usage.prompt_token_count or 0
+            )
+            GEMINI_TOKENS_TOTAL.labels(model=self.model, kind="output").inc(
+                (usage.candidates_token_count or 0) + (usage.thoughts_token_count or 0)
+            )
+
         data: _Analysis = response.parsed
         if data is None:
             # Pasa si el modelo agota max_output_tokens o devuelve JSON
             # inválido; sin este guard el fallo sería un AttributeError críptico.
+            GEMINI_REQUESTS_TOTAL.labels(model=self.model, status="error").inc()
             raise RuntimeError(
                 "Gemini no devolvió un análisis parseable "
                 f"(finish_reason={getattr(response.candidates[0], 'finish_reason', '?') if response.candidates else '?'})"
             )
+        GEMINI_REQUESTS_TOTAL.labels(model=self.model, status="success").inc()
 
         entities = [_entity_from_llm(e) for e in data.entities]
 

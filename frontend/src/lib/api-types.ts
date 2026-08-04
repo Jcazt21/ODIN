@@ -55,10 +55,33 @@ export interface paths {
         put?: never;
         /**
          * Analyze
-         * @description Descarga y analiza la URL. NO guarda — es una vista previa para que el
-         *     usuario revise/corrija en el frontend antes de POST /api/articles.
+         * @description Encola el análisis de la URL (§3.1 de task.md): la descarga y el NLP
+         *     corren en segundo plano en vez de bloquear el request hasta 60s. Si la
+         *     URL ya estaba guardada, devuelve `200` con el registro directamente (no
+         *     hay nada que encolar). Si es nueva, devuelve `202` + `job_id`; el cliente
+         *     consulta el resultado con GET /api/jobs/{job_id}.
          */
         post: operations["analyze_api_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job
+         * @description Estado/resultado de un job de POST /api/analyze.
+         */
+        get: operations["get_job_api_jobs__job_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -326,6 +349,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Métricas en formato Prometheus (§7.1 de task.md): pipeline, latencia y
+         *     tasa de error por endpoint, llamadas/gasto de Gemini.
+         */
+        get: operations["metrics_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/crawl-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Crawl Runs
+         * @description Historial de corridas del pipeline, más reciente primero.
+         */
+        get: operations["list_crawl_runs_api_crawl_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -357,6 +421,22 @@ export interface components {
             type?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /**
+         * AnalyzeAccepted
+         * @description Respuesta de POST /api/analyze cuando la URL es nueva: el trabajo
+         *     pesado (descarga + NLP, hasta ~60s) corre en segundo plano (§3.1 de
+         *     task.md) en vez de bloquear el request. El cliente hace polling de
+         *     GET /api/jobs/{job_id} hasta que `status` sea `done` o `failed`.
+         */
+        AnalyzeAccepted: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @default pending
+             */
+            status: string;
         };
         /** AnalyzeRequest */
         AnalyzeRequest: {
@@ -647,6 +727,36 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** CrawlRunResponse */
+        CrawlRunResponse: {
+            /** Id */
+            id: number;
+            /** Correlation Id */
+            correlation_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Status */
+            status: string;
+            /** Sources */
+            sources: string | null;
+            /** Analyzer Name */
+            analyzer_name: string | null;
+            /** Articles Discovered */
+            articles_discovered: number;
+            /** Articles Saved */
+            articles_saved: number;
+            /** Articles Failed */
+            articles_failed: number;
+            /** Stats By Source */
+            stats_by_source: string | null;
+            /** Error */
+            error: string | null;
+        };
         /** EntityAliasResponse */
         EntityAliasResponse: {
             /** Id */
@@ -745,6 +855,16 @@ export interface components {
         HealthResponse: {
             /** Status */
             status: string;
+        };
+        /** JobResponse */
+        JobResponse: {
+            /** Job Id */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Error */
+            error?: string | null;
+            result?: components["schemas"]["ArticleDetail"] | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -912,7 +1032,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleDetail"];
+                    "application/json": components["schemas"]["ArticleDetail"] | components["schemas"]["AnalyzeAccepted"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyzeAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_api_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1463,6 +1623,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    metrics_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_crawl_runs_api_crawl_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrawlRunResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

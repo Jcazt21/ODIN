@@ -188,9 +188,50 @@ export function getMe(): Promise<components["schemas"]["MeResponse"]> {
 }
 
 // ── Análisis ────────────────────────────────────────────────────────────────
+//
+// POST /api/analyze ya no bloquea hasta que termine la descarga+NLP (podía
+// tardar hasta ~60s, §3.1 de task.md): si la URL es nueva, encola un job y
+// responde 202 de inmediato; `analyzeUrl` hace el polling de
+// GET /api/jobs/{job_id} por dentro, así que quien la llama sigue recibiendo
+// una promesa que resuelve en `ArticleDetail`, igual que antes. `onStatus` es
+// opcional, para que la UI muestre progreso real en vez de un spinner ciego.
 
-export function analyzeUrl(url: string): Promise<ArticleAnalysis> {
-  return postJson("/api/analyze", { url })
+export type JobStatus = components["schemas"]["JobResponse"]["status"]
+
+const JOB_POLL_INTERVAL_MS = 1500
+const JOB_POLL_TIMEOUT_MS = 120_000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function pollJob(
+  jobId: string,
+  onStatus?: (status: JobStatus) => void
+): Promise<ArticleAnalysis> {
+  const deadline = Date.now() + JOB_POLL_TIMEOUT_MS
+  for (;;) {
+    const job = await request<components["schemas"]["JobResponse"]>(`/api/jobs/${jobId}`)
+    onStatus?.(job.status)
+    if (job.status === "done" && job.result) return job.result
+    if (job.status === "failed") throw new OdinApiError(job.error ?? "El análisis falló.")
+    if (Date.now() > deadline) {
+      throw new OdinApiError("El análisis está tardando demasiado. Intenta de nuevo.")
+    }
+    await sleep(JOB_POLL_INTERVAL_MS)
+  }
+}
+
+export async function analyzeUrl(
+  url: string,
+  onStatus?: (status: JobStatus) => void
+): Promise<ArticleAnalysis> {
+  const res = await postJson<ArticleAnalysis | components["schemas"]["AnalyzeAccepted"]>(
+    "/api/analyze",
+    { url }
+  )
+  if ("job_id" in res) return pollJob(res.job_id, onStatus)
+  return res
 }
 
 export function saveArticle(payload: SaveArticlePayload): Promise<ArticleAnalysis> {

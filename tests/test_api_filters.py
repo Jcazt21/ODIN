@@ -8,7 +8,7 @@ no hace falta para probar filtros de lectura sobre datos ya guardados.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from db.models import Article, Entity
 
@@ -23,7 +23,9 @@ def _make_article(**overrides) -> Article:
         topic_keywords="clave1, clave2",
         overall_sentiment="NEU",
         sentiment_score=0.5,
-        published_at=datetime(2026, 1, 1),
+        # UTC aware: es lo que persiste _parse_date en producción (§2.7 de
+        # task.md); un naive aquí no reproduciría cómo se comparan en la API.
+        published_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     defaults.update(overrides)
     return Article(**defaults)
@@ -110,15 +112,34 @@ class TestHasHardDataFilter:
 
 class TestDateRangeFilter:
     def test_range_is_inclusive_of_both_endpoints(self, api_client, sqlite_sessionmaker):
+        # date_from/date_to son fechas sin hora ("2026-01-10"): la API las
+        # interpreta como medianoche en Santo Domingo (UTC-4), igual que
+        # _parse_date normaliza cualquier fecha sin offset (§2.7 de
+        # task.md). Los `published_at` de este test están en UTC aware, como
+        # quedan realmente persistidos en producción.
         session = sqlite_sessionmaker()
         session.add_all([
-            _make_article(url="https://diariolibre.com/d9", published_at=datetime(2026, 1, 9)),
-            _make_article(url="https://diariolibre.com/d10", published_at=datetime(2026, 1, 10)),
+            _make_article(
+                url="https://diariolibre.com/d9", published_at=datetime(2026, 1, 9, tzinfo=UTC)
+            ),
+            # 2026-01-10 04:00 UTC == 2026-01-10 00:00 en Santo Domingo: borde inicial.
+            _make_article(
+                url="https://diariolibre.com/d10",
+                published_at=datetime(2026, 1, 10, 4, 0, tzinfo=UTC),
+            ),
             _make_article(
                 url="https://diariolibre.com/d12",
-                published_at=datetime(2026, 1, 12, 23, 0),
+                published_at=datetime(2026, 1, 12, 23, 0, tzinfo=UTC),
             ),
-            _make_article(url="https://diariolibre.com/d13", published_at=datetime(2026, 1, 13)),
+            # 2026-01-13 03:59 UTC == 2026-01-12 23:59 en Santo Domingo: sigue dentro del 12.
+            _make_article(
+                url="https://diariolibre.com/d13",
+                published_at=datetime(2026, 1, 13, 3, 59, tzinfo=UTC),
+            ),
+            _make_article(
+                url="https://diariolibre.com/d14",
+                published_at=datetime(2026, 1, 14, tzinfo=UTC),
+            ),
         ])
         session.commit()
         session.close()
@@ -127,11 +148,15 @@ class TestDateRangeFilter:
             "/api/articles", params={"date_from": "2026-01-10", "date_to": "2026-01-12"}
         )
         body = resp.json()
-        assert body["total"] == 2
+        assert body["total"] == 3
         urls = {item["url"] for item in api_client.get(
             "/api/articles", params={"date_from": "2026-01-10", "date_to": "2026-01-12", "limit": 100}
         ).json()["items"]}
-        assert urls == {"https://diariolibre.com/d10", "https://diariolibre.com/d12"}
+        assert urls == {
+            "https://diariolibre.com/d10",
+            "https://diariolibre.com/d12",
+            "https://diariolibre.com/d13",
+        }
 
 
 class TestTextSearchFilter:

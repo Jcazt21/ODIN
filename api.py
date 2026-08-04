@@ -1,10 +1,12 @@
 """API REST de Odin (FastAPI).
 
 Flujo en dos pasos:
-  1. POST /api/analyze   — descarga la URL (trafilatura) y la analiza (tema,
-     sentimiento, entidades). NO guarda: es una vista previa para revisar/
-     corregir en el frontend antes de persistir. Si la URL ya estaba
-     guardada, devuelve directamente ese registro (already_saved=true).
+  1. POST /api/analyze   — si la URL ya estaba guardada, devuelve `200` con
+     ese registro directamente (already_saved=true). Si es nueva, encola el
+     trabajo (descarga con trafilatura + NLP, §3.1 de task.md) y devuelve
+     `202` + `job_id`; GET /api/jobs/{job_id} da el estado/resultado. NO
+     guarda: es una vista previa para revisar/corregir en el frontend antes
+     de persistir.
   2. POST /api/articles  — recibe el resultado (posiblemente editado por el
      usuario) y lo guarda.
 
@@ -19,14 +21,17 @@ Uso:
 from __future__ import annotations
 
 import json
-import logging
+import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import requests
 import trafilatura
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, and_, func, or_, select, text
 from sqlalchemy.orm import selectinload
@@ -42,12 +47,25 @@ from analysis.local_analyzer import sentence_mentions_venue_word
 from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
 from analysis.text_norm import norm_key as _norm_key
 from config import settings
-from db.models import Article, CanonicalEntity, Entity, EntityAlias
+from db.models import AnalyzeJob, Article, CanonicalEntity, CrawlRun, Entity, EntityAlias
 from db.session import get_session, init_db
+from observability import (
+    HTTP_REQUEST_DURATION_SECONDS,
+    HTTP_REQUESTS_TOTAL,
+    configure_logging,
+    correlation_scope,
+    get_logger,
+    init_sentry,
+)
+from observability import (
+    registry as metrics_registry,
+)
 from scrapers.base import BaseScraper, _parse_date
 from url_guard import UrlNotAllowed
 
-log = logging.getLogger("odin.api")
+configure_logging()
+init_sentry()
+log = get_logger("odin.api")
 
 
 @asynccontextmanager
@@ -57,15 +75,63 @@ async def _lifespan(app: FastAPI):
         init_db()
         n = alias_store.load_seed()
         if n:
-            log.info("Catálogo semilla: %d siglas cargadas", n)
+            log.info("seed_catalog_loaded", aliases=n)
     except Exception as exc:
-        log.warning("No se pudo cargar el catálogo semilla: %s", exc)
+        log.warning("seed_catalog_load_failed", error=str(exc))
     yield
 
 
 app = FastAPI(title="Odin API", lifespan=_lifespan)
 
 app.include_router(auth.router)
+
+
+# Rutas parametrizadas (`/api/articles/{article_id}`) colapsan a su plantilla
+# para que las métricas no exploten en cardinalidad por cada ID distinto.
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    return route.path if route is not None else request.url.path
+
+
+@app.middleware("http")
+async def _observability_middleware(request: Request, call_next):
+    """Correlation ID + logs estructurados + métricas de latencia/error por
+    endpoint (§7.1 de task.md)."""
+    with correlation_scope(request.headers.get("x-correlation-id")) as correlation_id:
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            duration = time.perf_counter() - started
+            path = _route_template(request)
+            HTTP_REQUEST_DURATION_SECONDS.labels(method=request.method, path=path).observe(
+                duration
+            )
+            HTTP_REQUESTS_TOTAL.labels(
+                method=request.method, path=path, status_code="500"
+            ).inc()
+            log.exception(
+                "http_request_failed",
+                method=request.method,
+                path=path,
+                duration_seconds=round(duration, 4),
+            )
+            raise
+        duration = time.perf_counter() - started
+        path = _route_template(request)
+        HTTP_REQUEST_DURATION_SECONDS.labels(method=request.method, path=path).observe(duration)
+        HTTP_REQUESTS_TOTAL.labels(
+            method=request.method, path=path, status_code=str(response.status_code)
+        ).inc()
+        log.info(
+            "http_request_finished",
+            method=request.method,
+            path=path,
+            status_code=response.status_code,
+            duration_seconds=round(duration, 4),
+        )
+        response.headers["X-Correlation-ID"] = correlation_id
+        return response
 
 # Orígenes explícitos (ODIN_CORS_ORIGINS). Nada de "*": la API acepta escrituras
 # autenticadas y no tiene por qué ser invocable desde cualquier página.
@@ -382,7 +448,7 @@ def _fetch_and_extract(url: str):
     except UrlNotAllowed as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except requests.RequestException as exc:
-        log.warning("fetch falló (%s): %s", url, exc)
+        log.warning("fetch_failed", url=url, error=str(exc))
         raise HTTPException(status_code=422, detail="No se pudo descargar la URL.") from exc
 
     if not html:
@@ -421,10 +487,100 @@ def _fetch_and_extract(url: str):
     }
 
 
-@app.post("/api/analyze", dependencies=[Depends(auth.require_auth)], response_model=ArticleDetail)
-def analyze(req: AnalyzeRequest):
-    """Descarga y analiza la URL. NO guarda — es una vista previa para que el
-    usuario revise/corrija en el frontend antes de POST /api/articles."""
+class AnalyzeAccepted(BaseModel):
+    """Respuesta de POST /api/analyze cuando la URL es nueva: el trabajo
+    pesado (descarga + NLP, hasta ~60s) corre en segundo plano (§3.1 de
+    task.md) en vez de bloquear el request. El cliente hace polling de
+    GET /api/jobs/{job_id} hasta que `status` sea `done` o `failed`."""
+
+    job_id: str
+    status: str = "pending"
+
+
+class JobResponse(BaseModel):
+    job_id: str
+    status: str  # pending | running | done | failed
+    error: str | None = None
+    result: ArticleDetail | None = None
+
+
+def _run_analyze_job(job_id: str, url: str) -> None:
+    """Cuerpo del trabajo encolado por POST /api/analyze: descarga, analiza y
+    guarda el resultado en la fila `AnalyzeJob`. Corre en el threadpool de
+    `BackgroundTasks`, fuera del ciclo request/response — cualquier excepción
+    de aquí NUNCA debe propagarse (no hay a quién devolvérsela), se guarda
+    como `error` en el job para que el polling la muestre."""
+    session = get_session()
+    try:
+        job = session.get(AnalyzeJob, job_id)
+        if job is None:  # no debería pasar
+            return
+        job.status = "running"
+        job.started_at = datetime.now(UTC)
+        session.commit()
+
+        try:
+            extracted = _fetch_and_extract(url)
+            result = _analyze_safely(extracted["title"], extracted["body"])
+            _arbitrate_ambiguous_persons(result)
+            canonicalize_result(result)
+
+            detail = ArticleDetail(
+                already_saved=False,
+                source=extracted.get("sitename") or "manual",
+                url=url,
+                title=extracted["title"],
+                authors=extracted["authors"],
+                section=extracted["section"],
+                published_at=extracted["published_at"],
+                body=extracted["body"],
+                main_topic=result.main_topic,
+                topic_keywords=", ".join(result.topic_keywords) or None,
+                overall_sentiment=result.overall_sentiment,
+                sentiment_score=result.sentiment_score,
+                framing=result.framing,
+                headline_intent=result.headline_intent,
+                lead_orientation=result.lead_orientation,
+                dominant_actor=result.dominant_actor,
+                source_quality=result.source_quality,
+                has_hard_data=result.has_hard_data,
+                blamed_actor=result.blamed_actor,
+                credited_actor=result.credited_actor,
+                analyzer_name=_analyzer.name,
+                analyzer_model=_analyzer.model,
+                analyzer_version=_analyzer.version,
+                analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
+                analyzed_at=datetime.now(UTC),
+                entities=[EntityMention.model_validate(e) for e in result.entities],
+            )
+            job.status = "done"
+            job.result_json = detail.model_dump_json()
+        except HTTPException as exc:
+            job.status = "failed"
+            job.error = str(exc.detail)
+        except Exception as exc:
+            log.exception("analyze_job_failed", job_id=job_id, url=url)
+            job.status = "failed"
+            job.error = str(exc)
+        job.finished_at = datetime.now(UTC)
+        session.commit()
+    finally:
+        session.close()
+
+
+@app.post(
+    "/api/analyze",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=ArticleDetail | AnalyzeAccepted,
+    status_code=200,
+    responses={202: {"model": AnalyzeAccepted}},
+)
+def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks, response: Response):
+    """Encola el análisis de la URL (§3.1 de task.md): la descarga y el NLP
+    corren en segundo plano en vez de bloquear el request hasta 60s. Si la
+    URL ya estaba guardada, devuelve `200` con el registro directamente (no
+    hay nada que encolar). Si es nueva, devuelve `202` + `job_id`; el cliente
+    consulta el resultado con GET /api/jobs/{job_id}."""
     # Se valida antes de tocar la BD: una URL que no pasa el guard no debe
     # producir ninguna respuesta distinguible según lo que haya guardado.
     try:
@@ -437,42 +593,35 @@ def analyze(req: AnalyzeRequest):
         existing = session.scalar(select(Article).where(Article.url == url))
         if existing:
             return _serialize(existing, already_saved=True)
+
+        job = AnalyzeJob(id=str(uuid.uuid4()), url=url)
+        session.add(job)
+        session.commit()
+        job_id = job.id
     finally:
         session.close()
 
-    extracted = _fetch_and_extract(url)
-    result = _analyze_safely(extracted["title"], extracted["body"])
-    _arbitrate_ambiguous_persons(result)
-    canonicalize_result(result)
+    background_tasks.add_task(_run_analyze_job, job_id, url)
+    response.status_code = 202
+    return AnalyzeAccepted(job_id=job_id)
 
-    return ArticleDetail(
-        already_saved=False,
-        source=extracted.get("sitename") or "manual",
-        url=url,
-        title=extracted["title"],
-        authors=extracted["authors"],
-        section=extracted["section"],
-        published_at=extracted["published_at"],
-        body=extracted["body"],
-        main_topic=result.main_topic,
-        topic_keywords=", ".join(result.topic_keywords) or None,
-        overall_sentiment=result.overall_sentiment,
-        sentiment_score=result.sentiment_score,
-        framing=result.framing,
-        headline_intent=result.headline_intent,
-        lead_orientation=result.lead_orientation,
-        dominant_actor=result.dominant_actor,
-        source_quality=result.source_quality,
-        has_hard_data=result.has_hard_data,
-        blamed_actor=result.blamed_actor,
-        credited_actor=result.credited_actor,
-        analyzer_name=_analyzer.name,
-        analyzer_model=_analyzer.model,
-        analyzer_version=_analyzer.version,
-        analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
-        analyzed_at=datetime.now(UTC),
-        entities=[EntityMention.model_validate(e) for e in result.entities],
-    )
+
+@app.get(
+    "/api/jobs/{job_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=JobResponse,
+)
+def get_job(job_id: str):
+    """Estado/resultado de un job de POST /api/analyze."""
+    session = get_session()
+    try:
+        job = session.get(AnalyzeJob, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job no encontrado.")
+        result = ArticleDetail.model_validate_json(job.result_json) if job.result_json else None
+        return JobResponse(job_id=job.id, status=job.status, error=job.error, result=result)
+    finally:
+        session.close()
 
 
 # ── Listado y filtros de reportes ────────────────────────────────────────────
@@ -759,7 +908,7 @@ def update_article(article_id: int, payload: ArticleUpdatePayload):
         raise
     except Exception:
         session.rollback()
-        log.exception("error rectificando artículo %d", article_id)
+        log.exception("article_rectification_failed", article_id=article_id)
         raise HTTPException(status_code=500, detail="Error interno rectificando el artículo.") from None
     finally:
         session.close()
@@ -783,7 +932,7 @@ def delete_article(article_id: int):
         raise
     except Exception:
         session.rollback()
-        log.exception("error borrando artículo %d", article_id)
+        log.exception("article_deletion_failed", article_id=article_id)
         raise HTTPException(status_code=500, detail="Error interno borrando el artículo.") from None
     finally:
         session.close()
@@ -834,7 +983,7 @@ def update_entity(entity_id: int, payload: EntityUpdatePayload):
         raise
     except Exception:
         session.rollback()
-        log.exception("error rectificando mención %d", entity_id)
+        log.exception("entity_rectification_failed", entity_id=entity_id)
         raise HTTPException(status_code=500, detail="Error interno rectificando la mención.") from None
     finally:
         session.close()
@@ -857,7 +1006,7 @@ def delete_entity(entity_id: int):
         raise
     except Exception:
         session.rollback()
-        log.exception("error borrando mención %d", entity_id)
+        log.exception("entity_deletion_failed", entity_id=entity_id)
         raise HTTPException(status_code=500, detail="Error interno borrando la mención.") from None
     finally:
         session.close()
@@ -928,7 +1077,7 @@ def create_alias(payload: AliasPayload):
         raise
     except Exception:
         session.rollback()
-        log.exception("error creando alias")
+        log.exception("alias_creation_failed")
         raise HTTPException(status_code=500, detail="Error interno creando el alias.") from None
     finally:
         session.close()
@@ -962,7 +1111,7 @@ def update_alias(alias_id: int, payload: AliasUpdatePayload):
         raise
     except Exception:
         session.rollback()
-        log.exception("error actualizando alias %d", alias_id)
+        log.exception("alias_update_failed", alias_id=alias_id)
         raise HTTPException(status_code=500, detail="Error interno actualizando el alias.") from None
     finally:
         session.close()
@@ -985,7 +1134,7 @@ def delete_alias(alias_id: int):
         raise
     except Exception:
         session.rollback()
-        log.exception("error eliminando alias %d", alias_id)
+        log.exception("alias_deletion_failed", alias_id=alias_id)
         raise HTTPException(status_code=500, detail="Error interno eliminando el alias.") from None
     finally:
         session.close()
@@ -1153,7 +1302,7 @@ def update_canonical_entity(entity_id: int, payload: CanonicalEntityUpdatePayloa
         raise
     except Exception:
         session.rollback()
-        log.exception("error actualizando entidad canónica %d", entity_id)
+        log.exception("canonical_entity_update_failed", entity_id=entity_id)
         raise HTTPException(
             status_code=500, detail="Error interno actualizando la entidad canónica."
         ) from None
@@ -1189,7 +1338,7 @@ def merge_canonical_entities(entity_id: int, payload: CanonicalEntityMergePayloa
     except Exception:
         session.rollback()
         log.exception(
-            "error fusionando entidades canónicas %d <- %d", entity_id, payload.source_id
+            "canonical_entity_merge_failed", entity_id=entity_id, source_id=payload.source_id
         )
         raise HTTPException(status_code=500, detail="Error interno fusionando entidades.") from None
     finally:
@@ -1268,7 +1417,7 @@ def save_article(req: SaveArticleRequest):
         raise
     except Exception:
         session.rollback()
-        log.exception("error guardando %s", url)
+        log.exception("article_save_failed", url=url)
         raise HTTPException(status_code=500, detail="Error interno guardando el artículo.") from None
     finally:
         session.close()
@@ -1353,8 +1502,49 @@ def health():
     try:
         session.execute(text("SELECT 1"))
     except Exception as exc:
-        log.warning("health check: BD no responde: %s", exc)
+        log.warning("health_check_db_unreachable", error=str(exc))
         raise HTTPException(status_code=503, detail="La base de datos no responde.") from exc
     finally:
         session.close()
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+def metrics():
+    """Métricas en formato Prometheus (§7.1 de task.md): pipeline, latencia y
+    tasa de error por endpoint, llamadas/gasto de Gemini."""
+    return Response(generate_latest(metrics_registry), media_type=CONTENT_TYPE_LATEST)
+
+
+class CrawlRunResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    correlation_id: str
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    sources: str | None
+    analyzer_name: str | None
+    articles_discovered: int
+    articles_saved: int
+    articles_failed: int
+    stats_by_source: str | None
+    error: str | None
+
+
+@app.get(
+    "/api/crawl-runs",
+    response_model=list[CrawlRunResponse],
+    dependencies=[Depends(auth.require_auth)],
+)
+def list_crawl_runs(limit: int = Query(20, ge=1, le=200)):
+    """Historial de corridas del pipeline, más reciente primero."""
+    session = get_session()
+    try:
+        runs = session.scalars(
+            select(CrawlRun).order_by(CrawlRun.started_at.desc()).limit(limit)
+        ).all()
+        return runs
+    finally:
+        session.close()
