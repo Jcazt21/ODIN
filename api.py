@@ -21,13 +21,13 @@ from __future__ import annotations
 import json
 import logging
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import requests
 import trafilatura
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, and_, func, or_, select, text
 from sqlalchemy.orm import selectinload
 
@@ -199,6 +199,159 @@ class EntityUpdatePayload(BaseModel):
     context: str | None = None
 
 
+# ── Schemas de respuesta (tarea 25 de task.md, §9.2) ─────────────────────────
+# Interpuestos entre los modelos ORM (db/models.py) y las rutas vía
+# `response_model=`, con `from_attributes=True` para leer directo de los
+# objetos SQLAlchemy. Sustituyen a los serializadores mano a mano que había
+# antes (_serialize/_serialize_summary/_serialize_canonical_entity) y a los
+# dicts inline repetidos por ruta: esos campos ahora se declaran UNA vez, y
+# `scripts/generate_openapi.py` + `openapi-typescript` generan los tipos TS
+# del frontend a partir de ellos (ver frontend/src/lib/odin-api.ts), en vez
+# de mantener una tercera copia a mano.
+
+
+class _ResponseModel(BaseModel):
+    """Base común: `from_attributes` para leer objetos SQLAlchemy directo, y
+    `json_schema_serialization_defaults_required` para que los campos con
+    default de Python (ej. `authors: str | None = None`, siempre presentes en
+    la respuesta real) salgan como requeridos en el OpenAPI/TS generados —
+    Pydantic los marca opcionales por defecto por tener un valor por omisión
+    en el constructor, no porque la ruta pueda omitirlos."""
+
+    model_config = ConfigDict(from_attributes=True, json_schema_serialization_defaults_required=True)
+
+
+class EntityMention(_ResponseModel):
+    """Una mención de entidad. `id` y `canonical_entity_id` son `null` en la
+    vista previa de /api/analyze (el artículo aún no se guardó — `EntityResult`,
+    la clase de esa vista previa, ni siquiera tiene esos dos atributos)."""
+
+    id: int | None = None
+    name: str
+    type: str
+    mentions_count: int
+    sentiment_toward: str | None = None
+    sentiment_score: float | None = None
+    context: str | None = None
+    extraction_confidence: float
+    canonical_entity_id: int | None = None
+
+
+class ArticleDetail(_ResponseModel):
+    """Reporte completo con sus entidades: respuesta de /api/analyze,
+    POST /api/articles y GET/PUT /api/articles/{id}."""
+
+    already_saved: bool = False
+    id: int | None = None
+    source: str
+    url: str
+    title: str
+    authors: str | None = None
+    section: str | None = None
+    published_at: datetime | None = None
+    body: str | None = None
+    main_topic: str | None = None
+    topic_keywords: str | None = None
+    overall_sentiment: str | None = None
+    sentiment_score: float | None = None
+    framing: str | None = None
+    headline_intent: str | None = None
+    lead_orientation: str | None = None
+    dominant_actor: str | None = None
+    source_quality: str | None = None
+    has_hard_data: bool | None = None
+    blamed_actor: str | None = None
+    credited_actor: str | None = None
+    entities: list[EntityMention] = []
+
+
+class ArticleSummary(_ResponseModel):
+    """Fila de GET /api/articles: sin cuerpo ni entidades detalladas."""
+
+    id: int
+    source: str
+    url: str
+    title: str
+    section: str | None = None
+    published_at: datetime | None = None
+    scraped_at: datetime
+    main_topic: str | None = None
+    overall_sentiment: str | None = None
+    sentiment_score: float | None = None
+    framing: str | None = None
+    headline_intent: str | None = None
+    lead_orientation: str | None = None
+    source_quality: str | None = None
+    has_hard_data: bool | None = None
+    dominant_actor: str | None = None
+    blamed_actor: str | None = None
+    credited_actor: str | None = None
+    entity_count: int = 0
+
+
+class ArticleListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[ArticleSummary]
+
+
+class ArticleFiltersResponse(BaseModel):
+    sources: list[str]
+    sections: list[str]
+    sentiments: list[str]
+    framing: list[str]
+    headline_intent: list[str]
+    lead_orientation: list[str]
+    source_quality: list[str]
+
+
+class EntityAliasResponse(_ResponseModel):
+    id: int
+    alias: str
+    canonical_name: str
+    type: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class CanonicalEntityResponse(_ResponseModel):
+    id: int
+    name: str
+    type: str
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    article_count: int = 0
+    total_mentions: int = 0
+
+
+class CanonicalEntityArticleMention(_ResponseModel):
+    article_id: int
+    title: str
+    url: str
+    source: str
+    published_at: datetime | None = None
+    sentiment_toward: str | None = None
+    mentions_count: int
+
+
+class CanonicalEntityDetailResponse(CanonicalEntityResponse):
+    articles: list[CanonicalEntityArticleMention]
+
+
+class CanonicalEntityListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[CanonicalEntityResponse]
+
+
+class HealthResponse(BaseModel):
+    status: str
+
+
 def _fetch_and_extract(url: str):
     # La URL viene del usuario: se descarga con las protecciones de url_guard
     # (allowlist de dominios, bloqueo de IPs internas, tope de tamaño), no con
@@ -247,7 +400,7 @@ def _fetch_and_extract(url: str):
     }
 
 
-@app.post("/api/analyze", dependencies=[Depends(auth.require_auth)])
+@app.post("/api/analyze", dependencies=[Depends(auth.require_auth)], response_model=ArticleDetail)
 def analyze(req: AnalyzeRequest):
     """Descarga y analiza la URL. NO guarda — es una vista previa para que el
     usuario revise/corrija en el frontend antes de POST /api/articles."""
@@ -271,41 +424,29 @@ def analyze(req: AnalyzeRequest):
     _arbitrate_ambiguous_persons(result)
     canonicalize_result(result)
 
-    return {
-        "already_saved": False,
-        "id": None,
-        "source": extracted.get("sitename") or "manual",
-        "url": url,
-        "title": extracted["title"],
-        "authors": extracted["authors"],
-        "section": extracted["section"],
-        "published_at": extracted["published_at"],
-        "body": extracted["body"],
-        "main_topic": result.main_topic,
-        "topic_keywords": ", ".join(result.topic_keywords) or None,
-        "overall_sentiment": result.overall_sentiment,
-        "sentiment_score": result.sentiment_score,
-        "framing": result.framing,
-        "headline_intent": result.headline_intent,
-        "lead_orientation": result.lead_orientation,
-        "dominant_actor": result.dominant_actor,
-        "source_quality": result.source_quality,
-        "has_hard_data": result.has_hard_data,
-        "blamed_actor": result.blamed_actor,
-        "credited_actor": result.credited_actor,
-        "entities": [
-            {
-                "name": e.name,
-                "type": e.type,
-                "mentions_count": e.mentions_count,
-                "sentiment_toward": e.sentiment_toward,
-                "sentiment_score": e.sentiment_score,
-                "context": e.context,
-                "extraction_confidence": e.extraction_confidence,
-            }
-            for e in result.entities
-        ],
-    }
+    return ArticleDetail(
+        already_saved=False,
+        source=extracted.get("sitename") or "manual",
+        url=url,
+        title=extracted["title"],
+        authors=extracted["authors"],
+        section=extracted["section"],
+        published_at=extracted["published_at"],
+        body=extracted["body"],
+        main_topic=result.main_topic,
+        topic_keywords=", ".join(result.topic_keywords) or None,
+        overall_sentiment=result.overall_sentiment,
+        sentiment_score=result.sentiment_score,
+        framing=result.framing,
+        headline_intent=result.headline_intent,
+        lead_orientation=result.lead_orientation,
+        dominant_actor=result.dominant_actor,
+        source_quality=result.source_quality,
+        has_hard_data=result.has_hard_data,
+        blamed_actor=result.blamed_actor,
+        credited_actor=result.credited_actor,
+        entities=[EntityMention.model_validate(e) for e in result.entities],
+    )
 
 
 # ── Listado y filtros de reportes ────────────────────────────────────────────
@@ -395,31 +536,13 @@ def _apply_article_filters(
     return stmt
 
 
-def _serialize_summary(article: Article) -> dict:
-    return {
-        "id": article.id,
-        "source": article.source,
-        "url": article.url,
-        "title": article.title,
-        "section": article.section,
-        "published_at": article.published_at,
-        "scraped_at": article.scraped_at,
-        "main_topic": article.main_topic,
-        "overall_sentiment": article.overall_sentiment,
-        "sentiment_score": article.sentiment_score,
-        "framing": article.framing,
-        "headline_intent": article.headline_intent,
-        "lead_orientation": article.lead_orientation,
-        "source_quality": article.source_quality,
-        "has_hard_data": article.has_hard_data,
-        "dominant_actor": article.dominant_actor,
-        "blamed_actor": article.blamed_actor,
-        "credited_actor": article.credited_actor,
-        "entity_count": len(article.entities),
-    }
+def _serialize_summary(article: Article) -> ArticleSummary:
+    return ArticleSummary.model_validate(article).model_copy(
+        update={"entity_count": len(article.entities)}
+    )
 
 
-@app.get("/api/articles")
+@app.get("/api/articles", response_model=ArticleListResponse)
 def list_articles(
     q: str | None = None,
     source: list[str] | None = Query(None),
@@ -474,17 +597,17 @@ def list_articles(
             .offset(offset)
         ).all()
 
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "items": [_serialize_summary(a) for a in rows],
-        }
+        return ArticleListResponse(
+            total=total,
+            limit=limit,
+            offset=offset,
+            items=[_serialize_summary(a) for a in rows],
+        )
     finally:
         session.close()
 
 
-@app.get("/api/articles/filters")
+@app.get("/api/articles/filters", response_model=ArticleFiltersResponse)
 def article_filters():
     """Valores disponibles para poblar los selectores de filtro del frontend.
     Fuentes y secciones son dinámicas (dependen de lo ya guardado); el resto
@@ -503,20 +626,20 @@ def article_filters():
             ).all()
             if s
         ]
-        return {
-            "sources": sources,
-            "sections": sections,
-            "sentiments": list(SENTIMENT_VALUES),
-            "framing": list(FRAMING_VALUES),
-            "headline_intent": list(HEADLINE_INTENT_VALUES),
-            "lead_orientation": list(LEAD_ORIENTATION_VALUES),
-            "source_quality": list(SOURCE_QUALITY_VALUES),
-        }
+        return ArticleFiltersResponse(
+            sources=sources,
+            sections=sections,
+            sentiments=list(SENTIMENT_VALUES),
+            framing=list(FRAMING_VALUES),
+            headline_intent=list(HEADLINE_INTENT_VALUES),
+            lead_orientation=list(LEAD_ORIENTATION_VALUES),
+            source_quality=list(SOURCE_QUALITY_VALUES),
+        )
     finally:
         session.close()
 
 
-@app.get("/api/articles/{article_id}")
+@app.get("/api/articles/{article_id}", response_model=ArticleDetail)
 def get_article(article_id: int):
     """Reporte completo (con entidades) de un artículo ya guardado."""
     session = get_session()
@@ -531,7 +654,11 @@ def get_article(article_id: int):
         session.close()
 
 
-@app.put("/api/articles/{article_id}", dependencies=[Depends(auth.require_auth)])
+@app.put(
+    "/api/articles/{article_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=ArticleDetail,
+)
 def update_article(article_id: int, payload: ArticleUpdatePayload):
     """Rectifica el análisis de un artículo ya guardado (§8.2): tema, encuadre,
     sentimiento, actores señalados... Solo toca los campos enviados. No permite
@@ -585,7 +712,11 @@ def delete_article(article_id: int):
 # ── Menciones de entidad (por artículo) ──────────────────────────────────────
 
 
-@app.put("/api/entities/{entity_id}", dependencies=[Depends(auth.require_auth)])
+@app.put(
+    "/api/entities/{entity_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=EntityMention,
+)
 def update_entity(entity_id: int, payload: EntityUpdatePayload):
     """Rectifica una mención puntual (§8.2): nombre mal extraído, sentimiento
     mal inferido... sin tener que borrar y re-analizar todo el artículo.
@@ -618,17 +749,7 @@ def update_entity(entity_id: int, payload: EntityUpdatePayload):
         for field, value in data.items():
             setattr(entity, field, value)
         session.commit()
-        return {
-            "id": entity.id,
-            "name": entity.name,
-            "type": entity.type,
-            "mentions_count": entity.mentions_count,
-            "sentiment_toward": entity.sentiment_toward,
-            "sentiment_score": entity.sentiment_score,
-            "context": entity.context,
-            "extraction_confidence": entity.extraction_confidence,
-            "canonical_entity_id": entity.canonical_entity_id,
-        }
+        return EntityMention.model_validate(entity)
     except HTTPException:
         raise
     except Exception:
@@ -665,7 +786,7 @@ def delete_entity(entity_id: int):
 # ── CRUD de siglas ─────────────────────────────────────────────────────────────
 
 
-@app.get("/api/aliases")
+@app.get("/api/aliases", response_model=list[EntityAliasResponse])
 def list_aliases(q: str | None = None, limit: int = 500, offset: int = 0):
     """Devuelve alias activos e inactivos, filtrados en SQL (?q=) y paginados.
     `limit` por defecto es generoso (500, tope 1000) para no cambiar el
@@ -686,23 +807,17 @@ def list_aliases(q: str | None = None, limit: int = 500, offset: int = 0):
         rows = session.scalars(
             stmt.order_by(EntityAlias.alias).limit(limit).offset(offset)
         ).all()
-        return [
-            {
-                "id": r.id,
-                "alias": r.alias,
-                "canonical_name": r.canonical_name,
-                "type": r.type,
-                "is_active": r.is_active,
-                "created_at": r.created_at,
-                "updated_at": r.updated_at,
-            }
-            for r in rows
-        ]
+        return [EntityAliasResponse.model_validate(r) for r in rows]
     finally:
         session.close()
 
 
-@app.post("/api/aliases", status_code=201, dependencies=[Depends(auth.require_auth)])
+@app.post(
+    "/api/aliases",
+    status_code=201,
+    dependencies=[Depends(auth.require_auth)],
+    response_model=EntityAliasResponse,
+)
 def create_alias(payload: AliasPayload):
     """Crea un nuevo alias. Devuelve 409 si la sigla ya existe (mismo tipo)."""
     alias_key = alias_store.normalize_key(payload.alias)
@@ -729,15 +844,7 @@ def create_alias(payload: AliasPayload):
         session.add(row)
         session.commit()
         alias_store.invalidate_cache()
-        return {
-            "id": row.id,
-            "alias": row.alias,
-            "canonical_name": row.canonical_name,
-            "type": row.type,
-            "is_active": row.is_active,
-            "created_at": row.created_at,
-            "updated_at": row.updated_at,
-        }
+        return EntityAliasResponse.model_validate(row)
     except HTTPException:
         raise
     except Exception:
@@ -748,7 +855,11 @@ def create_alias(payload: AliasPayload):
         session.close()
 
 
-@app.put("/api/aliases/{alias_id}", dependencies=[Depends(auth.require_auth)])
+@app.put(
+    "/api/aliases/{alias_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=EntityAliasResponse,
+)
 def update_alias(alias_id: int, payload: AliasUpdatePayload):
     """Actualiza parcialmente un alias (nombre canónico, estado activo/inactivo...)."""
     session = get_session()
@@ -767,15 +878,7 @@ def update_alias(alias_id: int, payload: AliasUpdatePayload):
             row.is_active = payload.is_active
         session.commit()
         alias_store.invalidate_cache()
-        return {
-            "id": row.id,
-            "alias": row.alias,
-            "canonical_name": row.canonical_name,
-            "type": row.type,
-            "is_active": row.is_active,
-            "created_at": row.created_at,
-            "updated_at": row.updated_at,
-        }
+        return EntityAliasResponse.model_validate(row)
     except HTTPException:
         raise
     except Exception:
@@ -812,17 +915,12 @@ def delete_alias(alias_id: int):
 # ── Entidades canónicas (dimensión + fusión) ─────────────────────────────────
 
 
-def _serialize_canonical_entity(row: CanonicalEntity, article_count: int, total_mentions: int) -> dict:
-    return {
-        "id": row.id,
-        "name": row.name,
-        "type": row.type,
-        "description": row.description,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
-        "article_count": article_count,
-        "total_mentions": total_mentions,
-    }
+def _serialize_canonical_entity(
+    row: CanonicalEntity, article_count: int, total_mentions: int
+) -> CanonicalEntityResponse:
+    return CanonicalEntityResponse.model_validate(row).model_copy(
+        update={"article_count": article_count, "total_mentions": total_mentions}
+    )
 
 
 def _canonical_entity_counts(session, entity_id: int) -> tuple[int, int]:
@@ -839,7 +937,7 @@ def _canonical_entity_counts(session, entity_id: int) -> tuple[int, int]:
     return article_count, total_mentions
 
 
-@app.get("/api/canonical-entities")
+@app.get("/api/canonical-entities", response_model=CanonicalEntityListResponse)
 def list_canonical_entities(
     q: str | None = None,
     type_: str | None = Query(None, alias="type", pattern="^(ORG|PERSON)$"),
@@ -876,20 +974,20 @@ def list_canonical_entities(
             .offset(offset)
         ).all()
 
-        return {
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "items": [
+        return CanonicalEntityListResponse(
+            total=total,
+            limit=limit,
+            offset=offset,
+            items=[
                 _serialize_canonical_entity(row, article_count, total_mentions)
                 for row, article_count, total_mentions in rows
             ],
-        }
+        )
     finally:
         session.close()
 
 
-@app.get("/api/canonical-entities/{entity_id}")
+@app.get("/api/canonical-entities/{entity_id}", response_model=CanonicalEntityDetailResponse)
 def get_canonical_entity(entity_id: int):
     """Detalle de una entidad canónica: sus datos y los artículos donde
     aparece vinculada (vía Entity.canonical_entity_id), más recientes primero.
@@ -909,22 +1007,23 @@ def get_canonical_entity(entity_id: int):
             .limit(200)
         ).all()
         article_count, total_mentions = _canonical_entity_counts(session, entity_id)
+        summary = _serialize_canonical_entity(row, article_count, total_mentions)
 
-        return {
-            **_serialize_canonical_entity(row, article_count, total_mentions),
-            "articles": [
-                {
-                    "article_id": article.id,
-                    "title": article.title,
-                    "url": article.url,
-                    "source": article.source,
-                    "published_at": article.published_at,
-                    "sentiment_toward": mention.sentiment_toward,
-                    "mentions_count": mention.mentions_count,
-                }
+        return CanonicalEntityDetailResponse(
+            **summary.model_dump(),
+            articles=[
+                CanonicalEntityArticleMention(
+                    article_id=article.id,
+                    title=article.title,
+                    url=article.url,
+                    source=article.source,
+                    published_at=article.published_at,
+                    sentiment_toward=mention.sentiment_toward,
+                    mentions_count=mention.mentions_count,
+                )
                 for mention, article in mention_rows
             ],
-        }
+        )
     except HTTPException:
         raise
     finally:
@@ -932,7 +1031,9 @@ def get_canonical_entity(entity_id: int):
 
 
 @app.put(
-    "/api/canonical-entities/{entity_id}", dependencies=[Depends(auth.require_auth)]
+    "/api/canonical-entities/{entity_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=CanonicalEntityResponse,
 )
 def update_canonical_entity(entity_id: int, payload: CanonicalEntityUpdatePayload):
     """Renombra y/o describe una entidad canónica. El nombre nuevo entra a
@@ -984,6 +1085,7 @@ def update_canonical_entity(entity_id: int, payload: CanonicalEntityUpdatePayloa
 @app.post(
     "/api/canonical-entities/{entity_id}/merge",
     dependencies=[Depends(auth.require_auth)],
+    response_model=CanonicalEntityResponse,
 )
 def merge_canonical_entities(entity_id: int, payload: CanonicalEntityMergePayload):
     """Fusiona `source_id` DENTRO de `entity_id`: reasigna todas las menciones
@@ -1015,7 +1117,7 @@ def merge_canonical_entities(entity_id: int, payload: CanonicalEntityMergePayloa
         session.close()
 
 
-@app.post("/api/articles", dependencies=[Depends(auth.require_auth)])
+@app.post("/api/articles", dependencies=[Depends(auth.require_auth)], response_model=ArticleDetail)
 def save_article(req: SaveArticleRequest):
     """Persiste el resultado de /api/analyze, ya revisado/corregido."""
     url = req.url.strip()
@@ -1118,47 +1220,13 @@ def _arbitrate_ambiguous_persons(result) -> None:
     result.entities = [e for e in result.entities if id(e) not in dropped]
 
 
-def _serialize(article: Article, already_saved: bool) -> dict:
-    return {
-        "already_saved": already_saved,
-        "id": article.id,
-        "source": article.source,
-        "url": article.url,
-        "title": article.title,
-        "authors": article.authors,
-        "section": article.section,
-        "published_at": article.published_at,
-        "body": article.body,
-        "main_topic": article.main_topic,
-        "topic_keywords": article.topic_keywords,
-        "overall_sentiment": article.overall_sentiment,
-        "sentiment_score": article.sentiment_score,
-        "framing": article.framing,
-        "headline_intent": article.headline_intent,
-        "lead_orientation": article.lead_orientation,
-        "dominant_actor": article.dominant_actor,
-        "source_quality": article.source_quality,
-        "has_hard_data": article.has_hard_data,
-        "blamed_actor": article.blamed_actor,
-        "credited_actor": article.credited_actor,
-        "entities": [
-            {
-                "id": e.id,
-                "name": e.name,
-                "type": e.type,
-                "mentions_count": e.mentions_count,
-                "sentiment_toward": e.sentiment_toward,
-                "sentiment_score": e.sentiment_score,
-                "context": e.context,
-                "extraction_confidence": e.extraction_confidence,
-                "canonical_entity_id": e.canonical_entity_id,
-            }
-            for e in article.entities
-        ],
-    }
+def _serialize(article: Article, already_saved: bool) -> ArticleDetail:
+    return ArticleDetail.model_validate(article).model_copy(
+        update={"already_saved": already_saved}
+    )
 
 
-@app.get("/api/health")
+@app.get("/api/health", response_model=HealthResponse)
 def health():
     """Chequeo real: si la BD no responde, `status` refleja el problema en
     vez de devolver "ok" incondicionalmente (antes lo hacía sin tocar la

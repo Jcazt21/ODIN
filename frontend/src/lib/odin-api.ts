@@ -1,17 +1,18 @@
 import { clearSession, getToken, notifyAuthExpired, setSession } from "@/lib/auth"
+import type { components } from "@/lib/api-types"
 
-export interface EntityAnalysis {
-  id?: number
-  name: string
-  type: "PERSON" | "ORG" | string
-  mentions_count: number
-  sentiment_toward: "POS" | "NEG" | "NEU" | null
-  sentiment_score: number | null
-  context: string | null
-  extraction_confidence?: number
-  canonical_entity_id?: number | null
-}
+// Los tipos de forma (Article*, Entity*, CanonicalEntity*, Alias*) salen del
+// OpenAPI real de la API (`response_model=` en api.py/auth.py) en vez de
+// mantenerse a mano: era la tercera copia del mismo listado de campos, junto
+// a los modelos SQLAlchemy y los serializadores de api.py (§9.2 de task.md,
+// tarea 25). Para regenerar tras un cambio de schema: `npm run generate:types`.
 
+export type EntityAnalysis = components["schemas"]["EntityMention"]
+
+// Enumeraciones fijas del análisis (ver SENTIMENT_VALUES/FRAMING_VALUES/... en
+// api.py): el schema las declara como `string` porque los campos ORM son
+// `String(...)` sin CHECK constraint, así que se mantienen a mano aquí para
+// quien quiera el tipo estrecho al construir un valor.
 export type Framing =
   | "crisis_conflicto"
   | "logro_institucional"
@@ -29,72 +30,15 @@ export type SourceQuality =
   | "mixtas"
   | "sin_fuentes"
 
-export interface ArticleAnalysis {
-  already_saved: boolean
-  id: number | null
-  source: string
-  url: string
-  title: string
-  authors: string | null
-  section: string | null
-  published_at: string | null
-  body: string
-  main_topic: string | null
-  topic_keywords: string | null
-  overall_sentiment: "POS" | "NEG" | "NEU" | null
-  sentiment_score: number | null
-  // Análisis de encuadre — null cuando analizó el modelo local
-  framing: Framing | null
-  headline_intent: HeadlineIntent | null
-  lead_orientation: LeadOrientation | null
-  dominant_actor: string | null
-  source_quality: SourceQuality | null
-  has_hard_data: boolean | null
-  blamed_actor: string | null
-  credited_actor: string | null
-  entities: EntityAnalysis[]
-}
+export type ArticleAnalysis = components["schemas"]["ArticleDetail"]
 
 export type SaveArticlePayload = Omit<ArticleAnalysis, "id" | "already_saved">
 
-export interface ArticleSummary {
-  id: number
-  source: string
-  url: string
-  title: string
-  section: string | null
-  published_at: string | null
-  scraped_at: string
-  main_topic: string | null
-  overall_sentiment: "POS" | "NEG" | "NEU" | null
-  sentiment_score: number | null
-  framing: Framing | null
-  headline_intent: HeadlineIntent | null
-  lead_orientation: LeadOrientation | null
-  source_quality: SourceQuality | null
-  has_hard_data: boolean | null
-  dominant_actor: string | null
-  blamed_actor: string | null
-  credited_actor: string | null
-  entity_count: number
-}
+export type ArticleSummary = components["schemas"]["ArticleSummary"]
 
-export interface ArticleListResponse {
-  total: number
-  limit: number
-  offset: number
-  items: ArticleSummary[]
-}
+export type ArticleListResponse = components["schemas"]["ArticleListResponse"]
 
-export interface ArticleFilterOptions {
-  sources: string[]
-  sections: string[]
-  sentiments: string[]
-  framing: string[]
-  headline_intent: string[]
-  lead_orientation: string[]
-  source_quality: string[]
-}
+export type ArticleFilterOptions = components["schemas"]["ArticleFiltersResponse"]
 
 export interface ArticleListParams {
   q?: string
@@ -113,61 +57,19 @@ export interface ArticleListParams {
   offset?: number
 }
 
-export interface EntityAlias {
-  id: number
-  alias: string
-  canonical_name: string
-  type: "ORG" | "PERSON"
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+export type EntityAlias = components["schemas"]["EntityAliasResponse"]
 
-export interface AliasPayload {
-  alias: string
-  canonical_name: string
-  type: "ORG" | "PERSON"
-  is_active?: boolean
-}
+export type AliasPayload = components["schemas"]["AliasPayload"]
 
-export interface AliasUpdatePayload {
-  alias?: string
-  canonical_name?: string
-  type?: "ORG" | "PERSON"
-  is_active?: boolean
-}
+export type AliasUpdatePayload = components["schemas"]["AliasUpdatePayload"]
 
 // ── Entidades canónicas ──────────────────────────────────────────────────────
 
-export interface CanonicalEntity {
-  id: number
-  name: string
-  type: "PERSON" | "ORG"
-  description: string | null
-  created_at: string
-  updated_at: string
-  article_count: number
-  total_mentions: number
-}
+export type CanonicalEntity = components["schemas"]["CanonicalEntityResponse"]
 
-export interface CanonicalEntityDetail extends CanonicalEntity {
-  articles: {
-    article_id: number
-    title: string
-    url: string
-    source: string
-    published_at: string | null
-    sentiment_toward: "POS" | "NEG" | "NEU" | null
-    mentions_count: number
-  }[]
-}
+export type CanonicalEntityDetail = components["schemas"]["CanonicalEntityDetailResponse"]
 
-export interface CanonicalEntityListResponse {
-  total: number
-  limit: number
-  offset: number
-  items: CanonicalEntity[]
-}
+export type CanonicalEntityListResponse = components["schemas"]["CanonicalEntityListResponse"]
 
 export interface CanonicalEntityListParams {
   q?: string
@@ -176,10 +78,7 @@ export interface CanonicalEntityListParams {
   offset?: number
 }
 
-export interface CanonicalEntityUpdatePayload {
-  name?: string
-  description?: string
-}
+export type CanonicalEntityUpdatePayload = components["schemas"]["CanonicalEntityUpdatePayload"]
 
 export class OdinApiError extends Error {}
 
@@ -231,12 +130,7 @@ async function del(path: string): Promise<void> {
 
 // ── Autenticación ───────────────────────────────────────────────────────────
 
-export interface LoginResponse {
-  access_token: string
-  token_type: string
-  expires_in: number
-  username: string
-}
+export type LoginResponse = components["schemas"]["TokenResponse"]
 
 /** Inicia sesión y guarda el token. No pasa por request(): un 401 aquí es una
  *  contraseña equivocada, no una sesión vencida, y no debe disparar el evento
@@ -257,8 +151,8 @@ export async function login(username: string, password: string): Promise<LoginRe
 }
 
 /** Valida el token guardado al abrir la aplicación. */
-export function getMe(): Promise<{ username: string }> {
-  return request<{ username: string }>("/api/auth/me")
+export function getMe(): Promise<components["schemas"]["MeResponse"]> {
+  return request<components["schemas"]["MeResponse"]>("/api/auth/me")
 }
 
 // ── Análisis ────────────────────────────────────────────────────────────────

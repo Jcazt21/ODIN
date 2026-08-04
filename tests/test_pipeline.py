@@ -29,7 +29,8 @@ class TestPersistLinksCanonicalEntity:
         monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
 
         session = sqlite_sessionmaker()
-        article = _persist(session, _scraped("https://diariolibre.com/pipeline-1"), _FakeAnalyzer())
+        result = _FakeAnalyzer().analyze("Título", "cuerpo")
+        article = _persist(session, _scraped("https://diariolibre.com/pipeline-1"), result)
 
         entity = article.entities[0]
         assert entity.canonical_entity_id is not None
@@ -44,8 +45,8 @@ class TestPersistLinksCanonicalEntity:
 
         session = sqlite_sessionmaker()
         analyzer = _FakeAnalyzer()
-        _persist(session, _scraped("https://diariolibre.com/pipeline-2a"), analyzer)
-        _persist(session, _scraped("https://diariolibre.com/pipeline-2b"), analyzer)
+        _persist(session, _scraped("https://diariolibre.com/pipeline-2a"), analyzer.analyze("Título", "cuerpo"))
+        _persist(session, _scraped("https://diariolibre.com/pipeline-2b"), analyzer.analyze("Título", "cuerpo"))
 
         assert session.query(CanonicalEntity).filter_by(name="Luis Abinader").count() == 1
         mentions = session.query(Entity).filter_by(name="Luis Abinader").all()

@@ -303,6 +303,35 @@ Un reportaje largo se analiza parcialmente y **nada en el registro lo indica**.
 
 **Acción**: banderas `was_truncated` y `analyzed_chars` en el resultado y en la BD.
 
+### 2.9 🟢 Caché de sentimiento entre artículos (pendiente, bajo riesgo)
+
+**Contexto**: [local_analyzer.py:261-265](analysis/local_analyzer.py#L261) —
+`_sentiment_per_sentence` deduplica frases **solo dentro de un mismo
+artículo** (`dict.fromkeys` local a la llamada); se descarta al terminar
+`analyze()`. Ya se aplicó la optimización más importante encontrada en la
+auditoría de rendimiento de pysentimiento
+(2026-08-03): reemplazar `self.sent.predict()` por tokenización + forward
+pass manual en lotes de 32 (`_predict_batch`,
+[local_analyzer.py:267-306](analysis/local_analyzer.py#L267)), evitando el
+`Trainer.predict()`/`DataLoader` interno de pysentimiento — medido ~7-8x más
+rápido por frase que el loop anterior, y ~500x más rápido que pasarle la
+lista completa a `predict()` (bit-a-bit idéntico, verificado con
+`preprocess_tweet` + softmax sobre los mismos logits).
+
+**Pendiente** (no aplicado, queda a propósito para cuando haya datos reales):
+`LocalAnalyzer` vive todo el proceso (singleton en `api.py`, e instancia
+reutilizada en todo un `pipeline.run()` de cientos de artículos por fuente).
+Frases de plantilla repetidas **entre** artículos de la misma fuente
+(créditos de agencia, "Lea también:", avisos legales, párrafos de clima) hoy
+se re-infieren cada vez porque el caché no sobrevive a `analyze()`.
+
+**Acción**: mover el caché a nivel de instancia (`self._sent_cache`), acotado
+(p. ej. `functools.lru_cache` o dict con tope de ~20k entradas) para no
+crecer sin límite en el proceso de larga vida de `api.py`. Impacto real
+depende de cuánto texto se repite literalmente entre artículos — sin
+telemetría de eso, no vale la pena adivinar el tamaño del caché; medir
+primero con un lote real de una fuente.
+
 ---
 
 ## 3. Arquitectura
@@ -1042,7 +1071,7 @@ Ordenado por **riesgo × costo de postergar**. Los P0 se encarecen cada día que
 | 22 | 🕸️ Scheduler real del crawl + protección contra corridas solapadas (§7.2) |
 | 23 | 🕸️ Re-crawl con `ETag`/`If-Modified-Since` + `article_revisions` (§2.5) |
 | 24 | Partir `api.py` en routers + capa de servicios (§9.2) |
-| 25 | Generar tipos TS desde OpenAPI; eliminar la triple duplicación de esquema |
+| 25 | ✅ ~~Generar tipos TS desde OpenAPI; eliminar la triple duplicación de esquema~~ — hecho 2026-08-03: `response_model=` (Pydantic, `from_attributes=True`) en todas las rutas de `api.py`/`auth.py` sustituye a `_serialize`/`_serialize_summary`/`_serialize_canonical_entity` y a los dicts inline; `scripts/generate_openapi.py` vuelca `/openapi.json` y `openapi-typescript` genera `frontend/src/lib/api-types.ts` (`npm run generate:types`, ver `frontend/package.json`). `frontend/src/lib/odin-api.ts` ya no repite los ~20 campos a mano: sus tipos (`ArticleAnalysis`, `EntityAnalysis`, `ArticleSummary`, `EntityAlias`, `CanonicalEntity`...) son alias de `components["schemas"][...]`. |
 | 26 | Frontend: React Query, rutas, error boundary, Vitest, partir componentes grandes |
 | 27 | Hardening de contenedores: `USER` no-root, healthchecks, cabeceras en nginx (§5.5) |
 | 28 | Backups automáticos + procedimiento de restauración probado (§7.5) |

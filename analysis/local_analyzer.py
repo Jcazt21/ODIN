@@ -218,8 +218,18 @@ class LocalAnalyzer:
     # ---- API pública ------------------------------------------------------------
     def analyze(self, title: str, body: str) -> AnalysisResult:
         text = f"{title}.\n\n{body}".strip()
-        doc = self.nlp(text)
+        return self._analyze_doc(self.nlp(text))
 
+    def analyze_batch(self, items: list[tuple[str, str]]) -> list[AnalysisResult]:
+        """Analiza varios artículos en una sola pasada de spaCy (`nlp.pipe`).
+
+        Evita el overhead por-llamada de invocar `nlp()` una vez por artículo;
+        vale la pena cuando se procesa un lote (p.ej. todo un rastreo de una
+        fuente) en vez de un artículo suelto."""
+        texts = [f"{title}.\n\n{body}".strip() for title, body in items]
+        return [self._analyze_doc(doc) for doc in self.nlp.pipe(texts)]
+
+    def _analyze_doc(self, doc) -> AnalysisResult:
         sents = list(doc.sents)[:_MAX_SENTENCES]
         sent_texts = [s.text.strip()[:_MAX_SENT_CHARS] for s in sents]
 
@@ -246,20 +256,54 @@ class LocalAnalyzer:
         )
 
     # ---- helpers ----------------------------------------------------------------
-    def _sentiment_per_sentence(self, sent_texts: list[str]) -> list[dict | None]:
-        """Probabilidades por frase, calculando cada frase ÚNICA una sola vez.
+    _SENT_BATCH_SIZE = 32  # mismo batch_size con el que pysentimiento carga el modelo
 
-        Nota: se llama a predict() por frase individual a propósito. Pasar la
-        lista completa a pysentimiento activa una ruta con DataLoader/pin_memory
-        que es órdenes de magnitud más lenta en CPU/MPS. La ganancia real está en
-        deduplicar y reutilizar (el mismo sentimiento sirve para el global y para
-        cada entidad), no en el batch.
-        """
-        probas_map: dict[str, dict] = {}
-        for t in sent_texts:
-            if t and t not in probas_map:
-                probas_map[t] = self.sent.predict(t).probas
+    def _sentiment_per_sentence(self, sent_texts: list[str]) -> list[dict | None]:
+        """Probabilidades por frase, calculando cada frase ÚNICA una sola vez."""
+        unique_texts = list(dict.fromkeys(t for t in sent_texts if t))
+        probas_map = self._predict_batch(unique_texts)
         return [probas_map.get(t) for t in sent_texts]
+
+    def _predict_batch(self, texts: list[str]) -> dict[str, dict]:
+        """Igual que `self.sent.predict(texts)`, pero sin pasar por
+        `Trainer.predict()` de pysentimiento (que arma un `datasets.Dataset` +
+        DataLoader por llamada: ~500x más lento en CPU/MPS para lotes chicos,
+        medido). Tampoco es una frase a la vez: eso también deja rendimiento en
+        la mesa (sin aprovechar el paralelismo del batch). Aquí se tokeniza y
+        corre el modelo directamente, en lotes de `_SENT_BATCH_SIZE`.
+
+        Replica el mismo preprocesamiento y truncado que usa la librería para
+        que el resultado sea idéntico bit a bit (verificado): `preprocess_tweet`
+        por frase + `truncation=True, max_length=tokenizer.model_max_length` +
+        softmax sobre los logits, igual que `AnalyzerForSequenceClassification`.
+        """
+        if not texts:
+            return {}
+
+        import torch
+        from pysentimiento.preprocessing import preprocess_tweet
+
+        analyzer = self.sent
+        device = next(analyzer.model.parameters()).device
+        preprocessed = [preprocess_tweet(t, **analyzer.preprocessing_args) for t in texts]
+
+        results: dict[str, dict] = {}
+        for start in range(0, len(texts), self._SENT_BATCH_SIZE):
+            batch_orig = texts[start : start + self._SENT_BATCH_SIZE]
+            batch_pre = preprocessed[start : start + self._SENT_BATCH_SIZE]
+            enc = analyzer.tokenizer(
+                batch_pre,
+                padding=True,
+                truncation=True,
+                max_length=analyzer.tokenizer.model_max_length,
+                return_tensors="pt",
+            ).to(device)
+            with torch.no_grad():
+                logits = analyzer.model(**enc).logits
+            probs = torch.softmax(logits, dim=1)
+            for orig, row in zip(batch_orig, probs, strict=True):
+                results[orig] = {analyzer.id2label[i]: row[i].item() for i in analyzer.id2label}
+        return results
 
     def _keywords(self, doc, top_k: int = 8) -> list[str]:
         counts: Counter[str] = Counter()

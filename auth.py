@@ -182,6 +182,10 @@ class TokenResponse(BaseModel):
     username: str
 
 
+class MeResponse(BaseModel):
+    username: str
+
+
 def _credentials_ok(username: str, password: str) -> bool:
     """Compara usuario y contraseña sin cortocircuitar: aunque el usuario no
     coincida, igual verificamos la contraseña para no filtrar por tiempo cuál
@@ -225,7 +229,7 @@ def login(req: LoginRequest, request: Request):
     )
 
 
-@router.get("/me")
+@router.get("/me", response_model=MeResponse)
 def me(username: str = Depends(require_auth)):
     """Valida el token guardado en el navegador al abrir la aplicación."""
-    return {"username": username}
+    return MeResponse(username=username)

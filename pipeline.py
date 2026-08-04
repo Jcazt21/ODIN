@@ -27,10 +27,9 @@ def _already_stored(session, url: str) -> bool:
 def _persist(
     session,
     scraped: ScrapedArticle,
-    analyzer: Analyzer,
+    result,
     person_map: dict[str, str] | None = None,
 ) -> Article:
-    result = analyzer.analyze(scraped.title, scraped.body or "")
     # Unifica nombres antes de guardar ("Abinader" -> "Luis Abinader",
     # "MINERD" -> nombre completo) para no crear entidades duplicadas.
     canonicalize_result(result, person_map=person_map)
@@ -98,11 +97,34 @@ def run(
             # nombres completos conocidos usado en la canonicalización.
             person_map = known_person_fullname_map()
             new_count = 0
-            for scraped in scraper.scrape(limit=limit):
-                if _already_stored(session, scraped.url):
-                    continue
+
+            pending = [
+                a for a in scraper.scrape(limit=limit) if not _already_stored(session, a.url)
+            ]
+
+            # Si el analizador soporta lote (LocalAnalyzer), una sola pasada de
+            # spaCy sobre todos los artículos de la fuente es más eficiente que
+            # analizar uno por uno. Si el lote falla, se cae a analizar artículo
+            # por artículo para no perder toda la fuente por un solo texto malo.
+            results: list | None = None
+            analyze_batch = getattr(analyzer, "analyze_batch", None)
+            if analyze_batch is not None and pending:
                 try:
-                    _persist(session, scraped, analyzer, person_map=person_map)
+                    results = analyze_batch([(a.title, a.body or "") for a in pending])
+                except Exception:
+                    log.exception(
+                        "  Falló el análisis en lote de %s, se analiza artículo por artículo",
+                        scraper.name,
+                    )
+                    results = None
+            if results is None:
+                results = [None] * len(pending)
+
+            for scraped, result in zip(pending, results, strict=True):
+                try:
+                    if result is None:
+                        result = analyzer.analyze(scraped.title, scraped.body or "")
+                    _persist(session, scraped, result, person_map=person_map)
                     new_count += 1
                     log.info("  [%s] %s", scraper.source, scraped.title[:70])
                 except Exception:  # no dejar que un artículo tumbe la corrida

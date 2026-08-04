@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Intermedio de `npm run generate:types` (ver ../scripts/generate_openapi.py):
+# se regenera desde api.py/auth.py, no hace falta versionarlo. El resultado
+# que sí se commitea es src/lib/api-types.ts.
+openapi.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
