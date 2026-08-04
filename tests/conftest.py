@@ -6,12 +6,25 @@ la API de Gemini (ver CLAUDE.md).
 """
 from __future__ import annotations
 
+import re
+
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.models import Base
+
+
+def _sqlite_regexp_ci(pattern: str, value: str | None) -> bool:
+    """Implementa el operador `~*` de Postgres sobre SQLite: el código de
+    producción usa `column.op("~*")`, que en SQLite se traduce a la función
+    `REGEXP` de dos argumentos. Se registra aquí (no en db/session.py) porque
+    solo los tests corren contra SQLite; en Postgres esta función no existe y
+    no hace falta."""
+    if value is None:
+        return False
+    return re.search(pattern, value, re.IGNORECASE) is not None
 
 
 @pytest.fixture
@@ -24,6 +37,11 @@ def sqlite_sessionmaker():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    @event.listens_for(engine, "connect")
+    def _register_regexp(dbapi_connection, connection_record):
+        dbapi_connection.create_function("regexp", 2, _sqlite_regexp_ci)
+
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
     try:

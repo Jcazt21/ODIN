@@ -502,9 +502,12 @@ def _accent_insensitive_contains(column, value: str) -> ColumnElement[bool]:
     de los dos lados: "matias" encuentra "Matías" y viceversa. Usa el operador
     `~*` (regex case-insensitive nativo de Postgres) con el patrón de
     `accent_insensitive_regex` — no requiere la extensión `unaccent` ni traer
-    filas a Python para filtrarlas (ver analysis/text_norm.py)."""
+    filas a Python para filtrarlas (ver analysis/text_norm.py). Se usa
+    `regexp_match` (portable) en vez de `.op("~*")` directamente: SQLAlchemy
+    lo traduce a `~*` en Postgres y a la función `REGEXP` en SQLite, que los
+    tests registran en tests/conftest.py."""
     pattern = _accent_insensitive_regex(value)
-    return column.op("~*")(pattern)
+    return column.regexp_match(pattern, flags="i")
 
 
 def _apply_article_filters(
