@@ -1,7 +1,12 @@
 # syntax=docker/dockerfile:1
 # Imagen para el backend FastAPI (api.py) y el scraper CLI (main.py).
 # Mismo código Python, dos usos: ver docker-compose.yml (servicios "backend" y "scraper").
-FROM python:3.12-slim
+#
+# 3.13 y no 3.12: requirements.lock (ver README.md#requirementslock) se generó
+# con `uv pip compile --python-version 3.13`, así que sus hashes solo cubren
+# ruedas cp313. Instalarlo con --require-hashes (ver más abajo) sobre un
+# intérprete distinto no encuentra candidato válido y el build falla.
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -19,29 +24,37 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # El modelo de spaCy va primero y en su propia capa: el cache de capas de
 # Docker es en cascada (si una capa se invalida, todas las siguientes en el
 # mismo stage se reconstruyen aunque su propia instrucción no cambie). Como
-# requirements.txt cambia seguido, si esta capa fuera *después* de instalar
-# requirements.txt, cada cambio ahí forzaría re-descargar los ~568MB del
+# requirements.lock cambia seguido, si esta capa fuera *después* de instalar
+# requirements.lock, cada cambio ahí forzaría re-descargar los ~568MB del
 # modelo también. Puesta antes, solo se re-descarga si cambia esta línea.
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl
 
-# torch llega de rebote (pysentimiento -> transformers/accelerate -> torch).
-# El índice por defecto de PyPI resuelve a la build con CUDA, que arrastra
-# los paquetes nvidia-*/triton (~4.5GB) sin ninguna GPU disponible en el
-# contenedor. Instalarlo antes desde el índice CPU oficial hace que pip lo
-# encuentre ya satisfecho al procesar requirements.txt y no lo reemplace.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu
-
 # psycopg2-binary trae libpq embebido; no hacen falta headers de compilación.
 #
+# requirements.lock (no requirements.txt): fija con hash las dependencias
+# transitivas, para que esta capa instale exactamente lo mismo sin importar
+# cuándo se construya la imagen — ver README.md#requirementslock.
+# --require-hashes rechaza el build si el lock no trae hash para algo que
+# haya que instalar (por ejemplo, si alguien lo edita a mano en vez de
+# regenerarlo con uv).
+#
+# torch llega de rebote (pysentimiento -> transformers/accelerate -> torch).
+# El lock se regenera con `--torch-backend cpu` (ver comando arriba en
+# README.md#requirementslock), así que ya pinnea la build `2.13.0+cpu` en vez
+# de la build con CUDA por defecto de PyPI (que arrastra nvidia-*/triton,
+# ~4.5GB, sin ninguna GPU disponible en el contenedor). Esa build solo vive en
+# el índice de PyTorch, no en PyPI — de ahí el --extra-index-url.
+#
 # Cache de capas + cache de BuildKit (--mount=type=cache): mientras
-# requirements.txt no cambie, esta capa se reutiliza tal cual (no se
+# requirements.lock no cambie, esta capa se reutiliza tal cual (no se
 # descarga nada). Si cambia, pip solo baja los paquetes nuevos/actualizados
 # porque el cache de pip persiste entre builds aunque la capa se invalide.
-COPY requirements.txt .
+COPY requirements.lock .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install --require-hashes \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.lock
 
 # Usuario sin privilegios para correr la app: si el proceso se ve
 # comprometido (RCE en alguna dependencia, etc.) no queda como root dentro

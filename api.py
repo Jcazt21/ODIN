@@ -39,6 +39,7 @@ from analysis import LocalAnalyzer
 from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_entities, canonicalize_result, match_actor_name
 from analysis.local_analyzer import sentence_mentions_venue_word
+from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
 from analysis.text_norm import norm_key as _norm_key
 from config import settings
 from db.models import Article, CanonicalEntity, Entity, EntityAlias
@@ -92,6 +93,20 @@ if _IS_GEMINI_ANALYZER:
         "de Gemini. Usa ODIN_ANALYZER=local para el motor gratuito."
     )
     _analyzer = GeminiAnalyzer()
+elif settings.analyzer == "groq":
+    # Import perezoso: sin esto, correr en modo local exigiría el paquete groq.
+    from analysis.groq_analyzer import GroqAnalyzer
+
+    log.info("ODIN_ANALYZER=groq — GroqAnalyzer (free tier, rate-limited)")
+    _analyzer = GroqAnalyzer()
+elif settings.analyzer == "hybrid":
+    from analysis.groq_analyzer import HybridAnalyzer
+
+    log.info(
+        "ODIN_ANALYZER=hybrid — LocalAnalyzer (spaCy + pysentimiento) + Groq "
+        "solo para el encuadre (free tier, rate-limited)"
+    )
+    _analyzer = HybridAnalyzer()
 else:
     log.info("ODIN_ANALYZER=local — LocalAnalyzer (spaCy + pysentimiento), sin costo")
     _analyzer = LocalAnalyzer()
@@ -482,12 +497,14 @@ SOURCE_QUALITY_VALUES = (
 )
 
 
-def _escape_like(value: str) -> str:
-    """Escapa los comodines de LIKE/ILIKE (`%`, `_`) y el propio carácter de
-    escape, para que el texto que busca el usuario se trate literalmente. Sin
-    esto, buscar "50%" o "foo_bar" hace que `%`/`_` actúen como comodín en vez
-    de como el carácter literal que el usuario escribió."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+def _accent_insensitive_contains(column, value: str) -> ColumnElement[bool]:
+    """Como `column.ilike(f"%{value}%")` pero sin importar acentos en NINGUNO
+    de los dos lados: "matias" encuentra "Matías" y viceversa. Usa el operador
+    `~*` (regex case-insensitive nativo de Postgres) con el patrón de
+    `accent_insensitive_regex` — no requiere la extensión `unaccent` ni traer
+    filas a Python para filtrarlas (ver analysis/text_norm.py)."""
+    pattern = _accent_insensitive_regex(value)
+    return column.op("~*")(pattern)
 
 
 def _apply_article_filters(
@@ -530,17 +547,16 @@ def _apply_article_filters(
             # inclusivo: hasta el final del día indicado
             conditions.append(Article.published_at < parsed + timedelta(days=1))
     if q:
-        like = f"%{_escape_like(q)}%"
         conditions.append(
             or_(
-                Article.title.ilike(like, escape="\\"),
-                Article.main_topic.ilike(like, escape="\\"),
-                Article.topic_keywords.ilike(like, escape="\\"),
+                _accent_insensitive_contains(Article.title, q),
+                _accent_insensitive_contains(Article.main_topic, q),
+                _accent_insensitive_contains(Article.topic_keywords, q),
             )
         )
     if entity:
         stmt = stmt.join(Entity, Entity.article_id == Article.id).where(
-            Entity.name.ilike(f"%{_escape_like(entity)}%", escape="\\")
+            _accent_insensitive_contains(Entity.name, entity)
         )
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -858,11 +874,10 @@ def list_aliases(q: str | None = None, limit: int = 500, offset: int = 0):
     try:
         stmt = select(EntityAlias)
         if q:
-            like = f"%{_escape_like(q)}%"
             stmt = stmt.where(
                 or_(
-                    EntityAlias.alias.ilike(like, escape="\\"),
-                    EntityAlias.canonical_name.ilike(like, escape="\\"),
+                    _accent_insensitive_contains(EntityAlias.alias, q),
+                    _accent_insensitive_contains(EntityAlias.canonical_name, q),
                 )
             )
         rows = session.scalars(
@@ -1025,7 +1040,7 @@ def list_canonical_entities(
         if type_:
             stmt = stmt.where(CanonicalEntity.type == type_)
         if q:
-            stmt = stmt.where(CanonicalEntity.name.ilike(f"%{_escape_like(q)}%", escape="\\"))
+            stmt = stmt.where(_accent_insensitive_contains(CanonicalEntity.name, q))
 
         total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
 

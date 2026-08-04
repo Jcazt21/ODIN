@@ -9,6 +9,7 @@ Uso:
   python scripts/evaluate.py                      # LocalAnalyzer (gratis), golden set por defecto
   python scripts/evaluate.py --golden-set otro.jsonl
   python scripts/evaluate.py --analyzer gemini     # llamadas FACTURADAS a Gemini, ver CLAUDE.md
+  python scripts/evaluate.py --analyzer groq       # GroqAnalyzer (free tier), requiere GROQ_API_KEY
 
 Formato de tests/eval/golden_set.jsonl: ver tests/eval/README.md.
 """
@@ -228,6 +229,14 @@ def _build_analyzer(name: str) -> Analyzer:
         from analysis.gemini_analyzer import GeminiAnalyzer
 
         return GeminiAnalyzer()
+    if name == "groq":
+        from analysis.groq_analyzer import GroqAnalyzer
+
+        return GroqAnalyzer()
+    if name == "hybrid":
+        from analysis.groq_analyzer import HybridAnalyzer
+
+        return HybridAnalyzer()
     from analysis import LocalAnalyzer
 
     return LocalAnalyzer()
@@ -337,9 +346,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--analyzer",
-        choices=["local", "gemini"],
+        choices=["local", "gemini", "groq", "hybrid"],
         default="local",
-        help="'local' (gratis, por defecto) o 'gemini' (llamadas FACTURADAS, una por artículo).",
+        help="'local' (gratis, por defecto), 'gemini' (llamadas FACTURADAS, una "
+        "por artículo), 'groq' (todo vía Groq, free tier) o 'hybrid' (local + "
+        "Groq solo para el encuadre).",
     )
     parser.add_argument("--out", type=Path, default=None, help="Escribir el reporte también como JSON.")
     args = parser.parse_args()

@@ -1,28 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
-import {
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
-  RotateCcw,
-  Search,
-  Trash2,
-  X,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ChevronLeft, ChevronRight, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react"
+import { Select } from "@/components/ui/select"
 import { SentimentBadge } from "@/components/SentimentBadge"
-import { cn } from "@/lib/utils"
+import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
+import { EntitiesCard } from "@/components/EntitiesCard"
+import { useConfirm } from "@/lib/dialog"
+import { FRAMING_LABELS, HEADLINE_LABELS, LEAD_LABELS, SENTIMENT_LABELS, SOURCE_LABELS } from "@/lib/labels"
+import { formatDateShort } from "@/lib/format"
 import {
   listArticles,
   getArticle,
@@ -39,63 +23,24 @@ import {
 
 const PAGE_SIZE = 12
 
-const FRAMING_LABELS: Record<string, string> = {
-  crisis_conflicto: "Crisis / conflicto",
-  logro_institucional: "Logro institucional",
-  negligencia: "Negligencia",
-  crecimiento: "Crecimiento",
-  denuncia: "Denuncia",
-  neutro_informativo: "Neutro informativo",
-}
-const HEADLINE_LABELS: Record<string, string> = {
-  informativo: "Informativo",
-  alarmista: "Alarmista",
-  sensacionalista: "Sensacionalista",
-}
-const LEAD_LABELS: Record<string, string> = {
-  social: "Social (ciudadanía)",
-  oficialista: "Oficialista",
-  tecnico: "Técnico (datos)",
-}
-const SOURCE_LABELS: Record<string, string> = {
-  citas_directas: "Citas directas",
-  testimonios_anonimos: "Testimonios anónimos",
-  datos_duros: "Datos duros",
-  mixtas: "Mixtas",
-  sin_fuentes: "Sin fuentes",
-}
-const SENTIMENT_LABELS: Record<string, string> = {
-  POS: "Positivo",
-  NEG: "Negativo",
-  NEU: "Neutro",
-}
+type HardDataFilter = "" | "true" | "false"
+type EditableFields = Pick<
+  AnalysisCardFields,
+  | "main_topic"
+  | "topic_keywords"
+  | "overall_sentiment"
+  | "sentiment_score"
+  | "framing"
+  | "headline_intent"
+  | "lead_orientation"
+  | "source_quality"
+  | "has_hard_data"
+  | "dominant_actor"
+  | "blamed_actor"
+  | "credited_actor"
+>
 
-const selectClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-
-function formatDate(value: string | null) {
-  if (!value) return "Fecha desconocida"
-  try {
-    return new Intl.DateTimeFormat("es-DO", {
-      dateStyle: "long",
-      timeStyle: "short",
-    }).format(new Date(value))
-  } catch {
-    return value
-  }
-}
-
-function isLowConfidence(ent: { extraction_confidence?: number }) {
-  return typeof ent.extraction_confidence === "number" && ent.extraction_confidence < 0.9
-}
-
-const SENTIMENT_BAR_COLOR: Record<string, string> = {
-  POS: "bg-success",
-  NEG: "bg-destructive",
-  NEU: "bg-muted-foreground/50",
-}
-
-function toEditForm(article: ArticleAnalysis): ArticleUpdatePayload {
+function toEditForm(article: ArticleAnalysis): EditableFields {
   return {
     main_topic: article.main_topic,
     topic_keywords: article.topic_keywords,
@@ -112,13 +57,38 @@ function toEditForm(article: ArticleAnalysis): ArticleUpdatePayload {
   }
 }
 
-type HardDataFilter = "" | "true" | "false"
-
 const EMPTY_FILTERS: ArticleListParams = { sort: "recent" }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Filtros
 // ─────────────────────────────────────────────────────────────────────────────
+
+function DateField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label
+      className="flex h-8 items-center gap-1.5 rounded-[7px] border px-[11px]"
+      style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+    >
+      <span className="text-[11.5px]" style={{ color: "var(--faint)" }}>
+        {label}
+      </span>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 bg-transparent text-[12.5px] outline-none"
+      />
+    </label>
+  )
+}
 
 function FilterBar({
   filters,
@@ -128,6 +98,8 @@ function FilterBar({
   facets,
   onReset,
   hasActiveFilters,
+  total,
+  loaded,
 }: {
   filters: ArticleListParams
   onChange: (patch: Partial<ArticleListParams>) => void
@@ -136,435 +108,249 @@ function FilterBar({
   facets: ArticleFilterOptions | null
   onReset: () => void
   hasActiveFilters: boolean
+  total: number
+  loaded: number
 }) {
   return (
-    <Card>
-      <CardContent className="space-y-3 pt-5">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={filters.q ?? ""}
-              onChange={(e) => onChange({ q: e.target.value || undefined })}
-              placeholder="Buscar por título o tema…"
-              className="pl-8"
-            />
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={filters.entity ?? ""}
-              onChange={(e) => onChange({ entity: e.target.value || undefined })}
-              placeholder="Figura pública o empresa…"
-              className="pl-8"
-            />
-          </div>
-          <select
-            className={selectClass}
-            value={filters.source ?? ""}
-            onChange={(e) => onChange({ source: e.target.value || undefined })}
-          >
-            <option value="">Todas las fuentes</option>
-            {facets?.sources.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <select
-            className={selectClass}
-            value={filters.sentiment ?? ""}
-            onChange={(e) => onChange({ sentiment: e.target.value || undefined })}
-          >
-            <option value="">Cualquier sentimiento</option>
-            {(facets?.sentiments ?? []).map((s) => (
-              <option key={s} value={s}>
-                {SENTIMENT_LABELS[s] ?? s}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectClass}
-            value={filters.framing ?? ""}
-            onChange={(e) => onChange({ framing: e.target.value || undefined })}
-          >
-            <option value="">Cualquier encuadre</option>
-            {(facets?.framing ?? []).map((v) => (
-              <option key={v} value={v}>
-                {FRAMING_LABELS[v] ?? v}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectClass}
-            value={filters.headline_intent ?? ""}
-            onChange={(e) => onChange({ headline_intent: e.target.value || undefined })}
-          >
-            <option value="">Cualquier titular</option>
-            {(facets?.headline_intent ?? []).map((v) => (
-              <option key={v} value={v}>
-                {HEADLINE_LABELS[v] ?? v}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectClass}
-            value={filters.lead_orientation ?? ""}
-            onChange={(e) => onChange({ lead_orientation: e.target.value || undefined })}
-          >
-            <option value="">Cualquier lead</option>
-            {(facets?.lead_orientation ?? []).map((v) => (
-              <option key={v} value={v}>
-                {LEAD_LABELS[v] ?? v}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <select
-            className={selectClass}
-            value={filters.source_quality ?? ""}
-            onChange={(e) => onChange({ source_quality: e.target.value || undefined })}
-          >
-            <option value="">Cualquier tipo de fuente</option>
-            {(facets?.source_quality ?? []).map((v) => (
-              <option key={v} value={v}>
-                {SOURCE_LABELS[v] ?? v}
-              </option>
-            ))}
-          </select>
-          <select
-            className={selectClass}
-            value={hardData}
-            onChange={(e) => onHardDataChange(e.target.value as HardDataFilter)}
-          >
-            <option value="">Datos duros: todos</option>
-            <option value="true">Con datos duros</option>
-            <option value="false">Sin datos duros</option>
-          </select>
-          <Input
-            type="date"
-            value={filters.date_from ?? ""}
-            onChange={(e) => onChange({ date_from: e.target.value || undefined })}
-            aria-label="Desde"
-          />
-          <Input
-            type="date"
-            value={filters.date_to ?? ""}
-            onChange={(e) => onChange({ date_to: e.target.value || undefined })}
-            aria-label="Hasta"
-          />
-          <select
-            className={selectClass}
-            value={filters.sort ?? "recent"}
-            onChange={(e) => onChange({ sort: e.target.value as "recent" | "oldest" })}
-          >
-            <option value="recent">Más recientes</option>
-            <option value="oldest">Más antiguos</option>
-          </select>
-        </div>
-
-        {hasActiveFilters && (
-          <div className="flex justify-end">
-            <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onReset}>
-              <RotateCcw className="h-3.5 w-3.5" />
-              Limpiar filtros
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Fila de resultado
-// ─────────────────────────────────────────────────────────────────────────────
-
-function ReportRow({ article, onOpen }: { article: ArticleSummary; onOpen: (id: number) => void }) {
-  return (
-    <Card
-      className="cursor-pointer flex-row gap-0 overflow-hidden py-0 transition-colors hover:border-primary/40"
-      onClick={() => onOpen(article.id)}
+    <div
+      className="rounded-xl border p-[18px]"
+      style={{ background: "var(--panel)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
     >
-      <span
-        className={cn(
-          "w-1 flex-none",
-          SENTIMENT_BAR_COLOR[article.overall_sentiment ?? "NEU"]
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="text-[19px] font-semibold">Reportes</h1>
+          <span className="text-[12.5px]" style={{ color: "var(--faint)" }}>
+            {loaded} de {total} reportes
+          </span>
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center gap-1.5 text-[12.5px]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            <RotateCcw className="size-3.5" />
+            Limpiar filtros
+          </button>
         )}
-      />
-      <div className="min-w-0 flex-1 space-y-1.5 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <SentimentBadge sentiment={article.overall_sentiment} score={article.sentiment_score} />
-          <span>· {formatDate(article.published_at)}</span>
-        </div>
-        <p className="truncate text-[15px] font-semibold leading-snug">{article.title}</p>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>{article.source}</span>
-          {article.section && <span>· {article.section}</span>}
-          {article.entity_count > 0 && (
-            <span>
-              · {article.entity_count} {article.entity_count === 1 ? "entidad" : "entidades"}
-            </span>
-          )}
-          {article.main_topic && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
-              {article.main_topic}
-            </span>
-          )}
-          {article.framing && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
-              {FRAMING_LABELS[article.framing] ?? article.framing}
-            </span>
-          )}
-          {article.has_hard_data && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
-              Datos duros
-            </span>
-          )}
-        </div>
       </div>
-    </Card>
+
+      <div className="grid gap-[10px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))" }}>
+        <div className="relative">
+          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2" style={{ color: "var(--faint)" }} />
+          <input
+            value={filters.q ?? ""}
+            onChange={(e) => onChange({ q: e.target.value || undefined })}
+            placeholder="Título o tema…"
+            className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+          />
+        </div>
+        <div className="relative">
+          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2" style={{ color: "var(--faint)" }} />
+          <input
+            value={filters.entity ?? ""}
+            onChange={(e) => onChange({ entity: e.target.value || undefined })}
+            placeholder="Entidad mencionada…"
+            className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+          />
+        </div>
+
+        <Select value={filters.source ?? ""} onChange={(e) => onChange({ source: e.target.value || undefined })}>
+          <option value="">Todas las fuentes</option>
+          {facets?.sources.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </Select>
+        <Select value={filters.sentiment ?? ""} onChange={(e) => onChange({ sentiment: e.target.value || undefined })}>
+          <option value="">Todo sentimiento</option>
+          {(facets?.sentiments ?? []).map((s) => (
+            <option key={s} value={s}>
+              {SENTIMENT_LABELS[s] ?? s}
+            </option>
+          ))}
+        </Select>
+        <Select value={filters.framing ?? ""} onChange={(e) => onChange({ framing: e.target.value || undefined })}>
+          <option value="">Todo encuadre</option>
+          {(facets?.framing ?? []).map((v) => (
+            <option key={v} value={v}>
+              {FRAMING_LABELS[v] ?? v}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.headline_intent ?? ""}
+          onChange={(e) => onChange({ headline_intent: e.target.value || undefined })}
+        >
+          <option value="">Todo titular</option>
+          {(facets?.headline_intent ?? []).map((v) => (
+            <option key={v} value={v}>
+              {HEADLINE_LABELS[v] ?? v}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.lead_orientation ?? ""}
+          onChange={(e) => onChange({ lead_orientation: e.target.value || undefined })}
+        >
+          <option value="">Todo lead</option>
+          {(facets?.lead_orientation ?? []).map((v) => (
+            <option key={v} value={v}>
+              {LEAD_LABELS[v] ?? v}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={filters.source_quality ?? ""}
+          onChange={(e) => onChange({ source_quality: e.target.value || undefined })}
+        >
+          <option value="">Toda calidad de fuente</option>
+          {(facets?.source_quality ?? []).map((v) => (
+            <option key={v} value={v}>
+              {SOURCE_LABELS[v] ?? v}
+            </option>
+          ))}
+        </Select>
+        <Select value={hardData} onChange={(e) => onHardDataChange(e.target.value as HardDataFilter)}>
+          <option value="">Datos duros: todos</option>
+          <option value="true">Con datos duros</option>
+          <option value="false">Sin datos duros</option>
+        </Select>
+        <DateField label="Desde" value={filters.date_from ?? ""} onChange={(v) => onChange({ date_from: v || undefined })} />
+        <DateField label="Hasta" value={filters.date_to ?? ""} onChange={(v) => onChange({ date_to: v || undefined })} />
+        <Select value={filters.sort ?? "recent"} onChange={(e) => onChange({ sort: e.target.value as "recent" | "oldest" })}>
+          <option value="recent">Más recientes</option>
+          <option value="oldest">Más antiguos</option>
+        </Select>
+      </div>
+    </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Formulario de edición (rectificación §8.2)
+// Tabla
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ArticleEditForm({
-  article,
-  onSaved,
-  onCancel,
+function ReportsTable({
+  items,
+  loading,
+  onOpen,
+  sortDir,
+  onToggleSort,
 }: {
-  article: ArticleAnalysis
-  onSaved: (updated: ArticleAnalysis) => void
-  onCancel: () => void
+  items: ArticleSummary[]
+  loading: boolean
+  onOpen: (id: number) => void
+  sortDir: "recent" | "oldest"
+  onToggleSort: () => void
 }) {
-  const [form, setForm] = useState<ArticleUpdatePayload>(() => toEditForm(article))
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-
-  function patch(p: Partial<ArticleUpdatePayload>) {
-    setForm((f) => ({ ...f, ...p }))
-  }
-
-  async function handleSave() {
-    setBusy(true)
-    setErr(null)
-    try {
-      const updated = await updateArticle(article.id as number, form)
-      onSaved(updated)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error guardando la rectificación.")
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Rectificar análisis</CardTitle>
-        <CardDescription>
-          Solo se corrige el análisis (tema, sentimiento, encuadre); título, cuerpo y URL no se
-          pueden editar aquí.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {err && (
-          <Alert variant="destructive">
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{err}</AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Tema principal</label>
-            <Input
-              value={form.main_topic ?? ""}
-              onChange={(e) => patch({ main_topic: e.target.value || null })}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
-              Palabras clave (separadas por coma)
-            </label>
-            <Input
-              value={form.topic_keywords ?? ""}
-              onChange={(e) => patch({ topic_keywords: e.target.value || null })}
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Sentimiento global</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.overall_sentiment ?? ""}
-              onChange={(e) =>
-                patch({ overall_sentiment: (e.target.value || null) as ArticleUpdatePayload["overall_sentiment"] })
-              }
+    <div
+      className="overflow-hidden rounded-xl border"
+      style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+    >
+      <table className="w-full border-collapse text-[13px]">
+        <thead>
+          <tr style={{ background: "var(--surface-2)" }}>
+            <th
+              onClick={onToggleSort}
+              className="cursor-pointer border-b px-[14px] py-[10px] text-left font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap select-none"
+              style={{ borderColor: "var(--border)", color: "var(--primary)" }}
             >
-              <option value="">—</option>
-              {Object.entries(SENTIMENT_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
+              Fecha {sortDir === "recent" ? "↓" : "↑"}
+            </th>
+            {["Artículo", "Fuente", "Sentimiento", "Encuadre"].map((h) => (
+              <th
+                key={h}
+                className="border-b px-[14px] py-[10px] text-left font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
+                style={{ borderColor: "var(--border)", color: "var(--faint)" }}
+              >
+                {h}
+              </th>
+            ))}
+            <th
+              className="border-b px-[14px] py-[10px] text-right font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
+              style={{ borderColor: "var(--border)", color: "var(--faint)" }}
+            >
+              Ent.
+            </th>
+            <th
+              className="border-b px-[14px] py-[10px] text-center font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
+              style={{ borderColor: "var(--border)", color: "var(--faint)" }}
+            >
+              Datos
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading
+            ? Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i} className="border-b" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-[14px] py-3" colSpan={7}>
+                    <div
+                      className="h-4 rounded"
+                      style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }}
+                    />
+                  </td>
+                </tr>
+              ))
+            : items.map((a) => (
+                <tr
+                  key={a.id}
+                  onClick={() => onOpen(a.id)}
+                  className="cursor-pointer border-b transition-colors"
+                  style={{ borderColor: "var(--border)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td className="px-[14px] py-3 align-top font-mono text-[11.5px] whitespace-nowrap" style={{ color: "var(--faint)" }}>
+                    {formatDateShort(a.published_at)}
+                  </td>
+                  <td className="max-w-[380px] px-[14px] py-3 align-top">
+                    <p className="font-medium leading-[1.4]">{a.title}</p>
+                    {a.main_topic && (
+                      <p className="mt-0.5 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+                        {a.main_topic}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-[14px] py-3 align-top" style={{ color: "var(--muted-foreground)" }}>
+                    {a.source}
+                  </td>
+                  <td className="px-[14px] py-3 align-top">
+                    <SentimentBadge sentiment={a.overall_sentiment} score={a.sentiment_score} />
+                  </td>
+                  <td className="px-[14px] py-3 align-top">
+                    {a.framing ? (
+                      <span
+                        className="rounded-[5px] border px-2 py-0.5 text-[11.5px]"
+                        style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
+                      >
+                        {FRAMING_LABELS[a.framing] ?? a.framing}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--faint)" }}>—</span>
+                    )}
+                  </td>
+                  <td className="px-[14px] py-3 text-right align-top font-mono" style={{ color: "var(--muted-foreground)" }}>
+                    {a.entity_count}
+                  </td>
+                  <td className="px-[14px] py-3 text-center align-top">
+                    {a.has_hard_data ? (
+                      <span style={{ color: "var(--primary)" }}>●</span>
+                    ) : (
+                      <span style={{ color: "var(--faint)" }}>—</span>
+                    )}
+                  </td>
+                </tr>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Confianza (0–1)</label>
-            <Input
-              type="number"
-              min={0}
-              max={1}
-              step={0.01}
-              value={form.sentiment_score ?? ""}
-              onChange={(e) =>
-                patch({ sentiment_score: e.target.value === "" ? null : Number(e.target.value) })
-              }
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Datos duros</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.has_hard_data == null ? "" : String(form.has_hard_data)}
-              onChange={(e) =>
-                patch({ has_hard_data: e.target.value === "" ? null : e.target.value === "true" })
-              }
-            >
-              <option value="">—</option>
-              <option value="true">Sí</option>
-              <option value="false">No</option>
-            </select>
-          </div>
-        </div>
-
-        <Separator />
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Encuadre (marco)</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.framing ?? ""}
-              onChange={(e) =>
-                patch({ framing: (e.target.value || null) as ArticleUpdatePayload["framing"] })
-              }
-            >
-              <option value="">—</option>
-              {Object.entries(FRAMING_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Titular</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.headline_intent ?? ""}
-              onChange={(e) =>
-                patch({
-                  headline_intent: (e.target.value || null) as ArticleUpdatePayload["headline_intent"],
-                })
-              }
-            >
-              <option value="">—</option>
-              {Object.entries(HEADLINE_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Lead</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.lead_orientation ?? ""}
-              onChange={(e) =>
-                patch({
-                  lead_orientation: (e.target.value || null) as ArticleUpdatePayload["lead_orientation"],
-                })
-              }
-            >
-              <option value="">—</option>
-              {Object.entries(LEAD_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Calidad de fuentes</label>
-            <select
-              className={cn(selectClass, "w-full")}
-              value={form.source_quality ?? ""}
-              onChange={(e) =>
-                patch({
-                  source_quality: (e.target.value || null) as ArticleUpdatePayload["source_quality"],
-                })
-              }
-            >
-              <option value="">—</option>
-              {Object.entries(SOURCE_LABELS).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Actor dominante</label>
-            <Input
-              value={form.dominant_actor ?? ""}
-              onChange={(e) => patch({ dominant_actor: e.target.value || null })}
-              placeholder="Debe coincidir con una figura/empresa ya mencionada"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">Señalado (culpa)</label>
-            <Input
-              value={form.blamed_actor ?? ""}
-              onChange={(e) => patch({ blamed_actor: e.target.value || null })}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-muted-foreground">
-              Acreditado (solución)
-            </label>
-            <Input
-              value={form.credited_actor ?? ""}
-              onChange={(e) => patch({ credited_actor: e.target.value || null })}
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button type="button" size="sm" onClick={handleSave} disabled={busy}>
-            {busy ? "Guardando…" : "Guardar cambios"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -577,8 +363,12 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<EditableFields | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const confirm = useConfirm()
 
   useEffect(() => {
     let cancelled = false
@@ -589,9 +379,7 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
         if (!cancelled) setArticle(a)
       })
       .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof OdinApiError ? e.message : "No se pudo cargar el reporte.")
-        }
+        if (!cancelled) setError(e instanceof OdinApiError ? e.message : "No se pudo cargar el reporte.")
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -601,11 +389,37 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
   }, [id])
 
+  function startEditing() {
+    if (!article) return
+    setEditForm(toEditForm(article))
+    setSaveError(null)
+    setEditing(true)
+  }
+
+  async function handleSaveEdit() {
+    if (!article || !editForm) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await updateArticle(article.id as number, editForm as ArticleUpdatePayload)
+      setArticle(updated)
+      setEditing(false)
+    } catch (e) {
+      setSaveError(e instanceof OdinApiError ? e.message : "Error guardando la rectificación.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleDelete() {
     if (!article) return
-    if (!confirm(`¿Eliminar permanentemente el reporte "${article.title}"? No se puede deshacer.`)) {
-      return
-    }
+    const ok = await confirm({
+      title: "¿Eliminar este reporte?",
+      body: `Se eliminará permanentemente "${article.title}". Esta acción no se puede deshacer.`,
+      confirmLabel: "Eliminar",
+      danger: true,
+    })
+    if (!ok) return
     setDeleting(true)
     setDeleteError(null)
     try {
@@ -617,230 +431,109 @@ function ReportDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
   }
 
-  const keywords = (article?.topic_keywords ?? "")
-    .split(",")
-    .map((k) => k.trim())
-    .filter(Boolean)
+  const cardValue: AnalysisCardFields | null = article
+    ? editing && editForm
+      ? { ...article, ...editForm }
+      : article
+    : null
 
   return (
-    <div className="w-full space-y-4">
+    <div className="flex w-full flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onBack}>
-          <ChevronLeft className="h-3.5 w-3.5" />
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-[13px]"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          <ChevronLeft className="size-3.5" />
           Volver a la lista
-        </Button>
+        </button>
         {article && !editing && (
           <div className="flex gap-2">
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setEditing(true)}
+              onClick={startEditing}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px]"
+              style={{ borderColor: "var(--border)" }}
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Pencil className="size-3.5" />
               Editar
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-destructive hover:text-destructive"
               disabled={deleting}
               onClick={handleDelete}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] disabled:opacity-60"
+              style={{ borderColor: "var(--border)", color: "var(--neg)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="size-3.5" />
               {deleting ? "Eliminando…" : "Eliminar"}
-            </Button>
+            </button>
+          </div>
+        )}
+        {article && editing && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => setEditing(false)}
+              className="rounded-lg border px-3 py-1.5 text-[13px]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSaveEdit}
+              className="rounded-lg px-3.5 py-1.5 text-[13px] font-semibold disabled:opacity-60"
+              style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
+            >
+              {saving ? "Guardando…" : "Guardar cambios"}
+            </button>
           </div>
         )}
       </div>
 
+      {editing && (
+        <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+          Solo se corrige el análisis (tema, sentimiento, encuadre); título, cuerpo y URL no se
+          pueden editar aquí.
+        </p>
+      )}
+
+      {saveError && (
+        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+          <strong>No se pudo guardar</strong> {saveError}
+        </div>
+      )}
       {deleteError && (
-        <Alert variant="destructive">
-          <AlertTitle>No se pudo eliminar</AlertTitle>
-          <AlertDescription>{deleteError}</AlertDescription>
-        </Alert>
+        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+          <strong>No se pudo eliminar</strong> {deleteError}
+        </div>
       )}
-
       {error && (
-        <Alert variant="destructive">
-          <AlertTitle>No se pudo cargar</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {article && editing && (
-        <ArticleEditForm
-          article={article}
-          onCancel={() => setEditing(false)}
-          onSaved={(updated) => {
-            setArticle(updated)
-            setEditing(false)
-          }}
-        />
+        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+          <strong>No se pudo cargar</strong> {error}
+        </div>
       )}
 
       {loading && (
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="mt-2 h-4 w-1/2" />
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </CardContent>
-        </Card>
+        <div className="space-y-2 rounded-xl border p-[22px]" style={{ borderColor: "var(--border)" }}>
+          <div className="h-6 w-3/4 rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
+          <div className="h-4 w-1/2 rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out 0.15s infinite" }} />
+        </div>
       )}
 
-      {article && !editing && (
+      {article && cardValue && (
         <>
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center gap-2">
-                <SentimentBadge sentiment={article.overall_sentiment} score={article.sentiment_score} />
-              </div>
-              <CardTitle className="text-2xl leading-snug">
-                <a href={article.url} target="_blank" rel="noreferrer" className="hover:underline">
-                  {article.title}
-                </a>
-              </CardTitle>
-              <CardDescription className="flex flex-wrap gap-x-3 gap-y-1">
-                <span>{article.source}</span>
-                {article.authors && <span>· {article.authors}</span>}
-                {article.section && <span>· {article.section}</span>}
-                <span>· {formatDate(article.published_at)}</span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="mb-1 text-sm font-medium text-muted-foreground">Tema principal</p>
-                <p className="text-lg">{article.main_topic ?? "—"}</p>
-              </div>
-
-              {keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {keywords.map((kw) => (
-                    <span
-                      key={kw}
-                      className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {article.framing != null && (
-                <>
-                  <Separator />
-                  <div>
-                    <p className="mb-2 text-sm font-medium text-muted-foreground">
-                      Análisis de encuadre
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {(
-                        [
-                          ["Marco", article.framing, FRAMING_LABELS],
-                          ["Titular", article.headline_intent, HEADLINE_LABELS],
-                          ["Lead", article.lead_orientation, LEAD_LABELS],
-                          ["Fuentes", article.source_quality, SOURCE_LABELS],
-                        ] as const
-                      ).map(([label, value, labels]) => (
-                        <div key={label}>
-                          <p className="mb-1 text-xs text-muted-foreground">{label}</p>
-                          <span className="inline-block rounded-full bg-muted px-2.5 py-0.5 text-xs">
-                            {value ? labels[value] ?? value : "—"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {(
-                        [
-                          ["Actor dominante", article.dominant_actor],
-                          ["Señalado (culpa)", article.blamed_actor],
-                          ["Acreditado (solución)", article.credited_actor],
-                        ] as const
-                      ).map(([label, value]) => (
-                        <div key={label}>
-                          <p className="mb-1 text-xs text-muted-foreground">{label}</p>
-                          <p className="text-sm">{value ?? "—"}</p>
-                        </div>
-                      ))}
-                      <div>
-                        <p className="mb-1 text-xs text-muted-foreground">Datos duros</p>
-                        <span className="inline-block rounded-full bg-muted px-2.5 py-0.5 text-xs">
-                          {article.has_hard_data == null ? "—" : article.has_hard_data ? "Sí" : "No"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <Separator />
-              <div>
-                <p className="mb-1 text-sm font-medium text-muted-foreground">Cuerpo del artículo</p>
-                <p className="max-h-64 overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-foreground/90">
-                  {article.body}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div>
-            <h2 className="mb-3 text-lg font-medium">
-              Figuras y empresas mencionadas
-              {article.entities.length > 0 && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  ({article.entities.length})
-                </span>
-              )}
-            </h2>
-            {article.entities.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No se detectaron figuras públicas ni empresas en este artículo.
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {article.entities.map((ent) => (
-                  <Card key={`${ent.type}-${ent.name}`} className="gap-3 py-4">
-                    <CardHeader className="px-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <CardTitle className="flex items-center gap-1.5 text-base">
-                            {ent.name}
-                            {isLowConfidence(ent) && (
-                              <AlertTriangle
-                                className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-                                aria-label="Confianza de extracción baja"
-                              >
-                                <title>Confianza de extracción baja: revisa si el nombre/tipo es correcto.</title>
-                              </AlertTriangle>
-                            )}
-                          </CardTitle>
-                          <CardDescription>
-                            {ent.type === "PERSON" ? "Persona" : "Organización"}
-                            {" · "}
-                            {ent.mentions_count} {ent.mentions_count === 1 ? "mención" : "menciones"}
-                          </CardDescription>
-                        </div>
-                        <SentimentBadge sentiment={ent.sentiment_toward} score={ent.sentiment_score} />
-                      </div>
-                    </CardHeader>
-                    {ent.context && (
-                      <CardContent className="px-4">
-                        <p className="text-xs text-muted-foreground italic">“{ent.context}”</p>
-                      </CardContent>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
+          <AnalysisCard
+            value={cardValue}
+            editable={editing}
+            onChange={(patch) => setEditForm((f) => (f ? { ...f, ...patch } : f))}
+          />
+          <EntitiesCard entities={article.entities} editable={false} />
         </>
       )}
     </div>
@@ -881,9 +574,7 @@ export function ReportsList() {
       })
       setData(res)
     } catch (e) {
-      setError(
-        e instanceof OdinApiError ? e.message : "No se pudo conectar con la API de Odin."
-      )
+      setError(e instanceof OdinApiError ? e.message : "No se pudo conectar con la API de Odin.")
     } finally {
       setLoading(false)
     }
@@ -911,12 +602,10 @@ export function ReportsList() {
   }
 
   const hasActiveFilters =
-    hardData !== "" ||
-    Object.entries(filters).some(([k, v]) => k !== "sort" && v !== undefined && v !== "")
+    hardData !== "" || Object.entries(filters).some(([k, v]) => k !== "sort" && v !== undefined && v !== "")
 
   const total = data?.total ?? 0
   const items = data?.items ?? []
-  const from = total === 0 ? 0 : page * PAGE_SIZE + 1
   const to = Math.min(total, (page + 1) * PAGE_SIZE)
 
   if (selectedId != null) {
@@ -924,7 +613,7 @@ export function ReportsList() {
   }
 
   return (
-    <div className="w-full space-y-4">
+    <div className="flex w-full flex-col gap-4">
       <FilterBar
         filters={filters}
         onChange={updateFilters}
@@ -933,87 +622,77 @@ export function ReportsList() {
         facets={facets}
         onReset={resetFilters}
         hasActiveFilters={hasActiveFilters}
+        total={total}
+        loaded={items.length}
       />
 
       {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+          {error}
+        </div>
       )}
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          {loading
-            ? "Cargando…"
-            : total === 0
-              ? "Sin resultados"
-              : `${from}–${to} de ${total} reportes`}
-        </span>
-        {hasActiveFilters && !loading && (
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="flex items-center gap-1 hover:text-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-            Quitar filtros
-          </button>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} className="py-4">
-              <CardHeader className="px-4">
-                <Skeleton className="h-5 w-2/3" />
-                <Skeleton className="mt-2 h-3.5 w-1/3" />
-              </CardHeader>
-            </Card>
-          ))}
+      {!loading && items.length === 0 ? (
+        <div
+          className="flex flex-col items-center gap-3 rounded-xl border py-14 text-center"
+          style={{ borderColor: "var(--border)", background: "var(--panel)" }}
+        >
+          <p className="text-[14.5px] font-semibold">Sin resultados</p>
+          <p className="max-w-[38ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+            Ningún reporte coincide con los filtros aplicados.
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px]"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <X className="size-3.5" />
+              Quitar filtros
+            </button>
+          )}
         </div>
-      ) : items.length === 0 ? (
-        <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No hay reportes que coincidan con estos filtros.
-          </CardContent>
-        </Card>
       ) : (
-        <div className="space-y-3">
-          {items.map((a) => (
-            <ReportRow key={a.id} article={a} onOpen={setSelectedId} />
-          ))}
-        </div>
+        <ReportsTable
+          items={items}
+          loading={loading}
+          onOpen={setSelectedId}
+          sortDir={filters.sort ?? "recent"}
+          onToggleSort={() => updateFilters({ sort: filters.sort === "oldest" ? "recent" : "oldest" })}
+        />
       )}
 
       {total > PAGE_SIZE && (
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={page === 0 || loading}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="gap-1"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Anterior
-          </Button>
-          <span className={cn("text-sm text-muted-foreground")}>
-            Página {page + 1} de {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+        <div
+          className="flex items-center justify-between rounded-xl border px-[14px] py-[11px]"
+          style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+        >
+          <span className="text-[12px]" style={{ color: "var(--faint)" }}>
+            Página {page + 1} de {Math.max(1, Math.ceil(total / PAGE_SIZE))} · {items.length} visibles
           </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={to >= total || loading}
-            onClick={() => setPage((p) => p + 1)}
-            className="gap-1"
-          >
-            Siguiente
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0 || loading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="inline-flex items-center gap-1 rounded-[6px] border px-2.5 py-1 text-[12.5px] disabled:opacity-50"
+              style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+            >
+              <ChevronLeft className="size-3.5" />
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={to >= total || loading}
+              onClick={() => setPage((p) => p + 1)}
+              className="inline-flex items-center gap-1 rounded-[6px] border px-2.5 py-1 text-[12.5px] disabled:opacity-50"
+              style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+            >
+              Siguiente
+              <ChevronRight className="size-3.5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -71,7 +71,7 @@ class Settings:
     # cada análisis (puede estar ahí para el CLI, o simplemente olvidada en el
     # .env). Una credencial no debe ser un interruptor de comportamiento
     # facturable. Ver CLAUDE.md y task.md §3.2.
-    analyzer: str = _choice("ODIN_ANALYZER", "local", ("local", "gemini"))
+    analyzer: str = _choice("ODIN_ANALYZER", "local", ("local", "gemini", "groq", "hybrid"))
 
     # Árbitro de entidades ambiguas: una llamada EXTRA y facturada a Gemini por
     # cada análisis con personas dudosas, aparte del motor principal. Opt-in

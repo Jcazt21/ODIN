@@ -52,12 +52,12 @@ sobreescribe el `CMD` con `python main.py`).
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM python:3.12-slim
+FROM python:3.13-slim
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements.lock .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+    pip install --require-hashes -r requirements.lock
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install https://.../es_core_news_lg-3.8.0-py3-none-any.whl
@@ -69,21 +69,36 @@ CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
 
 Puntos clave:
 
-1. **`COPY requirements.txt .` antes que `COPY . .`** — el resto del código
+1. **Se instala desde `requirements.lock`, no `requirements.txt`** — el lock
+   fija con hash las 113 dependencias transitivas (ver
+   [README.md#requirementslock](../README.md#requirementslock)), así que dos
+   builds en fechas distintas instalan exactamente lo mismo.
+   `--require-hashes` hace que el build falle si algo a instalar no trae hash
+   en el lock, en vez de resolver silenciosamente una versión distinta.
+   `requirements.txt` sigue siendo la fuente que declara las dependencias
+   directas y de la que se regenera el lock — pero ya no es lo que entra a la
+   imagen.
+2. **`COPY requirements.lock .` antes que `COPY . .`** — el resto del código
    fuente (que cambia mucho más seguido que las dependencias) se copia
-   *después* de instalar. Así, si el código cambia pero `requirements.txt`
+   *después* de instalar. Así, si el código cambia pero `requirements.lock`
    no, Docker reutiliza la capa de `pip install` completa, sin tocar la red.
-2. **Modelo de spaCy en su propio `RUN`** — `es_core_news_lg` no depende de
-   `requirements.txt`, así que vive en una capa separada. Cambiar una
+3. **`FROM python:3.13-slim`** — `requirements.lock` se genera con `uv pip
+   compile --python-version 3.13` (ver
+   [README.md#requirementslock](../README.md#requirementslock)), así que sus
+   hashes solo cubren ruedas para esa versión. Instalar con
+   `--require-hashes` sobre un intérprete distinto no encuentra candidato
+   válido y el build falla.
+4. **Modelo de spaCy en su propio `RUN`** — `es_core_news_lg` no depende de
+   `requirements.lock`, así que vive en una capa separada. Cambiar una
    dependencia de Python no obliga a re-descargar el modelo (~500 MB), y
    viceversa.
-3. **`--mount=type=cache,target=/root/.cache/pip`** — cache de BuildKit,
+5. **`--mount=type=cache,target=/root/.cache/pip`** — cache de BuildKit,
    independiente del cacheo de capas de Docker. Persiste entre builds aunque
    la capa se invalide (por ejemplo, al agregar una dependencia nueva a
-   `requirements.txt`). Efecto práctico: si agregás **una** librería nueva,
+   `requirements.lock`). Efecto práctico: si agregás **una** librería nueva,
    `pip` solo descarga esa librería — el resto sale del cache local, no de
    la red.
-4. **`psycopg2-binary`** trae `libpq` embebido, por eso no hace falta
+6. **`psycopg2-binary`** trae `libpq` embebido, por eso no hace falta
    instalar headers de compilación (`gcc`, `libpq-dev`, etc.) en la imagen.
 
 ### 2.2 `frontend` — `frontend/Dockerfile` (multi-stage)
@@ -141,7 +156,7 @@ entraran al contexto, cualquier cambio ahí invalidaría capas sin necesidad.
 
 | Qué                                                  | Dónde vive                                                   | Se re-descarga cuando…                              |
 |-------------------------------------------------------|----------------------------------------------------------------|--------------------------------------------------------|
-| Paquetes de `pip` (`requirements.txt`)                | Capa de Docker + cache de BuildKit (`/root/.cache/pip`)         | Cambia `requirements.txt` (y solo lo que cambió, gracias al cache de BuildKit) |
+| Paquetes de `pip` (`requirements.lock`)               | Capa de Docker + cache de BuildKit (`/root/.cache/pip`)         | Cambia `requirements.lock` (y solo lo que cambió, gracias al cache de BuildKit) |
 | Modelo de spaCy (`es_core_news_lg`, ~500 MB)          | Capa de Docker propia + cache de BuildKit                       | Cambia esa línea del `Dockerfile.backend` (rara vez) |
 | Paquetes de `npm` (`package-lock.json`)               | Capa de Docker + cache de BuildKit (`/root/.npm`)                | Cambia `package.json` / `package-lock.json`          |
 | Pesos de `pysentimiento` (Hugging Face, ~500 MB)      | **Volumen nombrado** `hf_cache` (`/root/.cache/huggingface`)    | Nunca, salvo que se borre el volumen (`docker volume rm`) — se descargan en el primer *request*, no en el build |

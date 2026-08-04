@@ -71,13 +71,13 @@ class Article(Base):
     # después y decidir backfill selectivo en vez de re-analizar a ciegas.
     # Nulos en filas guardadas antes de esta columna (no hay forma de
     # reconstruir el linaje retroactivamente).
-    analyzer_name: Mapped[str | None] = mapped_column(String(40))      # "local" | "gemini"
-    analyzer_model: Mapped[str | None] = mapped_column(String(80))     # "es_es_core_news_lg-3.8.0" | "gemini-3.5-flash"
+    analyzer_name: Mapped[str | None] = mapped_column(String(40))      # "local" | "gemini" | "groq"
+    analyzer_model: Mapped[str | None] = mapped_column(String(80))     # "es_es_core_news_lg-3.8.0" | "gemini-3.5-flash" | "openai/gpt-oss-120b" | "es_es_core_news_lg-3.8.0+openai/gpt-oss-120b"
     analyzer_version: Mapped[str | None] = mapped_column(String(20))   # versión de la heurística/prompt
     analysis_schema_version: Mapped[int | None] = mapped_column(Integer)  # versión de AnalysisResult
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # --- Análisis de encuadre (solo GeminiAnalyzer; NULL con LocalAnalyzer) ---
+    # --- Análisis de encuadre (solo analizadores LLM: GeminiAnalyzer/GroqAnalyzer; NULL con LocalAnalyzer) ---
     framing: Mapped[str | None] = mapped_column(String(40))           # crisis_conflicto | logro_institucional | ...
     headline_intent: Mapped[str | None] = mapped_column(String(20))   # informativo | alarmista | sensacionalista
     lead_orientation: Mapped[str | None] = mapped_column(String(20))  # social | oficialista | tecnico

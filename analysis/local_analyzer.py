@@ -32,11 +32,19 @@ from analysis.text_norm import strip_accents as _strip_accents
 # cambie una regla que afecta el resultado (_VENUE_WORDS, _is_named_after_place,
 # _merge_aliases, umbrales de _extraction_confidence...), para poder distinguir
 # en la BD qué filas se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "1"
+_LOCAL_ANALYZER_VERSION = "2"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
 _STOP_ENTITY_TOKENS = {"foto", "video", "listín", "listin", "diario", "libre"}
+# palabras de estado/país/gobierno genéricas: spaCy a veces las etiqueta como
+# ORG cuando aparecen solas y capitalizadas ("presidente... de la República"),
+# pero no son el nombre propio de ninguna organización real. Solo se filtran
+# cuando son la entidad COMPLETA (p.ej. "República Dominicana" sigue
+# reconociéndose porque ahí "República" no es el span entero).
+_GENERIC_STATE_ORGS = {
+    "republica", "estado", "gobierno", "nacion", "pais", "administracion",
+}
 # tipos de entidad de spaCy que nos interesan -> tipo canónico
 _WANTED_ENT = {"PER": "PERSON", "PERSON": "PERSON", "ORG": "ORG"}
 # partículas que no rompen un nombre propio ("Policía del Distrito Nacional")
@@ -123,7 +131,17 @@ def _is_proper_span(ent) -> bool:
     Filtra spans que mezclan un título con un subtítulo pegado sin puntuación
     (p.ej. "Leonel Cuestionamientos", donde "Cuestionamientos" es NOUN, no
     PROPN) — un error típico de segmentación, no un nombre real.
+
+    También filtra spans TRUNCADOS que terminan en una partícula ("Secretaría
+    del", "Consejo Nacional de la") — spaCy a veces corta el span de NER antes
+    de completarlo (frecuente cuando la siguiente palabra del nombre real ya
+    quedó etiquetada como el inicio de OTRA entidad, p.ej. "Secretaría del
+    [Consejo]" donde "Consejo" se extrae aparte). Un nombre propio real nunca
+    termina en una preposición/artículo suelto.
     """
+    alpha_tokens = [tok for tok in ent if tok.is_alpha]
+    if alpha_tokens and alpha_tokens[-1].text.lower() in _NAME_PARTICLES:
+        return False
     for tok in ent:
         if not tok.is_alpha:
             continue
@@ -353,6 +371,12 @@ class LocalAnalyzer:
             name = " ".join(ent.text.split())
             nkey = _norm_key(name)
             if len(name) < 3 or nkey in _STOP_ENTITY_TOKENS:
+                continue
+            # "República"/"Estado"/"Gobierno" solas (no como parte de un
+            # nombre propio compuesto tipo "República Dominicana") no son una
+            # organización real, son una forma genérica de referirse al país
+            # o a la administración de turno.
+            if etype == "ORG" and nkey in _GENERIC_STATE_ORGS:
                 continue
             # Cifras, montos y porcentajes ("RD$654", "39%") no son nombres:
             # spaCy a veces los etiqueta como PERSON/ORG porque son tokens no

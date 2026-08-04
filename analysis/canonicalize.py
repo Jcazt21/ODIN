@@ -209,15 +209,26 @@ def _merge_duplicates(entities: list) -> list:
 
 
 def canonicalize_entities(entities: list, person_map: dict[str, str] | None = None) -> list:
-    """Aplica los 4 pasos y devuelve la lista canonicalizada (puede ser más
+    """Aplica los pasos y devuelve la lista canonicalizada (puede ser más
     corta que la de entrada si hubo fusiones). `person_map` se puede pasar
-    precomputado para procesar varios artículos con una sola consulta."""
+    precomputado para procesar varios artículos con una sola consulta.
+
+    Orden importante: se funde PRIMERO dentro del propio artículo (mismo
+    texto, sin depender de la BD) y solo DESPUÉS se resuelve contra el
+    historial de la BD (`_resolve_partial_persons`). Si "Rodríguez" y "Jean
+    Alain Rodríguez" aparecen como dos menciones separadas en el mismo
+    artículo (spaCy extrajo una parcial y otra completa), deben fundirse
+    entre sí antes de que "Rodríguez" tenga oportunidad de resolverse contra
+    un homónimo histórico distinto ya guardado en la BD (p.ej. "Jean Luis
+    Rodríguez") — hacerlo al revés fusiona con la persona equivocada porque
+    nunca se le da la chance a la evidencia del propio artículo de ganar."""
     entities = [e for e in entities if (e.name or "").strip()]
     for ent in entities:
         ent.name = " ".join(ent.name.split())
         if ent.type == "PERSON":
             ent.name = _strip_title_prefix(ent.name)
     _apply_alias_catalog(entities)
+    entities = _merge_duplicates(entities)
     if person_map is None:
         person_map = known_person_fullname_map()
     _resolve_partial_persons(entities, person_map)

@@ -351,7 +351,7 @@ cerrado, no abierto.
 ## Desarrollo: lint, tipos y ganchos de commit
 
 ```bash
-pip install -e ".[dev]"     # ruff, mypy, pre-commit, pytest, uv
+pip install -e ".[dev]"     # ruff, mypy, pre-commit, pytest, uv, pip-audit
 pre-commit install          # una vez por clon
 ```
 
@@ -360,12 +360,18 @@ pre-commit install          # una vez por clon
 | `ruff check .` | Lint (errores reales, imports, modernización, trampas comunes) |
 | `ruff check . --fix` | Arregla lo que se puede automáticamente |
 | `mypy` | Tipos. Configuración en `pyproject.toml`, sin `strict` por ahora |
-| `pytest` | Pruebas (aún no hay: es el siguiente item del backlog) |
-| `pre-commit run --all-files` | Todo lo anterior sobre el repo completo |
+| `pytest` | Pruebas (`tests/`, SQLite en memoria — ver `tests/conftest.py`) |
+| `pip-audit -r requirements.lock` | Vulnerabilidades conocidas en las dependencias fijadas |
+| `pre-commit run --all-files` | Lint y tipos sobre el repo completo (no corre pytest ni pip-audit) |
 
 La configuración de las tres herramientas vive en [pyproject.toml](pyproject.toml).
 Las dependencias de ejecución siguen declarándose en `requirements.txt`, que
 `pyproject.toml` lee — una sola lista, sin copias que se desincronizan.
+
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) corre estos
+mismos cuatro checks (lint, tipos, tests, `pip-audit`) en cada push y pull
+request a `main`, instalando desde `requirements.lock` con
+`--require-hashes`.
 
 **`ruff format` está apagado a propósito.** Reformatear todo el backend antes de
 tener pruebas produce un diff enorme que esconde los cambios reales; se activa
@@ -373,18 +379,33 @@ cuando exista la red de seguridad.
 
 ### requirements.lock
 
-[requirements.lock](requirements.lock) fija las **113 dependencias transitivas**
+[requirements.lock](requirements.lock) fija las **117 dependencias transitivas**
 con hash, para que dos instalaciones en fechas distintas den el mismo entorno.
 Se regenera cuando cambie `requirements.txt`:
 
 ```bash
-uv pip compile requirements.txt --generate-hashes --python-version 3.13 -o requirements.lock
+uv pip compile requirements.txt --generate-hashes --python-version 3.13 \
+    --python-platform x86_64-unknown-linux-gnu --torch-backend cpu \
+    -o requirements.lock
 ```
 
-> Todavía **nada instala desde el lock**: el `Dockerfile.backend` sigue usando
-> `requirements.txt`, así que los builds aún no son reproducibles. Conectarlo
-> (Docker + CI) queda para cuando se monte el pipeline de CI — item #19 del
-> backlog.
+- **`--python-platform x86_64-unknown-linux-gnu`**: `Dockerfile.backend` y los
+  runners de GitHub Actions son Linux; sin fijar la plataforma, `uv` resuelve
+  para el sistema operativo donde se corre el comando (p. ej. faltaría
+  `uvloop`, que no soporta Windows, si se regenera desde ahí).
+- **`--torch-backend cpu`**: `torch` llega de rebote
+  (`pysentimiento` -> `transformers`/`accelerate` -> `torch`). En Linux, el
+  índice por defecto de PyPI resuelve a la build con CUDA, que arrastra
+  `nvidia-*`/`triton` (~4.5GB) sin que el contenedor tenga GPU. Esta flag fija
+  la build `+cpu` (índice de PyTorch) directamente en el lock. Instalar desde
+  el lock requiere entonces `--extra-index-url
+  https://download.pytorch.org/whl/cpu` (ver `Dockerfile.backend` y
+  `.github/workflows/ci.yml`), porque esa build solo vive ahí, no en PyPI.
+
+> `Dockerfile.backend` y el CI de GitHub Actions
+> ([.github/workflows/ci.yml](.github/workflows/ci.yml)) instalan desde este
+> lock con `pip install --require-hashes`, así que los builds y los checks de
+> CI son reproducibles. Ver [docs/docker.md](docs/docker.md#21-backend--scraper--dockerfilebackend).
 
 ---
 

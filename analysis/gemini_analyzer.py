@@ -43,6 +43,21 @@ class _Entity(BaseModel):
     context: str = Field(
         description="Cita textual breve (máx. 12 palabras) que justifica el sentimiento"
     )
+    confidence: float = Field(
+        description=(
+            "Qué tan seguro estás de que 'name' es el nombre canónico correcto "
+            "y de que TODAS las variantes que fusionaste (apellido solo, "
+            "apodo, cargo + apellido) se refieren realmente a esta misma "
+            "entidad, basándote SOLO en el contexto de este artículo. 1.0 = "
+            "certeza total (nombre completo inequívoco, sin variantes "
+            "ambiguas). Baja (<0.7) cuando tuviste que asumir a quién se "
+            "refería una mención parcial o genérica ('el mandatario', "
+            "'Molina') sin que el texto lo confirmara sin dudas."
+        )
+    )
+    confidence_reason: str = Field(
+        description="Una frase breve explicando el motivo de la confianza asignada, especialmente si es baja (p.ej. 'apellido único en el texto, sin ambigüedad' o 'referencia genérica sin nombre propio cercano')"
+    )
 
 
 class _Analysis(BaseModel):
@@ -104,13 +119,32 @@ class _Analysis(BaseModel):
 # Versión del prompt/esquema de salida (§2.1 de task.md): subirla cuando
 # cambie _SYSTEM o los campos/descripciones de _Analysis/_Entity, para poder
 # distinguir en la BD qué filas se generaron con qué versión del prompt.
-_PROMPT_VERSION = "1"
+_PROMPT_VERSION = "4"
 
 _SYSTEM = (
-    "Eres un analista de prensa dominicana. Analizas artículos en español y "
-    "extraes: tema principal, palabras clave, sentimiento global, y las figuras "
-    "públicas y empresas mencionadas junto con la opinión que el artículo expresa "
-    "hacia cada una.\n\n"
+    "Eres un analista senior de prensa dominicana, especializado en evaluación "
+    "objetiva de noticias políticas e institucionales. Analizas artículos en "
+    "español y extraes: tema principal, palabras clave, sentimiento global, "
+    "las figuras públicas y empresas mencionadas junto con la opinión que el "
+    "artículo expresa hacia cada una, y el encuadre editorial de la nota.\n\n"
+    "PRINCIPIOS METODOLÓGICOS (aplican a TODO el análisis, no solo al "
+    "encuadre):\n"
+    "- No infieras intenciones que el texto no expresa explícita o "
+    "implícitamente. Si el texto no lo dice ni lo sugiere con claridad, no lo "
+    "asumas.\n"
+    "- Separa hechos de opiniones: una declaración atribuida a alguien "
+    "('el ministro afirmó que...') es su opinión, no un hecho verificado por "
+    "el medio; no la trates como si el medio la respaldara.\n"
+    "- Clasifica el sentimiento y el encuadre según cómo el TEXTO trata al "
+    "actor en ESTA nota, nunca según tu conocimiento previo o reputación de "
+    "esa persona/institución fuera del artículo.\n"
+    "- No uses información externa al texto para evaluar el contenido "
+    "(contexto histórico, lo que tú sepas de la persona, eventos no "
+    "mencionados).\n"
+    "- Evalúas el ENCUADRE (framing): cómo se presenta el hecho o el actor, "
+    "no si el hecho es verdadero, falso, justo o injusto.\n"
+    "- Si una mención de una entidad no trae valoración explícita ni "
+    "implícita clara, es NEU — una mención no implica apoyo ni rechazo.\n\n"
     "Reglas para entidades:\n"
     "- Devuelve cada persona/organización UNA sola vez, con su nombre más "
     "completo. Si el artículo alterna 'Abinader' y 'Luis Abinader', es UNA "
@@ -127,23 +161,53 @@ _SYSTEM = (
     "Palabras clave: de 3 a 8, en minúsculas, específicas del artículo (temas y "
     "conceptos, no los nombres de las entidades ya listadas), sin sinónimos "
     "repetidos.\n\n"
-    "Sentimiento (siempre POS, NEG o NEU): NEG si el artículo deja mal parada a "
-    "la entidad (acusaciones, críticas, fracasos, escándalos); POS si la deja "
-    "bien (logros, elogios, anuncios favorables, obras entregadas); NEU si solo "
-    "se le menciona sin carga valorativa. Sé objetivo: 'sentiment_toward' "
-    "refleja cómo queda la entidad según el artículo, no tu opinión personal.\n\n"
+    "Sentimiento hacia cada entidad (siempre POS, NEG o NEU): NEG si el "
+    "tratamiento en la nota la deja mal parada — acusaciones, críticas, "
+    "escándalos, corrupción, fracasos, errores; POS si el tratamiento la deja "
+    "bien — felicitaciones, logros presentados, avances explicados, una "
+    "medida defendida, resultados resaltados; NEU si el texto solo la "
+    "menciona o narra hechos sobre ella sin valoración. Justifica cada "
+    "clasificación con la frase concreta del texto que la sustenta (campo "
+    "'context').\n\n"
     "Encuadre y actores: clasifica además el marco de la nota (framing), la "
     "intención del titular, con qué abre el lead, el tipo de fuentes y los "
     "actores. 'dominant_actor', 'blamed_actor' y 'credited_actor' deben ser "
     "nombres EXACTOS de entidades que ya listaste en 'entities' (o '' si no "
-    "aplica). Analiza el texto tal como está escrito: el encuadre es el del "
-    "medio, no tu valoración de los hechos."
+    "aplica). Marca un actor como 'blamed_actor' o 'credited_actor' SOLO si "
+    "el texto explícitamente lo señala como causante o como quien resuelve — "
+    "no lo infieras de su cargo ni de quién luce mejor o peor en general. Si "
+    "el titular y el cuerpo tienen intención distinta (titular alarmista "
+    "sobre un cuerpo informativo, por ejemplo), 'headline_intent' describe "
+    "SOLO el titular; el resto de los campos de encuadre describen el "
+    "cuerpo."
 )
 
 
 def _norm_sentiment(value: str) -> str:
     v = (value or "").strip().upper()[:3]
     return v if v in _SENTIMENTS else "NEU"
+
+
+def _entity_from_llm(e: _Entity) -> EntityResult:
+    """Mapea la entidad devuelta por el LLM (Gemini o Groq, mismo schema
+    `_Entity`) a `EntityResult`. `confidence`/`confidence_reason` van al
+    mismo campo `extraction_confidence`/`context` que ya usa el frontend para
+    el badge "revisar" (`extraction_confidence < 0.9`, ver
+    frontend/src/lib/format.ts) — no hace falta un campo nuevo en el schema
+    de BD, el LLM solo empieza a llenar uno que antes quedaba en el default
+    1.0 (certeza asumida) para cualquier Analyzer que no lo calculara."""
+    reason = (e.confidence_reason or "").strip()
+    context = (e.context or "").strip()
+    combined_context = f"{context} [{reason}]" if reason else context or None
+    return EntityResult(
+        name=e.name.strip(),
+        type="ORG" if e.type == "ORG" else "PERSON",
+        mentions_count=max(1, e.mentions_count),
+        sentiment_toward=_norm_sentiment(e.sentiment_toward),
+        sentiment_score=None,  # el LLM no devuelve una probabilidad calibrada
+        context=combined_context,
+        extraction_confidence=round(min(max(e.confidence, 0.0), 1.0), 2),
+    )
 
 
 class GeminiAnalyzer:
@@ -191,9 +255,13 @@ class GeminiAnalyzer:
                 # de extracción con schema fijo (ver comentario en __init__).
                 "thinking_config": {"thinking_budget": self.thinking_budget},
                 # Tope de seguridad: el JSON esperado (tema + hasta ~15
-                # entidades con contexto corto) no debería superar esto salvo
-                # que el modelo se desvíe.
-                "max_output_tokens": 2048,
+                # entidades, cada una con context+confidence_reason) no
+                # debería superar esto salvo que el modelo se desvíe. 4096 y
+                # no 2048: con confidence/confidence_reason por entidad (ver
+                # _Entity) un artículo con muchas entidades se acerca al
+                # límite anterior y el análisis termina truncado a mitad de
+                # JSON (data is None abajo, finish_reason="MAX_TOKENS").
+                "max_output_tokens": 4096,
             },
         )
         data: _Analysis = response.parsed
@@ -205,17 +273,7 @@ class GeminiAnalyzer:
                 f"(finish_reason={getattr(response.candidates[0], 'finish_reason', '?') if response.candidates else '?'})"
             )
 
-        entities = [
-            EntityResult(
-                name=e.name.strip(),
-                type="ORG" if e.type == "ORG" else "PERSON",
-                mentions_count=max(1, e.mentions_count),
-                sentiment_toward=_norm_sentiment(e.sentiment_toward),
-                sentiment_score=None,  # el LLM no devuelve una probabilidad calibrada
-                context=(e.context or "").strip() or None,
-            )
-            for e in data.entities
-        ]
+        entities = [_entity_from_llm(e) for e in data.entities]
 
         return AnalysisResult(
             main_topic=data.main_topic.strip() or None,

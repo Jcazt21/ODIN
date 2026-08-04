@@ -414,6 +414,16 @@ export interface components {
             blamed_actor: string | null;
             /** Credited Actor */
             credited_actor: string | null;
+            /** Analyzer Name */
+            analyzer_name: string | null;
+            /** Analyzer Model */
+            analyzer_model: string | null;
+            /** Analyzer Version */
+            analyzer_version: string | null;
+            /** Analysis Schema Version */
+            analysis_schema_version: number | null;
+            /** Analyzed At */
+            analyzed_at: string | null;
             /**
              * Entities
              * @default []

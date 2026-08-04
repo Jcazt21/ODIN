@@ -1,16 +1,10 @@
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { SENTIMENT_LABELS } from "@/lib/labels"
 
-const LABELS: Record<string, string> = {
-  POS: "Positivo",
-  NEG: "Negativo",
-  NEU: "Neutro",
-}
-
-const STYLES: Record<string, string> = {
-  POS: "bg-success/15 text-success border-success/30",
-  NEG: "bg-destructive/15 text-destructive border-destructive/30",
-  NEU: "bg-muted text-muted-foreground border-border",
+const TONE_VAR: Record<string, string> = {
+  POS: "pos",
+  NEG: "neg",
+  NEU: "neu",
 }
 
 export function SentimentBadge({
@@ -21,11 +15,20 @@ export function SentimentBadge({
   score?: number | null
 }) {
   const key = sentiment ?? "NEU"
+  const tone = TONE_VAR[key] ?? "neu"
   return (
-    <Badge variant="outline" className={cn("font-medium", STYLES[key] ?? STYLES.NEU)}>
-      {LABELS[key] ?? key}
-      {typeof score === "number" && (
-        <span className="ml-1 opacity-70">{Math.round(score * 100)}%</span>
+    <Badge
+      variant="outline"
+      className="font-medium"
+      style={{
+        background: `var(--${tone}-soft)`,
+        color: `var(--${tone})`,
+        borderColor: `var(--${tone})`,
+      }}
+    >
+      {SENTIMENT_LABELS[key] ?? key}
+      {typeof score === "number" && key !== "NEU" && (
+        <span className="ml-1 opacity-70">· {Math.round(score * 100)}%</span>
       )}
     </Badge>
   )

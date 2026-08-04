@@ -18,7 +18,6 @@ odin.egg-info
 .agents
 .pre-commit-config.yaml
 pyproject.toml
-requirements.lock
 README.md
 task.md
 deploy-test.md

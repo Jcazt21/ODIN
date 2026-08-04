@@ -1,0 +1,30 @@
+# Dependencias directas para los jobs "types" y "test" de CI
+# (.github/workflows/ci.yml) — ni mypy ni pytest ejercitan LocalAnalyzer
+# (analysis/local_analyzer.py: pysentimiento + spacy), que arrastra
+# transformers/accelerate/torch (varios GB) solo para las heurísticas locales
+# de NER/sentimiento:
+#   - mypy tiene ignore_missing_imports=true (pyproject.toml), así que un
+#     import perezoso de un paquete no instalado no lo hace fallar.
+#   - los tests que sí usan spaCy (tests/test_local_analyzer.py) se saltan
+#     solos si no está instalado, vía pytest.importorskip("spacy").
+#   - gemini_analyzer.py y groq_analyzer.py importan sus SDKs de forma
+#     perezosa también, y ningún test los ejercita hoy.
+#
+# Sin versiones: se instala con `pip install -c requirements.lock`, que fija
+# versión y hash exactos desde el lock. Mantener en sync con requirements.txt
+# si cambian las dependencias directas (todas menos pysentimiento/spacy).
+
+requests
+trafilatura
+feedparser
+beautifulsoup4
+lxml
+SQLAlchemy
+psycopg2-binary
+alembic
+google-genai
+groq
+python-dotenv
+fastapi
+uvicorn
+PyJWT

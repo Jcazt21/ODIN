@@ -1,0 +1,88 @@
+name: CI
+
+# Lint + tipos + tests + auditoría de dependencias sobre cada push/PR.
+#
+# requirements.lock (ver README.md#requirementslock) es la única fuente de
+# verdad para las versiones/hashes de las dependencias de ejecución. Los jobs
+# "types" y "test" no instalan el lock completo: usan requirements-ci.txt
+# (ver ese archivo) con `pip install -c requirements.lock`, que toma versión y
+# hash del lock pero evita pysentimiento/spacy y lo que arrastran
+# (transformers/accelerate/torch, varios GB) — ni mypy (ignore_missing_imports)
+# ni pytest (tests que sí los usan se saltan solos) los necesitan. El job
+# "pip-audit" audita requirements.lock completo tal cual, sin instalarlo.
+#
+# requirements.lock se regenera con:
+#   uv pip compile requirements.txt --generate-hashes --python-version 3.13 \
+#       --python-platform x86_64-unknown-linux-gnu --torch-backend cpu \
+#       -o requirements.lock
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # Versión fijada igual que .pre-commit-config.yaml (astral-sh/ruff-pre-commit
+      # rev v0.16.1), para que CI y el hook local vean exactamente el mismo ruff.
+      - run: pip install ruff==0.16.1
+      - run: ruff check .
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+      # mypy necesita los paquetes reales instalados (SQLAlchemy, FastAPI,
+      # Pydantic...) para resolver sus tipos, no solo el código propio. Set
+      # recortado: ver requirements-ci.txt.
+      - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
+      - run: pip install "mypy>=1.14"
+      - run: mypy
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
+      - run: pip install "pytest>=8.3"
+      # Las pruebas usan SQLite en memoria (ver tests/conftest.py), nunca
+      # DATABASE_URL real, y no llaman a la API de Gemini (ver CLAUDE.md). Las
+      # que dependen del modelo es_core_news_lg de spaCy se saltan solas si no
+      # está instalado (no se descarga acá: ~500 MB que no hacen falta para
+      # que el resto de la suite corra).
+      - run: pytest
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      # Audita las versiones fijadas en el lock contra la base de datos de
+      # vulnerabilidades (OSV) sin necesidad de instalar el entorno completo.
+      # --extra-index-url: torch se fija a la build +cpu (ver
+      # README.md#requirementslock), que solo vive en el índice de PyTorch.
+      # pip-audit no puede auditar esa build igual (no está en PyPI) y lo
+      # reporta como "Skip Reason" en vez de fallar — es esperado, no un error.
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
