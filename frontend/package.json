@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "generate:types": "cd .. && .venv/bin/python scripts/generate_openapi.py && cd frontend && openapi-typescript openapi.json -o src/lib/api-types.ts"
+    "generate:types": "python ../scripts/generate_openapi.py && openapi-typescript openapi.json -o src/lib/api-types.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -17,7 +17,9 @@
     "@tailwindcss/vite": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.43.0",
     "lucide-react": "^1.28.0",
+    "mx-icons": "^1.1.1",
     "ogl": "^1.0.11",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

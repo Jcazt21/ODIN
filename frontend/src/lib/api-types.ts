@@ -390,6 +390,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/scrape-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Scrape Jobs
+         * @description Corridas recientes, más reciente primero — el frontend la usa al
+         *     montar la tab para detectar un job pending/running y retomar el polling
+         *     en vez de mostrar el formulario (p. ej. tras recargar la página).
+         */
+        get: operations["list_scrape_jobs_api_scrape_jobs_get"];
+        put?: never;
+        /**
+         * Start Scrape Job
+         * @description Encola una corrida del scraper de política sobre las 9 fuentes
+         *     permitidas. Rechaza con 409 si ya hay una en curso — un backend de un
+         *     solo worker no tiene por qué correr dos scrapes de 9 fuentes a la vez.
+         */
+        post: operations["start_scrape_job_api_scrape_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scrape-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scrape Job
+         * @description Estado/avance de una corrida encolada por POST /api/scrape-jobs.
+         */
+        get: operations["get_scrape_job_api_scrape_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scrape-jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Scrape Job
+         * @description Pide cancelar una corrida en curso. Cooperativo, no instantáneo:
+         *     pipeline.run() solo lo consulta entre fuentes y entre artículos, así que
+         *     puede tardar hasta que termine de descargar la fuente actual.
+         */
+        post: operations["cancel_scrape_job_api_scrape_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -923,6 +993,74 @@ export interface components {
              * @default []
              */
             entities: components["schemas"]["EntityPayload"][];
+        };
+        /** ScrapeJobAccepted */
+        ScrapeJobAccepted: {
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @default pending
+             */
+            status: string;
+        };
+        /** ScrapeJobResponse */
+        ScrapeJobResponse: {
+            /** Job Id */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Target */
+            target: number;
+            /** Per Source Cap */
+            per_source_cap: number;
+            /** Analyzer */
+            analyzer: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Progress */
+            progress: {
+                [key: string]: components["schemas"]["ScrapeSourceProgress"];
+            };
+            crawl_run?: components["schemas"]["CrawlRunResponse"] | null;
+            /** Error */
+            error?: string | null;
+        };
+        /** ScrapeJobStartRequest */
+        ScrapeJobStartRequest: {
+            /**
+             * Target
+             * @default 250
+             */
+            target: number;
+            /** Per Source Cap */
+            per_source_cap?: number | null;
+            /**
+             * Analyzer
+             * @default local
+             * @enum {string}
+             */
+            analyzer: "local" | "groq" | "hybrid";
+        };
+        /** ScrapeSourceProgress */
+        ScrapeSourceProgress: {
+            /** Source */
+            source: string;
+            /** Stage */
+            stage: string;
+            /** Status */
+            status: string;
+            /** Detail */
+            detail: string;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -1665,6 +1803,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CrawlRunResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_scrape_jobs_api_scrape_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeJobResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_scrape_job_api_scrape_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScrapeJobStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeJobAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scrape_job_api_scrape_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_scrape_job_api_scrape_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScrapeJobResponse"];
                 };
             };
             /** @description Validation Error */

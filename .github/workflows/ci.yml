@@ -71,6 +71,22 @@ jobs:
       # que el resto de la suite corra).
       - run: pytest
 
+  test-windows:
+    # Red de seguridad de portabilidad: el cliente corre Odin en Windows.
+    # requirements.lock está fijado a x86_64-unknown-linux-gnu (ver
+    # README.md#requirementslock), así que --require-hashes -c
+    # requirements.lock no sirve acá — se instala requirements-ci.txt sin pin
+    # de hash (mismo set liviano que el job "test", sin pysentimiento/spacy).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements-ci.txt
+      - run: pip install "pytest>=8.3"
+      - run: pytest
+
   pip-audit:
     runs-on: ubuntu-latest
     steps:

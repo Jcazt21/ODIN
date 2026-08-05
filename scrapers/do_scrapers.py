@@ -1,6 +1,6 @@
 """Scrapers de periódicos dominicanos (descubrimiento por sitemap o RSS).
 
-Todos reutilizan el flujo estándar de BaseScraper: descubrir URLs desde
+La mayoría reutiliza el flujo estándar de BaseScraper: descubrir URLs desde
 `sitemaps`/`feeds` y extraer el contenido con trafilatura.
 
 URLs de descubrimiento verificadas el 2026-08-02:
@@ -11,11 +11,12 @@ URLs de descubrimiento verificadas el 2026-08-02:
   eldia.com.do       → RSS (~15 entradas)
   n.com.do           → RSS (~10 entradas)
 
-Medios descartados (por ahora):
-  - Acento (acento.com.do): el feed RSS devuelve HTML 200 vacío; sin sitemap
-    público. Necesita scraping directo de la portada o API privada.
+Verificado el 2026-08-04:
+  acento.com.do      → portada (~80 artículos), ver AcentoScraper
 """
 from __future__ import annotations
+
+import re
 
 from scrapers.base import BaseScraper
 
@@ -57,10 +58,38 @@ class AlMomentoScraper(BaseScraper):
 class ElDiaScraper(BaseScraper):
     source = "el_dia"
     name = "El Día"
-    feeds = ["https://eldia.com.do/feed/"]
+    # Sin slash final a propósito: el robots.txt del sitio tiene
+    # "Disallow: */feed/" pero "Allow: /feed$" — con el slash, _RobotsCache
+    # lo bloquea entero y discover_urls() no encuentra nada.
+    feeds = ["https://eldia.com.do/feed"]
 
 
 class NDigitalScraper(BaseScraper):
     source = "n_digital"
     name = "N Digital"
     feeds = ["https://n.com.do/feed/"]
+
+
+_ACENTO_ARTICLE_RE = re.compile(r"https://acento\.com\.do/[a-z0-9-]+/[a-z0-9-]+-\d+\.html")
+
+
+class AcentoScraper(BaseScraper):
+    """Acento no tiene una fuente de descubrimiento estándar: el feed RSS
+    devuelve HTML 200 vacío, `sitemaps-daily.xml` solo lista páginas de
+    sección (no artículos) y `sitemaps-index.xml` apunta a listados .txt
+    desactualizados (última actualización 2025-03-05). En cambio, la portada
+    trae los links de artículo directo en el HTML
+    (`/<sección>/<slug>-<id numérico>.html`), así que los extraemos por regex.
+    """
+
+    source = "acento"
+    name = "Acento"
+
+    def discover_urls(self, limit: int | None = None) -> list[str]:
+        html = self.fetch("https://acento.com.do/")
+        if not html:
+            return []
+        urls = list(dict.fromkeys(_ACENTO_ARTICLE_RE.findall(html)))
+        if limit is not None and limit > 0:
+            urls = urls[:limit]
+        return urls

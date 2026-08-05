@@ -146,7 +146,8 @@ class _RobotsCache:
                 parser.read()
             except Exception:
                 # Sin robots.txt legible, se asume permitido (ver docstring).
-                parser.allow_all = True
+                # atributo real en runtime; typeshed no lo declara en el stub.
+                parser.allow_all = True  # type: ignore[attr-defined]
             self._parsers[domain] = parser
             return parser
 
@@ -259,6 +260,12 @@ class BaseScraper:
             try:
                 resp = self.session.get(url, timeout=20)
                 resp.raise_for_status()
+                if "charset" not in resp.headers.get("content-type", "").lower():
+                    # Sin charset en el header, requests asume ISO-8859-1 (RFC
+                    # 2616) aunque el body sea UTF-8 (p. ej. acento.com.do) y
+                    # los acentos llegan mojibake ("ediciÃ³n"). apparent_encoding
+                    # (chardet) sí mira el contenido real.
+                    resp.encoding = resp.apparent_encoding
                 return resp.text
             except requests.RequestException as exc:
                 if attempt + 1 >= retries:
@@ -314,11 +321,25 @@ class BaseScraper:
         (I/O de red), con un tope de workers como throttle de cortesía."""
         urls = self.discover_urls(limit=limit)
         if not urls:
+            log.info("%s: no se descubrió ninguna URL", self.name)
             return
+        log.info(
+            "%s: %d URLs descubiertas, descargando con %d workers (~%.1fs entre "
+            "peticiones al mismo dominio, puede tardar)",
+            self.name,
+            len(urls),
+            max(1, settings.fetch_workers),
+            settings.request_delay,
+        )
         workers = max(1, settings.fetch_workers)
+        completed = 0
+        progress_every = max(1, len(urls) // 10)  # ~10 avisos por fuente, sea grande o chica
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(self._fetch_and_extract, u): u for u in urls}
             for future in as_completed(futures):
+                completed += 1
+                if completed % progress_every == 0 or completed == len(urls):
+                    log.info("%s: descargadas %d/%d", self.name, completed, len(urls))
                 try:
                     article = future.result()
                 except Exception:

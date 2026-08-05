@@ -234,6 +234,8 @@ class TestFetchRespectsRobotsAndThrottle:
 
         class _FakeResponse:
             text = "ok"
+            headers = {"content-type": "text/html; charset=utf-8"}
+            apparent_encoding = "utf-8"
 
             def raise_for_status(self):
                 pass
@@ -261,6 +263,8 @@ class TestFetchRespectsRobotsAndThrottle:
 
         class _FakeResponse:
             text = "ok"
+            headers = {"content-type": "text/html; charset=utf-8"}
+            apparent_encoding = "utf-8"
 
             def raise_for_status(self):
                 pass

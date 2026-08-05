@@ -25,6 +25,9 @@ alembic
 google-genai
 groq
 python-dotenv
+structlog
+prometheus-client
+sentry-sdk
 fastapi
 uvicorn
 PyJWT

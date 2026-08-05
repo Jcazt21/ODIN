@@ -1,0 +1,12 @@
+# Normaliza fin de línea a LF para todo archivo de texto, sin importar el SO
+# donde se clone/edite (Mac, Windows con core.autocrlf, etc.). Evita diffs
+# ruidosos y archivos que se lean distinto entre máquinas.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.db binary

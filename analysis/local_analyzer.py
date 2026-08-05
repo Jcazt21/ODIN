@@ -11,10 +11,16 @@ se recalculaba por frase y por entidad, con ~38% de llamadas redundantes).
 Campos:
   - main_topic / topic_keywords: sustantivos y nombres propios frecuentes;
     el tema principal prefiere una frase nominal ("agua potable") si existe.
-  - overall_sentiment: sentimiento agregado sobre TODAS las frases del artículo.
+  - overall_sentiment: sentimiento agregado sobre TODAS las frases del artículo,
+    reforzado por frase con el glosario político de
+    `analysis/sentiment_lexicon.py` antes de agregar (ver `_predict_batch`).
   - entities + sentiment_toward: por cada figura/empresa se agregan las frases
     donde se le menciona. Los nombres se normalizan y se fusionan alias
-    ("Policía" -> "Policía Nacional").
+    ("Policía" -> "Policía Nacional"). Esas frases también se refuerzan con
+    el léxico RELACIONAL de `analysis/sentiment_lexicon.py` ("acusado de",
+    "reconocido por"): a diferencia del léxico general (que se aplica a toda
+    frase por igual), este solo aplica sobre las frases ya asociadas a esa
+    entidad puntual, porque su dirección depende de a quién mencionan.
 
 NOTA: `sentiment_toward` es una aproximación por frase (aspect-based sentiment
 sencillo). Para máxima precisión, sustituir por el analizador con LLM (misma
@@ -25,14 +31,19 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from analysis.base import AnalysisResult, EntityResult
+from analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
+from analysis.sentiment_lexicon import (
+    apply_entity_relation_boost as _apply_entity_relation_boost,
+)
 from analysis.text_norm import norm_key as _norm_key
 from analysis.text_norm import strip_accents as _strip_accents
 
 # Versión de la heurística de LocalAnalyzer (§2.1 de task.md): subirla cuando
 # cambie una regla que afecta el resultado (_VENUE_WORDS, _is_named_after_place,
-# _merge_aliases, umbrales de _extraction_confidence...), para poder distinguir
-# en la BD qué filas se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "2"
+# _merge_aliases, umbrales de _extraction_confidence, el glosario de
+# analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
+# se analizaron con qué versión del código.
+_LOCAL_ANALYZER_VERSION = "4"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
@@ -295,10 +306,13 @@ class LocalAnalyzer:
         la mesa (sin aprovechar el paralelismo del batch). Aquí se tokeniza y
         corre el modelo directamente, en lotes de `_SENT_BATCH_SIZE`.
 
-        Replica el mismo preprocesamiento y truncado que usa la librería para
-        que el resultado sea idéntico bit a bit (verificado): `preprocess_tweet`
-        por frase + `truncation=True, max_length=tokenizer.model_max_length` +
-        softmax sobre los logits, igual que `AnalyzerForSequenceClassification`.
+        Replica el mismo preprocesamiento y truncado que usa la librería —
+        `preprocess_tweet` por frase + `truncation=True,
+        max_length=tokenizer.model_max_length` + softmax sobre los logits,
+        igual que `AnalyzerForSequenceClassification` — así que el softmax
+        crudo es idéntico bit a bit al de la librería; el único paso propio
+        de Odin es el ajuste de `analysis/sentiment_lexicon.apply_boost`
+        aplicado después, sobre vocabulario político dominicano.
         """
         if not texts:
             return {}
@@ -325,7 +339,8 @@ class LocalAnalyzer:
                 logits = analyzer.model(**enc).logits
             probs = torch.softmax(logits, dim=1)
             for orig, row in zip(batch_orig, probs, strict=True):
-                results[orig] = {analyzer.id2label[i]: row[i].item() for i in analyzer.id2label}
+                probas = {analyzer.id2label[i]: row[i].item() for i in analyzer.id2label}
+                results[orig] = _apply_sentiment_boost(orig, probas)
         return results
 
     def _keywords(self, doc, top_k: int = 8) -> list[str]:
@@ -355,6 +370,8 @@ class LocalAnalyzer:
         return top
 
     def _entities(self, doc, probas_by_index, start_to_index) -> list[EntityResult]:
+        sents = list(doc.sents)
+
         # 1) recolectar menciones agrupadas por (clave normalizada, tipo)
         groups: dict[tuple[str, str], dict] = {}
         for ent in doc.ents:
@@ -409,12 +426,24 @@ class LocalAnalyzer:
         results: list[EntityResult] = []
         for (_nkey, etype), g in groups.items():
             display = g["display"].most_common(1)[0][0]  # variante más usada
-            probas = [probas_by_index[i] for i in sorted(g["sent_idx"])]
+            sent_indices = sorted(g["sent_idx"])
+            # Léxico relacional ("acusado de", "reconocido por"): solo tiene
+            # sentido aquí, sobre las frases YA asociadas a esta entidad
+            # puntual — a diferencia del léxico general (aplicado en
+            # _predict_batch a TODA frase), la dirección de estas frases
+            # depende de a quién mencionan, así que no puede aplicarse al
+            # documento completo.
+            probas = [
+                _apply_entity_relation_boost(sents[i].text, probas_by_index[i])
+                if probas_by_index[i] is not None
+                else None
+                for i in sent_indices
+            ]
             label, score = _aggregate(probas)
             context = None
-            if g["sent_idx"]:
-                first = min(g["sent_idx"])
-                context = list(doc.sents)[first].text.strip()[:_MAX_SENT_CHARS]
+            if sent_indices:
+                first = sent_indices[0]
+                context = sents[first].text.strip()[:_MAX_SENT_CHARS]
             results.append(
                 EntityResult(
                     name=display,

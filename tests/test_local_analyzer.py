@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("spacy")
 
 from analysis.local_analyzer import (
+    LocalAnalyzer,
     _extraction_confidence,
     _is_named_after_place,
     _norm_key,
@@ -103,3 +104,62 @@ class TestVenueHeuristics:
                 _preceded_by_venue_noun(ent) or _is_named_after_place(ent)
                 for ent in ents
             ), f"no se detectó patrón de lugar/venue en: {text}"
+
+
+class TestEntitySentimentBoost:
+    """`_entities()` recibe `probas_by_index` ya calculado (no llama a
+    pysentimiento), así que se puede probar con probabilidades neutrales
+    fabricadas a mano — solo se ejercita spaCy (NER + segmentación) y el
+    léxico relacional de analysis/sentiment_lexicon.py."""
+
+    # Probabilidades base "cerca del límite" (NEU apenas por delante de NEG):
+    # así el boost de 0.12 (analysis/sentiment_lexicon.BOOST) alcanza para
+    # voltear la etiqueta cuando SÍ hay patrón relacional, y no cuando no lo
+    # hay — igual que se espera que se comporte con predicciones reales de
+    # pysentimiento cerca del límite.
+    _NEG_LEANING = {"NEG": 0.40, "NEU": 0.45, "POS": 0.15}
+    _POS_LEANING = {"POS": 0.40, "NEU": 0.45, "NEG": 0.15}
+
+    @staticmethod
+    def _run(nlp, text: str, default: dict[str, float]):
+        doc = nlp(text)
+        sents = list(doc.sents)
+        probas_by_index = [dict(default) for _ in sents]
+        start_to_index = {s.start_char: i for i, s in enumerate(sents)}
+        results = LocalAnalyzer()._entities(doc, probas_by_index, start_to_index)
+        return {e.name: e for e in results}
+
+    def test_accused_entity_leans_negative(self, nlp):
+        entities = self._run(
+            nlp,
+            "El senador Ramón Pérez fue acusado de corrupción por el fiscal.",
+            self._NEG_LEANING,
+        )
+        assert entities["Ramón Pérez"].sentiment_toward == "NEG"
+
+    def test_recognized_entity_leans_positive(self, nlp):
+        entities = self._run(
+            nlp,
+            "La alcaldesa Rosa Martínez fue reconocida por su gestión municipal.",
+            self._POS_LEANING,
+        )
+        assert entities["Rosa Martínez"].sentiment_toward == "POS"
+
+    def test_plain_mention_stays_neutral(self, nlp):
+        entities = self._run(
+            nlp,
+            "El senador Ramón Pérez asistió a la sesión ordinaria del Congreso.",
+            self._NEG_LEANING,
+        )
+        assert entities["Ramón Pérez"].sentiment_toward == "NEU"
+
+    def test_relation_boost_is_scoped_to_the_mentioned_entity(self, nlp):
+        # "acusado de" describe a Pérez en una frase; Martínez solo aparece en
+        # otra frase sin patrón — no debe heredar el sentimiento negativo de Pérez.
+        text = (
+            "El senador Ramón Pérez fue acusado de corrupción. "
+            "Rosa Martínez presidió la sesión del ayuntamiento."
+        )
+        entities = self._run(nlp, text, self._NEG_LEANING)
+        assert entities["Ramón Pérez"].sentiment_toward == "NEG"
+        assert entities["Rosa Martínez"].sentiment_toward == "NEU"

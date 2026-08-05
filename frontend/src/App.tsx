@@ -6,6 +6,7 @@ import { EntitiesCard } from "@/components/EntitiesCard"
 import { AliasManager } from "@/components/AliasManager"
 import { CanonicalEntityManager } from "@/components/CanonicalEntityManager"
 import { ReportsList } from "@/components/ReportsList"
+import { ScrapeTab } from "@/components/ScrapeTab"
 import { LoginScreen } from "@/components/LoginScreen"
 import { DialogProvider } from "@/lib/dialog"
 import {
@@ -38,6 +39,7 @@ const NAV_ITEMS = [
   { label: "Reportes", tab: "reports" },
   { label: "Entidades", tab: "entities" },
   { label: "Siglas", tab: "aliases" },
+  { label: "Scraper", tab: "scrape" },
 ]
 
 // Apaga la banda de Aurora del workspace sin exponer un control en la UI: es
@@ -67,6 +69,38 @@ interface WorkspaceProps {
   onLogout: () => void
   theme: Theme
   onToggleTheme: () => void
+}
+
+function ActionButtons({
+  onDiscard,
+  onSave,
+  saving,
+}: {
+  onDiscard: () => void
+  onSave: () => void
+  saving: boolean
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        onClick={onDiscard}
+        className="rounded-lg border px-3.5 py-2 text-[13px]"
+        style={{ borderColor: "var(--border)", color: "var(--neg)" }}
+      >
+        Descartar
+      </button>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={onSave}
+        className="rounded-lg px-4 py-2 text-[13px] font-semibold disabled:opacity-60"
+        style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
+      >
+        {saving ? "Guardando…" : "Guardar reporte"}
+      </button>
+    </div>
+  )
 }
 
 function AnalyzeTab() {
@@ -246,27 +280,7 @@ function AnalyzeTab() {
                 Guardado en el archivo
               </span>
             )}
-            {isDraft && (
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={discard}
-                  className="rounded-lg border px-3.5 py-2 text-[13px]"
-                  style={{ borderColor: "var(--border)", color: "var(--neg)" }}
-                >
-                  Descartar
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSave}
-                  className="rounded-lg px-4 py-2 text-[13px] font-semibold disabled:opacity-60"
-                  style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
-                >
-                  {saving ? "Guardando…" : "Guardar reporte"}
-                </button>
-              </div>
-            )}
+            {isDraft && <ActionButtons onDiscard={discard} onSave={handleSave} saving={saving} />}
           </div>
 
           <AnalysisCard
@@ -280,6 +294,12 @@ function AnalyzeTab() {
             onUpdate={updateEntity}
             onRemove={removeEntity}
           />
+
+          {isDraft && (
+            <div className="flex justify-end">
+              <ActionButtons onDiscard={discard} onSave={handleSave} saving={saving} />
+            </div>
+          )}
         </>
       )}
     </div>
@@ -287,7 +307,7 @@ function AnalyzeTab() {
 }
 
 function Workspace({ onLogout, theme, onToggleTheme }: WorkspaceProps) {
-  const [tab, setTab] = useState<"analyze" | "reports" | "entities" | "aliases">("analyze")
+  const [tab, setTab] = useState<"analyze" | "reports" | "entities" | "aliases" | "scrape">("analyze")
 
   return (
     <div className="relative min-h-screen" style={{ background: "var(--bg)" }}>
@@ -320,6 +340,7 @@ function Workspace({ onLogout, theme, onToggleTheme }: WorkspaceProps) {
           {tab === "reports" && <ReportsList />}
           {tab === "entities" && <CanonicalEntityManager />}
           {tab === "aliases" && <AliasManager />}
+          {tab === "scrape" && <ScrapeTab />}
         </main>
       </div>
     </div>

@@ -32,7 +32,7 @@ dependencies = { file = ["requirements.txt"] }
 # Layout plano: módulos sueltos en la raíz + tres paquetes. Se declara explícito
 # porque el autodescubrimiento de setuptools no sabe qué hacer con esta mezcla.
 [tool.setuptools]
-py-modules = ["api", "auth", "config", "main", "pipeline", "report", "url_guard"]
+py-modules = ["api", "auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard"]
 
 [tool.setuptools.packages.find]
 include = ["analysis*", "db*", "scrapers*"]
@@ -67,7 +67,7 @@ ignore = [
 python_version = "3.13"
 files = [
     "api.py", "auth.py", "config.py", "main.py", "pipeline.py",
-    "report.py", "url_guard.py", "analysis", "db", "scrapers", "scripts",
+    "report.py", "scrape_jobs.py", "url_guard.py", "analysis", "db", "scrapers", "scripts",
     "alembic/env.py",
 ]
 exclude = ["^\\.venv/", "^frontend/", "^alembic/versions/"]

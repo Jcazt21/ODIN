@@ -24,6 +24,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from analysis.base import AnalysisResult, EntityResult
+from analysis.sentiment_lexicon import PROMPT_GLOSSARY
 
 _SENTIMENTS = ("POS", "NEG", "NEU")
 _MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo
@@ -119,7 +120,7 @@ class _Analysis(BaseModel):
 # Versión del prompt/esquema de salida (§2.1 de task.md): subirla cuando
 # cambie _SYSTEM o los campos/descripciones de _Analysis/_Entity, para poder
 # distinguir en la BD qué filas se generaron con qué versión del prompt.
-_PROMPT_VERSION = "4"
+_PROMPT_VERSION = "5"
 
 _SYSTEM = (
     "Eres un analista senior de prensa dominicana, especializado en evaluación "
@@ -169,6 +170,7 @@ _SYSTEM = (
     "menciona o narra hechos sobre ella sin valoración. Justifica cada "
     "clasificación con la frase concreta del texto que la sustenta (campo "
     "'context').\n\n"
+    f"{PROMPT_GLOSSARY}\n\n"
     "Encuadre y actores: clasifica además el marco de la nota (framing), la "
     "intención del titular, con qué abre el lead, el tipo de fuentes y los "
     "actores. 'dominant_actor', 'blamed_actor' y 'credited_actor' deben ser "

@@ -23,6 +23,7 @@ python3.13 --version
 
 Desde la carpeta del proyecto (`/Users/jazar/Documents/Projects/Odin`):
 
+**macOS / Linux:**
 ```bash
 python3.13 -m venv .venv
 source .venv/bin/activate
@@ -31,13 +32,27 @@ python -m spacy download es_core_news_lg
 cp .env.example .env
 ```
 
+**Windows (PowerShell):**
+```powershell
+python3.13 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m spacy download es_core_news_lg
+Copy-Item .env.example .env
+```
+
 > La primera vez se descargan ~1.5 GB (torch + modelos). La descarga de los pesos
 > del modelo de sentimiento (~416 MB) ocurre sola en la primera corrida.
 
 **Cada vez que abras una terminal nueva**, activa el entorno antes de usar Odin:
 ```bash
+# macOS/Linux
 cd /Users/jazar/Documents/Projects/Odin
 source .venv/bin/activate
+
+# Windows (PowerShell)
+cd C:\ruta\a\Odin
+.venv\Scripts\Activate.ps1
 ```
 
 ---
@@ -147,8 +162,14 @@ Por defecto Odin usa el analizador **local** (gratis). Para usar **Google
 Gemini** (más preciso en "¿hablan bien o mal de esta figura?"):
 
 ```bash
+# macOS/Linux
 pip install google-genai
 export GEMINI_API_KEY=tu_clave_aqui
+python main.py --limit 10 --analyzer gemini
+
+# Windows (PowerShell)
+pip install google-genai
+$env:GEMINI_API_KEY="tu_clave_aqui"
 python main.py --limit 10 --analyzer gemini
 ```
 
@@ -163,11 +184,17 @@ python main.py --limit 10 --analyzer gemini
 ## 8. Corridas periódicas (opcional)
 
 Para actualizar la base de datos automáticamente (p.ej. cada mañana), agrega una
-tarea `cron` que active el entorno y corra Odin. Ejemplo (todos los días 7am):
+tarea que active el entorno y corra Odin.
 
+**macOS/Linux (`cron`)** — ejemplo, todos los días 7am:
 ```cron
 0 7 * * * cd /Users/jazar/Documents/Projects/Odin && ./.venv/bin/python main.py >> odin.log 2>&1
 ```
+
+**Windows (Programador de tareas)**: crea una tarea básica con
+"Iniciar un programa" apuntando a `.venv\Scripts\python.exe`, argumentos
+`main.py`, y "Iniciar en" la carpeta del proyecto — desde el Programador de
+tareas (`taskschd.msc`) o con `schtasks /create`.
 
 ---
 
@@ -180,7 +207,7 @@ tarea `cron` que active el entorno y corra Odin. Ejemplo (todos los días 7am):
 | `ModuleNotFoundError: No module named 'google'` | Falta la librería de Gemini | `pip install google-genai` (solo si usas `--analyzer gemini`) |
 | La primera corrida tarda mucho | Está descargando los pesos del modelo (~416 MB) | Es normal solo la primera vez; luego quedan en caché |
 | No aparecen artículos nuevos | Ya estaban guardados (dedup por URL) | Normal; borra la BD o espera a que los periódicos publiquen más |
-| `python: command not found` o versión 3.14 | Entorno no activado o Python equivocado | `source .venv/bin/activate` (creado con `python3.13`) |
+| `python: command not found` o versión 3.14 | Entorno no activado o Python equivocado | `source .venv/bin/activate` (macOS/Linux) o `.venv\Scripts\Activate.ps1` (Windows) — creado con `python3.13` |
 
 ---
 

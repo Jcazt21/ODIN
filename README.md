@@ -248,12 +248,22 @@ docs/docker.md       cómo funciona la dockerización (servicios, cache, comando
 
 ## Instalación
 
+**macOS / Linux:**
 ```bash
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m spacy download es_core_news_lg
 cp .env.example .env        # ajusta DATABASE_URL
+```
+
+**Windows (PowerShell):**
+```powershell
+python3.13 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m spacy download es_core_news_lg
+Copy-Item .env.example .env    # ajusta DATABASE_URL
 ```
 
 > Usa **Python 3.13** (no 3.14: las librerías de ML aún no tienen soporte estable).
@@ -268,7 +278,11 @@ cambias `DATABASE_URL` en `.env`.
 
 **Prueba rápida sin instalar nada (SQLite):**
 ```bash
+# macOS/Linux
 DATABASE_URL="sqlite:///odin.db" python main.py --limit 5
+
+# Windows (PowerShell)
+$env:DATABASE_URL="sqlite:///odin.db"; python main.py --limit 5
 ```
 
 **PostgreSQL (desarrollo):**

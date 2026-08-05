@@ -5,6 +5,11 @@ __pycache__
 .git
 .env
 odin.db
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 # El backend nunca toca código de frontend; tiene su propio contexto/
 # .dockerignore en frontend/. Excluirlo entero evita copiar ~decenas de MB
 # de fuente JS/assets irrelevantes dentro de la imagen del backend.

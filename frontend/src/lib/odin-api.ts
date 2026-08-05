@@ -331,3 +331,68 @@ export function mergeCanonicalEntities(
 ): Promise<CanonicalEntity> {
   return postJson(`/api/canonical-entities/${targetId}/merge`, { source_id: sourceId })
 }
+
+// ── Scraper de política ─────────────────────────────────────────────────────
+//
+// POST /api/scrape-jobs encola una corrida del scraper de política dominicana
+// sobre las 9 fuentes permitidas (target/tope por fuente/analizador) y
+// responde 202 + job_id de inmediato — la corrida real tarda varios minutos.
+// `pollScrapeJob` hace polling de GET /api/scrape-jobs/{id}, igual patrón que
+// `pollJob` para /api/analyze, pero sin timeout fijo (acá "tardar mucho" es
+// normal, no un error) y con `onUpdate` recibiendo el job completo en cada
+// tick para que la UI dibuje el progreso por fuente.
+
+export type ScrapeJobStartPayload = components["schemas"]["ScrapeJobStartRequest"]
+export type ScrapeJob = components["schemas"]["ScrapeJobResponse"]
+export type ScrapeJobStatus = ScrapeJob["status"]
+export type ScrapeSourceProgress = components["schemas"]["ScrapeSourceProgress"]
+
+const SCRAPE_JOB_POLL_INTERVAL_MS = 2000
+
+const SCRAPE_JOB_TERMINAL_STATUSES: ScrapeJobStatus[] = ["done", "failed", "cancelled"]
+
+export function startScrapeJob(payload: ScrapeJobStartPayload): Promise<components["schemas"]["ScrapeJobAccepted"]> {
+  return postJson("/api/scrape-jobs", payload)
+}
+
+export function getScrapeJob(jobId: string): Promise<ScrapeJob> {
+  return request<ScrapeJob>(`/api/scrape-jobs/${jobId}`)
+}
+
+export function listScrapeJobs(limit = 1): Promise<ScrapeJob[]> {
+  return request<ScrapeJob[]>(`/api/scrape-jobs?limit=${limit}`)
+}
+
+export function cancelScrapeJob(jobId: string): Promise<ScrapeJob> {
+  return postJson(`/api/scrape-jobs/${jobId}/cancel`, {})
+}
+
+/** Hace polling de un job hasta que llega a un estado terminal, invocando
+ *  `onUpdate` en cada tick. Devuelve una función `stop()` para cortar el
+ *  polling desde afuera (p. ej. si el componente se desmonta). */
+export function pollScrapeJob(
+  jobId: string,
+  onUpdate: (job: ScrapeJob) => void
+): () => void {
+  let stopped = false
+  ;(async () => {
+    while (!stopped) {
+      let job: ScrapeJob
+      try {
+        job = await getScrapeJob(jobId)
+      } catch {
+        // Error de red transitorio durante el polling: reintenta en el
+        // próximo tick en vez de tumbar el polling entero.
+        await sleep(SCRAPE_JOB_POLL_INTERVAL_MS)
+        continue
+      }
+      if (stopped) return
+      onUpdate(job)
+      if (SCRAPE_JOB_TERMINAL_STATUSES.includes(job.status)) return
+      await sleep(SCRAPE_JOB_POLL_INTERVAL_MS)
+    }
+  })()
+  return () => {
+    stopped = true
+  }
+}

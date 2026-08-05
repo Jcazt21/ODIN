@@ -49,8 +49,10 @@ _MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo, igual que Gemini
 # HybridAnalyzer comparten el mismo prompt/schema (_SYSTEM/_Analysis) de
 # GeminiAnalyzer sin modificarlo; se versiona aparte porque el transporte
 # (formato de schema, modelo) puede cambiar el resultado aunque el prompt sea
-# idéntico.
-_GROQ_ANALYZER_PROMPT_VERSION = "3"
+# idéntico. Aun así, sube en paralelo a gemini_analyzer._PROMPT_VERSION cada
+# vez que cambia el CONTENIDO de _SYSTEM (p.ej. el glosario de
+# analysis/sentiment_lexicon.py), porque ese texto sí es compartido.
+_GROQ_ANALYZER_PROMPT_VERSION = "4"
 
 
 _DEFAULT_MODEL = "openai/gpt-oss-120b"

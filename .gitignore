@@ -5,6 +5,10 @@ __pycache__/
 *.db
 *.sqlite3
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
 frontend/node_modules/
 frontend/dist/
 /node_modules/

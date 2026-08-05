@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import time
 import traceback
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -103,22 +104,64 @@ def run(
     analyzer: Analyzer,
     sources: list[str] | None = None,
     limit: int | None = None,
+    article_filter: Callable[[ScrapedArticle], bool] | None = None,
+    on_progress: Callable[[str, str, str, str], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    correlation_id: str | None = None,
 ) -> dict[str, int]:
     """Ejecuta el pipeline. Devuelve conteo de artículos nuevos por fuente.
 
     Cada corrida queda registrada en `crawl_runs` (§7.1 de task.md): antes el
     resumen solo se imprimía por consola y se perdía. El `correlation_id` de
     la fila es el mismo que decora cada línea de log de la corrida, para
-    poder cruzar logs y BD.
+    poder cruzar logs y BD. Si se pasa `correlation_id`, se usa ese en vez de
+    generar uno nuevo — para que un caller externo (p. ej. un job de la API)
+    pueda ubicar después la fila `crawl_runs` que produjo esta corrida.
+
+    `article_filter`, si se pasa, decide qué artículos ya descubiertos (y no
+    guardados aún) se analizan y persisten — p. ej. para acotar una corrida a
+    una temática o imponer un tope por fuente (ver `scripts/scrape_politics.py`).
+    No afecta el descubrimiento ni el fetch: eso lo sigue gobernando `limit`.
+
+    `on_progress(source, stage, status, detail)`, si se pasa, se llama en los
+    puntos de transición de cada fuente — `stage` es `"discover"` o
+    `"analyze"`, `status` es `"running"`/`"done"`/`"cancelled"`. Pensado para
+    que un caller
+    externo espeje el avance en algo consultable (p. ej. `scrape_jobs.py`
+    para el polling de la UI); un error del callback nunca debe tumbar la
+    corrida, así que se atrapa y se loguea.
+
+    `should_stop()`, si se pasa, se consulta entre fuentes y entre artículos
+    dentro de una fuente para cancelación cooperativa: si devuelve `True`, la
+    corrida corta ahí (sin tocar las fuentes que faltan) y `crawl_runs.status`
+    queda en `"cancelled"`. Un error del callback se trata como `False` (nunca
+    cancela una corrida por accidente).
     """
     init_db()
+
+    def _report(source: str, stage: str, status: str, detail: str) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(source, stage, status, detail)
+        except Exception:
+            log.warning("progress_callback_failed", source=source, stage=stage)
+
+    def _stopped() -> bool:
+        if should_stop is None:
+            return False
+        try:
+            return should_stop()
+        except Exception:
+            log.warning("should_stop_callback_failed")
+            return False
 
     if sources:
         selected = {s: SCRAPERS[s] for s in sources if s in SCRAPERS}
     else:
         selected = dict(SCRAPERS)
 
-    with correlation_scope() as run_id:
+    with correlation_scope(correlation_id) as run_id:
         run_started = time.perf_counter()
         crawl_run_session = get_session()
         crawl_run = CrawlRun(
@@ -136,28 +179,54 @@ def run(
         discovered_total = 0
         saved_total = 0
         failed_total = 0
+        cancelled = False
         session = get_session()
         try:
             for key, scraper_cls in selected.items():
+                if _stopped():
+                    cancelled = True
+                    break
+
                 scraper: BaseScraper = scraper_cls()
                 log.info("crawl_source_started", source=scraper.name)
+                _report(key, "discover", "running", "Descargando listado de artículos...")
                 source_started = time.perf_counter()
                 # Una consulta por fuente (no por artículo) para el mapa de
                 # nombres completos conocidos usado en la canonicalización.
                 person_map = known_person_fullname_map()
                 new_count = 0
+                source_failed = 0
 
                 scraped_articles = list(scraper.scrape(limit=limit))
                 discovered_total += len(scraped_articles)
                 PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="discovered").inc(
                     len(scraped_articles)
                 )
-                pending = [a for a in scraped_articles if not _already_stored(session, a.url)]
+                pending = [
+                    a
+                    for a in scraped_articles
+                    if not _already_stored(session, a.url)
+                    and (article_filter is None or article_filter(a))
+                ]
+                log.info(
+                    "crawl_source_scraped",
+                    source=scraper.name,
+                    scraped=len(scraped_articles),
+                    pending_to_analyze=len(pending),
+                    skipped=len(scraped_articles) - len(pending),
+                )
+                _report(
+                    key,
+                    "discover",
+                    "done",
+                    f"{len(scraped_articles)} encontrados, {len(pending)} pendientes de analizar",
+                )
 
                 # Si el analizador soporta lote (LocalAnalyzer), una sola pasada de
                 # spaCy sobre todos los artículos de la fuente es más eficiente que
                 # analizar uno por uno. Si el lote falla, se cae a analizar artículo
                 # por artículo para no perder toda la fuente por un solo texto malo.
+                _report(key, "analyze", "running", f"Analizando {len(pending)} artículos...")
                 results: list | None = None
                 analyze_batch = getattr(analyzer, "analyze_batch", None)
                 if analyze_batch is not None and pending:
@@ -173,6 +242,9 @@ def run(
                     results = [None] * len(pending)
 
                 for scraped, result in zip(pending, results, strict=True):
+                    if _stopped():
+                        cancelled = True
+                        break
                     try:
                         if result is None:
                             result = analyzer.analyze(scraped.title, scraped.body or "")
@@ -185,6 +257,7 @@ def run(
                         session.rollback()
                         PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="failed").inc()
                         failed_total += 1
+                        source_failed += 1
                         log.exception("article_processing_failed", url=scraped.url)
                 stats[key] = new_count
                 saved_total += new_count
@@ -196,6 +269,14 @@ def run(
                     source=scraper.name,
                     new_articles=new_count,
                 )
+                _report(
+                    key,
+                    "analyze",
+                    "cancelled" if cancelled else "done",
+                    f"{new_count} nuevos, {source_failed} fallidos",
+                )
+                if cancelled:
+                    break
         except Exception:
             _finish_crawl_run(
                 crawl_run_id,
@@ -209,15 +290,16 @@ def run(
             PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status="failed").inc()
             raise
         else:
+            final_status = "cancelled" if cancelled else "success"
             _finish_crawl_run(
                 crawl_run_id,
-                status="success",
+                status=final_status,
                 discovered=discovered_total,
                 saved=saved_total,
                 failed=failed_total,
                 stats_by_source=stats,
             )
-            PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status="success").inc()
+            PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status=final_status).inc()
         finally:
             session.close()
             CRAWL_RUN_IN_PROGRESS.set(0)

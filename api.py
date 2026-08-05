@@ -21,10 +21,12 @@ Uso:
 from __future__ import annotations
 
 import json
+import math
 import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 import requests
 import trafilatura
@@ -32,7 +34,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Req
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import ColumnElement, and_, func, or_, select, text
 from sqlalchemy.orm import selectinload
 
@@ -47,7 +49,7 @@ from analysis.local_analyzer import sentence_mentions_venue_word
 from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
 from analysis.text_norm import norm_key as _norm_key
 from config import settings
-from db.models import AnalyzeJob, Article, CanonicalEntity, CrawlRun, Entity, EntityAlias
+from db.models import AnalyzeJob, Article, CanonicalEntity, CrawlRun, Entity, EntityAlias, ScrapeJob
 from db.session import get_session, init_db
 from observability import (
     HTTP_REQUEST_DURATION_SECONDS,
@@ -60,6 +62,7 @@ from observability import (
 from observability import (
     registry as metrics_registry,
 )
+from scrape_jobs import has_active_scrape_job, run_scrape_job
 from scrapers.base import BaseScraper, _parse_date
 from url_guard import UrlNotAllowed
 
@@ -1546,5 +1549,168 @@ def list_crawl_runs(limit: int = Query(20, ge=1, le=200)):
             select(CrawlRun).order_by(CrawlRun.started_at.desc()).limit(limit)
         ).all()
         return runs
+    finally:
+        session.close()
+
+
+# ── Scraper de política (tab "Scraper" del frontend) ─────────────────────────
+#
+# Arranca una corrida del scraper de política dominicana (pipeline.run() +
+# analysis.politics_filter) en background y expone su avance para polling —
+# mismo patrón que POST /api/analyze + GET /api/jobs/{id}, escalado a una
+# corrida de varios minutos con 9 fuentes. El motor de análisis está
+# restringido a local|groq|hybrid a nivel de schema (Literal): "gemini" ni
+# siquiera es un valor aceptable acá, adrede — ver CLAUDE.md.
+
+
+class ScrapeJobStartRequest(BaseModel):
+    target: int = Field(default=250, gt=0, le=2000)
+    per_source_cap: int | None = Field(default=None, gt=0)
+    analyzer: Literal["local", "groq", "hybrid"] = "local"
+
+
+class ScrapeJobAccepted(BaseModel):
+    job_id: str
+    status: str = "pending"
+
+
+class ScrapeSourceProgress(BaseModel):
+    source: str
+    stage: str
+    status: str
+    detail: str
+    updated_at: datetime | None = None
+
+
+class ScrapeJobResponse(BaseModel):
+    job_id: str
+    status: str
+    target: int
+    per_source_cap: int
+    analyzer: str
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    progress: dict[str, ScrapeSourceProgress]
+    crawl_run: CrawlRunResponse | None = None
+    error: str | None = None
+
+
+def _serialize_scrape_job(job: ScrapeJob) -> ScrapeJobResponse:
+    progress_raw = json.loads(job.progress_json) if job.progress_json else {}
+    progress: dict[str, ScrapeSourceProgress] = {}
+    for k, v in progress_raw.items():
+        try:
+            progress[k] = ScrapeSourceProgress(**v)
+        except ValidationError:
+            # Fila de un formato de progress_json anterior (p. ej. de antes de
+            # que "source" fuera requerido) — no tumbar el listado entero por
+            # una entrada vieja, solo omitirla.
+            log.warning("scrape_job_progress_entry_unparseable", job_id=job.id, key=k)
+    return ScrapeJobResponse(
+        job_id=job.id,
+        status=job.status,
+        target=job.target,
+        per_source_cap=job.per_source_cap,
+        analyzer=job.analyzer_name,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        progress=progress,
+        crawl_run=CrawlRunResponse.model_validate(job.crawl_run) if job.crawl_run else None,
+        error=job.error,
+    )
+
+
+@app.post(
+    "/api/scrape-jobs",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=ScrapeJobAccepted,
+    status_code=202,
+)
+def start_scrape_job(req: ScrapeJobStartRequest, background_tasks: BackgroundTasks):
+    """Encola una corrida del scraper de política sobre las 9 fuentes
+    permitidas. Rechaza con 409 si ya hay una en curso — un backend de un
+    solo worker no tiene por qué correr dos scrapes de 9 fuentes a la vez."""
+    from scrapers import SCRAPERS
+
+    per_source_cap = req.per_source_cap or math.ceil(req.target / len(SCRAPERS))
+    session = get_session()
+    try:
+        if has_active_scrape_job(session):
+            raise HTTPException(status_code=409, detail="Ya hay una corrida de scraping en curso.")
+        job = ScrapeJob(
+            id=str(uuid.uuid4()),
+            target=req.target,
+            per_source_cap=per_source_cap,
+            analyzer_name=req.analyzer,
+        )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+    finally:
+        session.close()
+
+    background_tasks.add_task(run_scrape_job, job_id, req.target, per_source_cap, req.analyzer)
+    return ScrapeJobAccepted(job_id=job_id)
+
+
+@app.get(
+    "/api/scrape-jobs/{job_id}",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=ScrapeJobResponse,
+)
+def get_scrape_job(job_id: str):
+    """Estado/avance de una corrida encolada por POST /api/scrape-jobs."""
+    session = get_session()
+    try:
+        job = session.get(ScrapeJob, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job no encontrado.")
+        return _serialize_scrape_job(job)
+    finally:
+        session.close()
+
+
+@app.get(
+    "/api/scrape-jobs",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=list[ScrapeJobResponse],
+)
+def list_scrape_jobs(limit: int = Query(5, ge=1, le=50)):
+    """Corridas recientes, más reciente primero — el frontend la usa al
+    montar la tab para detectar un job pending/running y retomar el polling
+    en vez de mostrar el formulario (p. ej. tras recargar la página)."""
+    session = get_session()
+    try:
+        jobs = session.scalars(
+            select(ScrapeJob).order_by(ScrapeJob.created_at.desc()).limit(limit)
+        ).all()
+        return [_serialize_scrape_job(j) for j in jobs]
+    finally:
+        session.close()
+
+
+@app.post(
+    "/api/scrape-jobs/{job_id}/cancel",
+    dependencies=[Depends(auth.require_auth)],
+    response_model=ScrapeJobResponse,
+)
+def cancel_scrape_job(job_id: str):
+    """Pide cancelar una corrida en curso. Cooperativo, no instantáneo:
+    pipeline.run() solo lo consulta entre fuentes y entre artículos, así que
+    puede tardar hasta que termine de descargar la fuente actual."""
+    session = get_session()
+    try:
+        job = session.get(ScrapeJob, job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job no encontrado.")
+        if job.status not in ("pending", "running"):
+            raise HTTPException(
+                status_code=409, detail=f"El job ya está en estado '{job.status}', no se puede cancelar."
+            )
+        job.cancel_requested = True
+        session.commit()
+        return _serialize_scrape_job(job)
     finally:
         session.close()

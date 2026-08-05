@@ -234,7 +234,9 @@ class CrawlRun(Base):
 
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    status: Mapped[str] = mapped_column(String(20), default="running")  # running | success | failed
+    status: Mapped[str] = mapped_column(
+        String(20), default="running"
+    )  # running | success | failed | cancelled
 
     # Fuentes pedidas en esta corrida ("diario_libre, listin_diario"); None = todas.
     sources: Mapped[str | None] = mapped_column(String(300))
@@ -251,6 +253,61 @@ class CrawlRun(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<CrawlRun {self.correlation_id} {self.status}>"
+
+
+class ScrapeJob(Base):
+    """Trabajo asíncrono de `POST /api/scrape-jobs`: arranca una corrida del
+    scraper de política dominicana (`pipeline.run()` + `analysis.politics_filter`)
+    desde el frontend y expone su avance para polling, igual que `AnalyzeJob`
+    hace para `POST /api/analyze`.
+
+    A diferencia de `AnalyzeJob` (un solo resultado), una corrida de scraping
+    tiene 9 fuentes, cada una en dos etapas (discover -> analyze) —
+    `progress_json` guarda el estado de cada (fuente, etapa) bajo la clave
+    compuesta `"fuente:etapa"` como `{source, stage, status, detail,
+    updated_at}`, sobreescrito por clave en cada actualización (mismo
+    criterio que `CrawlRun.stats_by_source`: no amerita una tabla propia por
+    ser de solo-lectura y sin necesidad de consultarse por fuente). El
+    resumen final ya vive en la fila `CrawlRun` que esta corrida produce
+    (`crawl_run_id`).
+    """
+
+    __tablename__ = "scrape_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # uuid4, igual que AnalyzeJob.id
+
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending"
+    )  # pending | running | done | failed | cancelled
+    target: Mapped[int] = mapped_column(Integer)
+    per_source_cap: Mapped[int] = mapped_column(Integer)
+    # local | groq | hybrid — nunca "gemini": esa opción no existe en el
+    # request de la API (Literal en el schema), es política de costo, no
+    # solo una preferencia de UI. Ver CLAUDE.md.
+    analyzer_name: Mapped[str] = mapped_column(String(40))
+
+    # Mismo correlation_id pasado a pipeline.run(): permite ubicar la fila
+    # crawl_runs de esta corrida y cruzar logs sin duplicar contadores aquí.
+    correlation_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    crawl_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("crawl_runs.id", ondelete="SET NULL"), index=True
+    )
+    crawl_run: Mapped[CrawlRun | None] = relationship(foreign_keys=[crawl_run_id])
+
+    progress_json: Mapped[str | None] = mapped_column(Text)
+
+    # Pedido de cancelación desde otro request (POST .../cancel); pipeline.run()
+    # lo consulta cooperativamente vía should_stop() entre fuentes/artículos —
+    # no hay forma de matar el trabajo a la fuerza, solo de pedirle que pare.
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(Text)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ScrapeJob {self.id} {self.status}>"
 
 
 class EntityAlias(Base):

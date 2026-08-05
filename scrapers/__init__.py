@@ -1,6 +1,7 @@
 from scrapers.base import BaseScraper, ScrapedArticle
 from scrapers.diario_libre import DiarioLibreScraper
 from scrapers.do_scrapers import (
+    AcentoScraper,
     AlMomentoScraper,
     ElCaribeScraper,
     ElDiaScraper,
@@ -20,6 +21,7 @@ SCRAPERS: dict[str, type[BaseScraper]] = {
     AlMomentoScraper.source: AlMomentoScraper,
     ElDiaScraper.source: ElDiaScraper,
     NDigitalScraper.source: NDigitalScraper,
+    AcentoScraper.source: AcentoScraper,
 }
 
 __all__ = [
@@ -33,5 +35,6 @@ __all__ = [
     "AlMomentoScraper",
     "ElDiaScraper",
     "NDigitalScraper",
+    "AcentoScraper",
     "SCRAPERS",
 ]
