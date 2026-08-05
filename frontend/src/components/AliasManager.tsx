@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from "react"
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
 import { Pencil, Trash2, Plus, Check, X, Search, ToggleLeft, ToggleRight } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
@@ -345,11 +345,13 @@ export function AliasManager() {
     }
   }, [])
 
+  const isFirstLoad = useRef(true)
   useEffect(() => {
-    load()
-  }, [load])
-
-  useEffect(() => {
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false
+      load(q)
+      return
+    }
     const t = setTimeout(() => load(q), 300)
     return () => clearTimeout(t)
   }, [q, load])

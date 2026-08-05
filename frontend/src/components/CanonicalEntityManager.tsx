@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Pencil, Check, X, Search, ChevronDown, ChevronRight, GitMerge } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
@@ -357,11 +357,13 @@ export function CanonicalEntityManager() {
     }
   }, [])
 
+  const isFirstLoad = useRef(true)
   useEffect(() => {
-    load()
-  }, [load])
-
-  useEffect(() => {
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false
+      load(q, typeFilter)
+      return
+    }
     const t = setTimeout(() => load(q, typeFilter), 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps

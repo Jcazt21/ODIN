@@ -42,6 +42,18 @@ const NAV_ITEMS = [
   { label: "Scraper", tab: "scrape" },
 ]
 
+const TABS = ["analyze", "reports", "entities", "aliases", "scrape"] as const
+type Tab = (typeof TABS)[number]
+
+function isTab(value: string | null): value is Tab {
+  return TABS.includes(value as Tab)
+}
+
+function getInitialTab(): Tab {
+  const fromUrl = new URLSearchParams(window.location.search).get("tab")
+  return isTab(fromUrl) ? fromUrl : "analyze"
+}
+
 // Apaga la banda de Aurora del workspace sin exponer un control en la UI: es
 // lo primero que se sacrifica en equipos lentos (README §Fondo Plasma).
 const WORKSPACE_AURORA_ENABLED = true
@@ -307,7 +319,31 @@ function AnalyzeTab() {
 }
 
 function Workspace({ onLogout, theme, onToggleTheme }: WorkspaceProps) {
-  const [tab, setTab] = useState<"analyze" | "reports" | "entities" | "aliases" | "scrape">("analyze")
+  const [tab, setTab] = useState<Tab>(getInitialTab)
+
+  // Sincroniza el tab activo con el historial del navegador: sin esto la app
+  // nunca crea entradas navegables y el gesto de "atrás" (two-finger swipe
+  // en trackpad, Alt+Left, botón atrás) no tiene nada a lo que volver.
+  useEffect(() => {
+    window.history.replaceState({ tab }, "", `?tab=${tab}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    function onPopState(e: PopStateEvent) {
+      const fromState = (e.state as { tab?: string } | null)?.tab ?? null
+      const fromUrl = new URLSearchParams(window.location.search).get("tab")
+      setTab(isTab(fromState) ? fromState : isTab(fromUrl) ? fromUrl : "analyze")
+    }
+    window.addEventListener("popstate", onPopState)
+    return () => window.removeEventListener("popstate", onPopState)
+  }, [])
+
+  function changeTab(next: string) {
+    if (!isTab(next) || next === tab) return
+    setTab(next)
+    window.history.pushState({ tab: next }, "", `?tab=${next}`)
+  }
 
   return (
     <div className="relative min-h-screen" style={{ background: "var(--bg)" }}>
@@ -328,7 +364,7 @@ function Workspace({ onLogout, theme, onToggleTheme }: WorkspaceProps) {
         <Nav
           items={NAV_ITEMS}
           activeTab={tab}
-          onTabChange={(t) => setTab(t as typeof tab)}
+          onTabChange={changeTab}
           username={getUsername()}
           onLogout={onLogout}
           theme={theme}

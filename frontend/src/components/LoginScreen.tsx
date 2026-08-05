@@ -79,6 +79,7 @@ export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
           style={{
             background: "var(--panel-strong)",
             backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
             borderColor: "var(--border)",
             boxShadow: "var(--shadow)",
           }}

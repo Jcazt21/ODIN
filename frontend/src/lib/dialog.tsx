@@ -80,7 +80,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {dialog && (
         <div
           className="fixed inset-0 z-[100] grid place-items-center p-6"
-          style={{ background: "oklch(0.2 0.02 265 / 0.5)", backdropFilter: "blur(2px)" }}
+          style={{
+            background: "oklch(0.2 0.02 265 / 0.5)",
+            backdropFilter: "blur(2px)",
+            WebkitBackdropFilter: "blur(2px)",
+          }}
           onClick={() => close(false)}
         >
           <div
@@ -92,6 +96,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             style={{
               background: "var(--panel-strong)",
               backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
               borderColor: "var(--border)",
               boxShadow: "var(--shadow)",
               animation: "odinIn 0.16s ease",

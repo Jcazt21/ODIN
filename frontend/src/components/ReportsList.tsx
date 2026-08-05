@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, Pencil, RotateCcw, Search, Trash2, X } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { SentimentBadge } from "@/components/SentimentBadge"
@@ -562,7 +562,12 @@ export function ReportsList() {
       .catch(() => {})
   }, [])
 
+  // Evita que una respuesta vieja (p. ej. de un filtro anterior, más lenta en
+  // resolver que la siguiente) sobrescriba datos más nuevos ya renderizados.
+  const requestIdRef = useRef(0)
+
   const load = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
@@ -572,18 +577,37 @@ export function ReportsList() {
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE,
       })
+      if (requestIdRef.current !== requestId) return
       setData(res)
     } catch (e) {
+      if (requestIdRef.current !== requestId) return
       setError(e instanceof OdinApiError ? e.message : "No se pudo conectar con la API de Odin.")
     } finally {
-      setLoading(false)
+      if (requestIdRef.current === requestId) setLoading(false)
     }
   }, [filters, hardData, page])
 
+  // Solo los campos de texto libre (q, entity) necesitan debounce; clicks en
+  // selects, fechas, orden o paginación deben reflejarse de inmediato — antes
+  // heredaban los mismos 300ms de espera del texto y se sentían lentos.
+  const isFirstLoad = useRef(true)
+  const prevTextRef = useRef({ q: filters.q, entity: filters.entity })
   useEffect(() => {
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false
+      prevTextRef.current = { q: filters.q, entity: filters.entity }
+      load()
+      return
+    }
+    const textChanged = filters.q !== prevTextRef.current.q || filters.entity !== prevTextRef.current.entity
+    prevTextRef.current = { q: filters.q, entity: filters.entity }
+    if (!textChanged) {
+      load()
+      return
+    }
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
-  }, [load])
+  }, [load, filters.q, filters.entity])
 
   function updateFilters(patch: Partial<ArticleListParams>) {
     setPage(0)

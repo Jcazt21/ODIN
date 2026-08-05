@@ -8,6 +8,7 @@ fuentes en vez de una sola descarga.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -66,26 +67,37 @@ def run_scrape_job(job_id: str, target: int, per_source_cap: int, analyzer_name:
         job.correlation_id = correlation_id
         session.commit()
 
+        # pipeline.run() ahora procesa las 9 fuentes en threads concurrentes
+        # (una por dominio) — on_progress/should_stop se van a llamar desde
+        # varios de esos threads a la vez, todos sobre el mismo `job`/`session`
+        # compartido. `Session` de SQLAlchemy no es thread-safe, así que las
+        # dos closures de abajo (la única escritura/lectura compartida de
+        # verdad) se serializan con un lock — el trabajo real de cada fuente
+        # (su propia sesión, en pipeline.py) sigue corriendo en paralelo.
+        lock = threading.Lock()
+
         def _persist_progress(source_key: str, stage: str, status: str, detail: str) -> None:
             # Clave compuesta "fuente:etapa", no solo "fuente": cada fuente pasa
             # por dos etapas (discover -> analyze) y el frontend necesita poder
             # mostrar ambas subtareas a la vez (p. ej. "descubrimiento: listo" +
             # "análisis: corriendo"). Con una clave por fuente, la segunda
             # actualización pisaría el estado final de la primera etapa.
-            progress = json.loads(job.progress_json) if job.progress_json else {}
-            progress[f"{source_key}:{stage}"] = {
-                "source": source_key,
-                "stage": stage,
-                "status": status,
-                "detail": detail,
-                "updated_at": datetime.now(UTC).isoformat(),
-            }
-            job.progress_json = json.dumps(progress)
-            session.commit()
+            with lock:
+                progress = json.loads(job.progress_json) if job.progress_json else {}
+                progress[f"{source_key}:{stage}"] = {
+                    "source": source_key,
+                    "stage": stage,
+                    "status": status,
+                    "detail": detail,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+                job.progress_json = json.dumps(progress)
+                session.commit()
 
         def _should_stop() -> bool:
-            session.refresh(job)
-            return job.cancel_requested
+            with lock:
+                session.refresh(job)
+                return job.cancel_requested
 
         analyzer = _build_analyzer(analyzer_name)
         article_filter, _counts = make_filter(target, per_source_cap)

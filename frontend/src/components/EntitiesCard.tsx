@@ -135,7 +135,10 @@ export function EntitiesCard({
                       type="button"
                       onClick={() => {
                         onRemove?.(i)
-                        if (editingIndex === i) setEditingIndex(null)
+                        setEditingIndex((prev) => {
+                          if (prev === null || prev === i) return null
+                          return prev > i ? prev - 1 : prev
+                        })
                       }}
                       aria-label="Quitar entidad"
                       className="inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11.5px] transition-colors hover:text-[var(--neg)]"

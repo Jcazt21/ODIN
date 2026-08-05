@@ -201,8 +201,30 @@ export type JobStatus = components["schemas"]["JobResponse"]["status"]
 const JOB_POLL_INTERVAL_MS = 1500
 const JOB_POLL_TIMEOUT_MS = 120_000
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Con la pestaña oculta, los polls de jobs en curso (análisis, scraper) se
+// espacian para no gastar CPU/red/batería en segundo plano — el job del
+// backend sigue corriendo igual, solo se revisa con menos frecuencia. Apenas
+// la pestaña vuelve a estar visible se corta la espera y se refresca al toque
+// en vez de dejar el último estado mostrado quedarse desactualizado.
+const HIDDEN_POLL_MULTIPLIER = 4
+
+function pollDelay(ms: number): Promise<void> {
+  const hidden = typeof document !== "undefined" && document.visibilityState === "hidden"
+  const delay = hidden ? ms * HIDDEN_POLL_MULTIPLIER : ms
+  return new Promise((resolve) => {
+    const timer = setTimeout(finish, delay)
+    function finish() {
+      document.removeEventListener("visibilitychange", onVisible)
+      resolve()
+    }
+    function onVisible() {
+      if (document.visibilityState !== "hidden") {
+        clearTimeout(timer)
+        finish()
+      }
+    }
+    if (hidden) document.addEventListener("visibilitychange", onVisible)
+  })
 }
 
 async function pollJob(
@@ -218,7 +240,7 @@ async function pollJob(
     if (Date.now() > deadline) {
       throw new OdinApiError("El análisis está tardando demasiado. Intenta de nuevo.")
     }
-    await sleep(JOB_POLL_INTERVAL_MS)
+    await pollDelay(JOB_POLL_INTERVAL_MS)
   }
 }
 
@@ -383,13 +405,13 @@ export function pollScrapeJob(
       } catch {
         // Error de red transitorio durante el polling: reintenta en el
         // próximo tick en vez de tumbar el polling entero.
-        await sleep(SCRAPE_JOB_POLL_INTERVAL_MS)
+        await pollDelay(SCRAPE_JOB_POLL_INTERVAL_MS)
         continue
       }
       if (stopped) return
       onUpdate(job)
       if (SCRAPE_JOB_TERMINAL_STATUSES.includes(job.status)) return
-      await sleep(SCRAPE_JOB_POLL_INTERVAL_MS)
+      await pollDelay(SCRAPE_JOB_POLL_INTERVAL_MS)
     }
   })()
   return () => {

@@ -9,6 +9,7 @@ clave sobre título + cuerpo del artículo ya extraído.
 from __future__ import annotations
 
 import re
+import threading
 from collections import defaultdict
 from collections.abc import Callable
 from urllib.parse import urlparse
@@ -130,20 +131,35 @@ def make_filter(
     target: int, per_source_cap: int
 ) -> tuple[Callable[[ScrapedArticle], bool], dict[str, int]]:
     """Cierre con estado: decide qué artículos entran, respetando el tope
-    global y el tope por fuente. `counts` se expone para el resumen final."""
+    global y el tope por fuente. `counts` se expone para el resumen final.
+
+    `pipeline.run()` procesa las fuentes en paralelo (una por dominio, cada
+    una con su propio thread) — este filtro es el único estado COMPARTIDO
+    entre esos threads (el conteo global `target` no tiene sentido partido
+    por fuente), así que el chequeo-e-incremento va bajo lock: sin esto, dos
+    fuentes evaluando un artículo casi al mismo tiempo pueden pisarse el
+    incremento y terminar aceptando más de `target` en total.
+    """
     counts: dict[str, int] = defaultdict(int)
     total = 0
+    lock = threading.Lock()
 
     def _filter(article: ScrapedArticle) -> bool:
         nonlocal total
-        if total >= target:
+        # Chequeo barato: no vale la pena tomar el lock si ya sabemos que no
+        # califica sin siquiera mirar el contenido.
+        if total >= target or counts[article.source] >= per_source_cap:
             return False
-        if counts[article.source] >= per_source_cap:
-            return False
+        # El regex sobre el body es lo más caro de esta función — se hace
+        # SIN el lock, para no serializar el trabajo pesado de las 9 fuentes
+        # entre sí. Solo el conteo (aritmética trivial) necesita ser atómico.
         if not is_dominican_politics(article):
             return False
-        counts[article.source] += 1
-        total += 1
-        return True
+        with lock:
+            if total >= target or counts[article.source] >= per_source_cap:
+                return False
+            counts[article.source] += 1
+            total += 1
+            return True
 
     return _filter, counts

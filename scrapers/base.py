@@ -14,7 +14,7 @@ import json
 import logging
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
@@ -316,9 +316,23 @@ class BaseScraper:
         html = self.fetch(url)
         return self.extract(url, html) if html else None
 
-    def scrape(self, limit: int | None = None) -> Iterator[ScrapedArticle]:
+    def scrape(
+        self,
+        limit: int | None = None,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> Iterator[ScrapedArticle]:
         """Genera artículos extraídos. La descarga se hace de forma concurrente
-        (I/O de red), con un tope de workers como throttle de cortesía."""
+        (I/O de red), con un tope de workers como throttle de cortesía.
+
+        `should_stop()`, si se pasa, se consulta después de cada URL bajada
+        (no solo antes/después de la fuente entera, que en un sitemap grande
+        como el de Listín Diario tarda varios minutos — sin este chequeo
+        intermedio, cancelar una corrida podía tardar lo mismo que la fuente
+        más lenta). Al cortar, no se espera a los workers en vuelo: se
+        cancelan las tareas todavía en cola (`cancel_futures=True`) y las que
+        ya estaban en curso simplemente terminan solas en segundo plano, sin
+        que nadie consuma su resultado.
+        """
         urls = self.discover_urls(limit=limit)
         if not urls:
             log.info("%s: no se descubrió ninguna URL", self.name)
@@ -334,7 +348,8 @@ class BaseScraper:
         workers = max(1, settings.fetch_workers)
         completed = 0
         progress_every = max(1, len(urls) // 10)  # ~10 avisos por fuente, sea grande o chica
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
             futures = {pool.submit(self._fetch_and_extract, u): u for u in urls}
             for future in as_completed(futures):
                 completed += 1
@@ -347,3 +362,8 @@ class BaseScraper:
                     continue
                 if article is not None:
                     yield article
+                if should_stop is not None and should_stop():
+                    log.info("%s: cancelado, %d/%d procesadas", self.name, completed, len(urls))
+                    return
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)

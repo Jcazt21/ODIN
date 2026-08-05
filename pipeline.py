@@ -9,6 +9,8 @@ import json
 import time
 import traceback
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -30,6 +32,19 @@ from scrapers import SCRAPERS
 from scrapers.base import BaseScraper, ScrapedArticle
 
 log = get_logger("odin.pipeline")
+
+
+@dataclass
+class _SourceResult:
+    """Lo que devuelve `_process_source` al thread principal, que agrega
+    esto en `stats`/`discovered_total`/etc. — la única escritura de ese
+    estado compartido, ya no hay que protegerla con locks."""
+
+    key: str
+    discovered: int
+    new_count: int
+    failed: int
+    cancelled: bool
 
 
 def _already_stored(session, url: str) -> bool:
@@ -175,108 +190,153 @@ def run(
         crawl_run_session.close()
         CRAWL_RUN_IN_PROGRESS.set(1)
 
+        # Una sola consulta para todo el run (antes: una por fuente, repetida
+        # 9 veces) — el mapa resultante es de solo lectura, seguro de
+        # compartir entre los threads de _process_source de abajo.
+        person_map = known_person_fullname_map()
+
         stats: dict[str, int] = {}
         discovered_total = 0
         saved_total = 0
         failed_total = 0
         cancelled = False
-        session = get_session()
-        try:
-            for key, scraper_cls in selected.items():
-                if _stopped():
-                    cancelled = True
-                    break
 
-                scraper: BaseScraper = scraper_cls()
-                log.info("crawl_source_started", source=scraper.name)
-                _report(key, "discover", "running", "Descargando listado de artículos...")
-                source_started = time.perf_counter()
-                # Una consulta por fuente (no por artículo) para el mapa de
-                # nombres completos conocidos usado en la canonicalización.
-                person_map = known_person_fullname_map()
-                new_count = 0
-                source_failed = 0
-
-                scraped_articles = list(scraper.scrape(limit=limit))
-                discovered_total += len(scraped_articles)
-                PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="discovered").inc(
-                    len(scraped_articles)
-                )
-                pending = [
-                    a
-                    for a in scraped_articles
-                    if not _already_stored(session, a.url)
-                    and (article_filter is None or article_filter(a))
-                ]
-                log.info(
-                    "crawl_source_scraped",
-                    source=scraper.name,
-                    scraped=len(scraped_articles),
-                    pending_to_analyze=len(pending),
-                    skipped=len(scraped_articles) - len(pending),
-                )
-                _report(
-                    key,
-                    "discover",
-                    "done",
-                    f"{len(scraped_articles)} encontrados, {len(pending)} pendientes de analizar",
-                )
-
-                # Si el analizador soporta lote (LocalAnalyzer), una sola pasada de
-                # spaCy sobre todos los artículos de la fuente es más eficiente que
-                # analizar uno por uno. Si el lote falla, se cae a analizar artículo
-                # por artículo para no perder toda la fuente por un solo texto malo.
-                _report(key, "analyze", "running", f"Analizando {len(pending)} artículos...")
-                results: list | None = None
-                analyze_batch = getattr(analyzer, "analyze_batch", None)
-                if analyze_batch is not None and pending:
+        def _process_source(key: str, scraper_cls: type[BaseScraper]) -> _SourceResult:
+            """Descubre, filtra, analiza y guarda UNA fuente, con su propia
+            sesión de BD (SQLAlchemy `Session` no es thread-safe: cada
+            llamada concurrente necesita la suya). Nunca deja escapar una
+            excepción — una fuente rota se reporta como fallida y no tumba
+            las demás, que es justo el punto de aislarlas en tareas separadas."""
+            try:
+                with correlation_scope(run_id):
+                    session = get_session()
                     try:
-                        results = analyze_batch([(a.title, a.body or "") for a in pending])
-                    except Exception:
-                        log.exception(
-                            "batch_analysis_failed",
-                            source=scraper.name,
+                        scraper: BaseScraper = scraper_cls()
+                        log.info("crawl_source_started", source=scraper.name)
+                        _report(key, "discover", "running", "Descargando listado de artículos...")
+                        source_started = time.perf_counter()
+                        new_count = 0
+                        source_failed = 0
+                        source_cancelled = False
+
+                        scraped_articles = list(
+                            scraper.scrape(limit=limit, should_stop=_stopped)
                         )
-                        results = None
-                if results is None:
-                    results = [None] * len(pending)
+                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="discovered").inc(
+                            len(scraped_articles)
+                        )
 
-                for scraped, result in zip(pending, results, strict=True):
-                    if _stopped():
+                        if _stopped():
+                            # Cortó durante la descarga de ESTA fuente (scrape()
+                            # ya dejó de bajar URLs por su propio chequeo de
+                            # should_stop): no tiene sentido analizar/guardar lo
+                            # poco que se alcanzó a juntar, cancelar es "ahora".
+                            _report(
+                                key, "discover", "cancelled", f"{len(scraped_articles)} encontrados"
+                            )
+                            _report(key, "analyze", "cancelled", "0 nuevos, 0 fallidos")
+                            return _SourceResult(key, len(scraped_articles), 0, 0, True)
+
+                        pending = [
+                            a
+                            for a in scraped_articles
+                            if not _already_stored(session, a.url)
+                            and (article_filter is None or article_filter(a))
+                        ]
+                        log.info(
+                            "crawl_source_scraped",
+                            source=scraper.name,
+                            scraped=len(scraped_articles),
+                            pending_to_analyze=len(pending),
+                            skipped=len(scraped_articles) - len(pending),
+                        )
+                        _report(
+                            key,
+                            "discover",
+                            "done",
+                            f"{len(scraped_articles)} encontrados, "
+                            f"{len(pending)} pendientes de analizar",
+                        )
+
+                        # Si el analizador soporta lote (LocalAnalyzer), una sola
+                        # pasada de spaCy sobre todos los artículos de la fuente
+                        # es más eficiente que analizar uno por uno. Si el lote
+                        # falla, se cae a analizar artículo por artículo para no
+                        # perder toda la fuente por un solo texto malo.
+                        _report(key, "analyze", "running", f"Analizando {len(pending)} artículos...")
+                        results: list | None = None
+                        analyze_batch = getattr(analyzer, "analyze_batch", None)
+                        if analyze_batch is not None and pending:
+                            try:
+                                results = analyze_batch(
+                                    [(a.title, a.body or "") for a in pending]
+                                )
+                            except Exception:
+                                log.exception("batch_analysis_failed", source=scraper.name)
+                                results = None
+                        if results is None:
+                            results = [None] * len(pending)
+
+                        for scraped, result in zip(pending, results, strict=True):
+                            if _stopped():
+                                source_cancelled = True
+                                break
+                            try:
+                                if result is None:
+                                    result = analyzer.analyze(scraped.title, scraped.body or "")
+                                PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="analyzed").inc()
+                                _persist(session, scraped, result, analyzer, person_map=person_map)
+                                PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="saved").inc()
+                                new_count += 1
+                                log.info(
+                                    "article_saved", source=scraper.source, title=scraped.title[:70]
+                                )
+                            except Exception:  # no dejar que un artículo tumbe la fuente
+                                session.rollback()
+                                PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="failed").inc()
+                                source_failed += 1
+                                log.exception("article_processing_failed", url=scraped.url)
+
+                        PIPELINE_RUN_DURATION_SECONDS.labels(source=key).observe(
+                            time.perf_counter() - source_started
+                        )
+                        log.info("crawl_source_finished", source=scraper.name, new_articles=new_count)
+                        _report(
+                            key,
+                            "analyze",
+                            "cancelled" if source_cancelled else "done",
+                            f"{new_count} nuevos, {source_failed} fallidos",
+                        )
+                        return _SourceResult(
+                            key, len(scraped_articles), new_count, source_failed, source_cancelled
+                        )
+                    finally:
+                        session.close()
+            except Exception:
+                log.exception("source_processing_failed", source=key)
+                _report(key, "discover", "failed", "Error inesperado procesando la fuente")
+                return _SourceResult(key, 0, 0, 1, False)
+
+        try:
+            # Cada fuente es un dominio distinto: _DomainThrottle
+            # (scrapers/base.py) ya limita la tasa POR DOMINIO, así que
+            # correrlas concurrentemente no le pega más fuerte a ningún sitio
+            # individual — solo deja de esperar a que termine una para recién
+            # arrancar la siguiente (antes: secuencial, ~suma de los tiempos
+            # de las 9; ahora: ~el máximo de las 9).
+            with ThreadPoolExecutor(max_workers=max(1, len(selected))) as pool:
+                futures = {
+                    pool.submit(_process_source, key, scraper_cls): key
+                    for key, scraper_cls in selected.items()
+                }
+                for future in as_completed(futures):
+                    result = future.result()
+                    stats[result.key] = result.new_count
+                    discovered_total += result.discovered
+                    saved_total += result.new_count
+                    failed_total += result.failed
+                    if result.cancelled:
                         cancelled = True
-                        break
-                    try:
-                        if result is None:
-                            result = analyzer.analyze(scraped.title, scraped.body or "")
-                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="analyzed").inc()
-                        _persist(session, scraped, result, analyzer, person_map=person_map)
-                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="saved").inc()
-                        new_count += 1
-                        log.info("article_saved", source=scraper.source, title=scraped.title[:70])
-                    except Exception:  # no dejar que un artículo tumbe la corrida
-                        session.rollback()
-                        PIPELINE_ARTICLES_TOTAL.labels(source=key, stage="failed").inc()
-                        failed_total += 1
-                        source_failed += 1
-                        log.exception("article_processing_failed", url=scraped.url)
-                stats[key] = new_count
-                saved_total += new_count
-                PIPELINE_RUN_DURATION_SECONDS.labels(source=key).observe(
-                    time.perf_counter() - source_started
-                )
-                log.info(
-                    "crawl_source_finished",
-                    source=scraper.name,
-                    new_articles=new_count,
-                )
-                _report(
-                    key,
-                    "analyze",
-                    "cancelled" if cancelled else "done",
-                    f"{new_count} nuevos, {source_failed} fallidos",
-                )
-                if cancelled:
-                    break
         except Exception:
             _finish_crawl_run(
                 crawl_run_id,
@@ -301,7 +361,6 @@ def run(
             )
             PIPELINE_RUNS_TOTAL.labels(source=",".join(selected.keys()), status=final_status).inc()
         finally:
-            session.close()
             CRAWL_RUN_IN_PROGRESS.set(0)
             log.info(
                 "crawl_run_finished",
