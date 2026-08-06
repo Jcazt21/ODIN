@@ -45,17 +45,23 @@ from pydantic import BaseModel
 from analysis.base import AnalysisResult
 from analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _result_from_llm
 
-# 4.000 y no 16.000 (el valor de Gemini): en Groq el límite que muerde no es el
+# 5.000 y no 16.000 (el valor de Gemini): en Groq el límite que muerde no es el
 # coste sino el TPM del free tier — 8.000 tokens POR REQUEST incluido el cupo de
 # salida (ver _call_groq). Se recorta la ENTRADA para poder darle más cupo a la
 # salida, que es donde el análisis se estaba truncando.
 #
-# 4.000 caracteres no es una poda agresiva sobre este corpus: la mediana de los
-# artículos guardados es ~2.700 (el p90, ~4.200), así que la mayoría entra
-# entera; y el recorte es por la cola, de modo que titular y lead —donde vive
-# el encuadre— siempre llegan completos. Si Groq falla igual, el fallback a
-# Gemini (analysis/fallback_analyzer.py) analiza el artículo SIN este recorte.
-_MAX_BODY_CHARS = 4_000
+# Subido de 4.000 a 5.000: con 4.000, artículos con listados/cifras al final
+# del cuerpo (p.ej. un listado de nombres tras el desarrollo, tipo "los
+# senadores son: ...") perdían justo esa cola — el LLM ni la veía, así que no
+# podía extraer esas entidades por más que el prompt se lo pidiera. No se subió
+# a 6.000: con cuerpo completo Y muchas entidades (20+, listados largos de
+# personas) el cuello de botella pasa a ser la SALIDA, no la entrada —
+# _call_groq necesita margen para max_completion_tokens. 5.000 caracteres
+# (~1.070 tokens) deja prompt fijo (~3.150) + cuerpo ≈ 4.220 tokens de
+# entrada, dejando ~3.700 para salida sin pasar el TPM de 8.000. Si Groq
+# empieza a devolver 429 por esto en artículos largos, el fallback a Gemini
+# (analysis/fallback_analyzer.py) analiza el artículo SIN este recorte.
+_MAX_BODY_CHARS = 5_000
 
 log = logging.getLogger("odin.groq_analyzer")
 
@@ -142,19 +148,20 @@ def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
             # El reparto de los 8.000 se movió hacia la SALIDA porque ahí es donde
             # estaba fallando: con 2.500 el modelo cortaba a mitad del JSON
             # (finish_reason="length"), mientras que la entrada entraba de sobra.
-            # Ahora ~3.150 fijos (system+schema) + ~1.000 de cuerpo
-            # (_MAX_BODY_CHARS) + 3.200 ≈ 7.350.
             #
-            # Un truncado duele especialmente con este esquema:
-            # `overall_sentiment` es el ÚLTIMO campo (el orden va de evidencia a
-            # conclusión), así que se pierde justo la etiqueta global. El log de uso
-            # de abajo dice cuánto se consumió de verdad: ajustar con ese dato, no
-            # a ojo (estimar tokens como chars/4 ya falló una vez). Con
-            # "confidence"/"confidence_reason" por entidad, un artículo con
-            # muchas entidades (10-15+) puede seguir truncándose dentro de este
-            # presupuesto — si eso vuelve a pasar, subir este número exige
-            # revisar el reparto del TPM de arriba, no solo el valor a ojo.
-            max_completion_tokens=3200,
+            # Subido de 3.200 a 3.700 junto con _MAX_BODY_CHARS (4.000 -> 6.000):
+            # con cuerpo completo, un artículo con listado largo de personas
+            # (p.ej. 10 senadores + varias organizaciones = 20+ entidades) generaba
+            # bastante más JSON que antes y volvía a cortarse en finish_reason=
+            # "length" con 3.200. Con _MAX_BODY_CHARS=6.000, prompt fijo
+            # (system+schema ~3.150) + cuerpo (hasta ~1.280 tokens) puede llegar a
+            # ~4.400; sumando 3.700 de salida da ~8.100 — puede rozar el TPM de
+            # 8.000 en el peor caso (artículo largo Y con muchas entidades). El log
+            # de uso de abajo dice cuánto se consumió de verdad: ajustar con ese
+            # dato, no a ojo (estimar tokens como chars/4 ya falló una vez). Si
+            # vuelve a aparecer finish_reason="length" o 429 por TPM, hay que bajar
+            # uno de los dos números, no solo subir este.
+            max_completion_tokens=3700,
             response_format={
                 "type": "json_schema",
                 "json_schema": {"name": "analysis", "schema": schema.model_json_schema()},

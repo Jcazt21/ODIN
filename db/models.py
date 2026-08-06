@@ -216,6 +216,11 @@ class AnalyzeJob(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
 
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|running|done|failed
+    # Paso del pipeline dentro de status="running" (fetching|analyzing|
+    # canonicalizing — ver ANALYZE_STAGES en services/analyze_service.py):
+    # para que el polling del frontend muestre en qué parte del análisis va,
+    # no solo que "está corriendo". NULL fuera de running.
+    stage: Mapped[str | None] = mapped_column(String(20))
     url: Mapped[str] = mapped_column(String(2048))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

@@ -11,7 +11,6 @@ const NAV_ITEMS = [
   { label: "Reportes", tab: "/reports" },
   { label: "Entidades", tab: "/entities" },
   { label: "Siglas", tab: "/aliases" },
-  { label: "Scraper", tab: "/scrape" },
 ]
 
 // Apaga la banda de Aurora del workspace sin exponer un control en la UI: es

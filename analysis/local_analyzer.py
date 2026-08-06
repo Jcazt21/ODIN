@@ -43,7 +43,7 @@ from analysis.text_norm import strip_accents as _strip_accents
 # _merge_aliases, umbrales de _extraction_confidence, el glosario de
 # analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
 # se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "4"
+_LOCAL_ANALYZER_VERSION = "5"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
@@ -55,6 +55,23 @@ _STOP_ENTITY_TOKENS = {"foto", "video", "listín", "listin", "diario", "libre"}
 # reconociéndose porque ahí "República" no es el span entero).
 _GENERIC_STATE_ORGS = {
     "republica", "estado", "gobierno", "nacion", "pais", "administracion",
+}
+# las 31 provincias de RD + el Distrito Nacional: spaCy las etiqueta como
+# PERSON cuando aparecen solas y capitalizadas entre paréntesis tras un nombre
+# propio ("Moisés Ayala Pérez, (Barahona)") — el patrón "Nombre, (Lugar)" no
+# le da suficiente contexto para distinguir el gentilicio del topónimo. Se
+# filtran solo cuando son la entidad COMPLETA (mismo criterio que
+# _GENERIC_STATE_ORGS): "Santiago" a secas cae aquí, pero "Santiago Zorrilla
+# Sena" no, porque el span entero no coincide con ningún nombre de la lista.
+_DOMINICAN_PROVINCES = {
+    "azua", "bahoruco", "barahona", "dajabon", "distrito nacional",
+    "duarte", "el seibo", "elias pina", "espaillat", "hato mayor",
+    "hermanas mirabal", "independencia", "la altagracia", "la romana",
+    "la vega", "maria trinidad sanchez", "monsenor nouel", "monte cristi",
+    "montecristi", "monte plata", "pedernales", "peravia", "puerto plata",
+    "samana", "san cristobal", "san jose de ocoa", "san juan",
+    "san pedro de macoris", "sanchez ramirez", "santiago",
+    "santiago rodriguez", "santo domingo", "valverde",
 }
 # tipos de entidad de spaCy que nos interesan -> tipo canónico
 _WANTED_ENT = {"PER": "PERSON", "PERSON": "PERSON", "ORG": "ORG"}
@@ -394,6 +411,11 @@ class LocalAnalyzer:
             # organización real, son una forma genérica de referirse al país
             # o a la administración de turno.
             if etype == "ORG" and nkey in _GENERIC_STATE_ORGS:
+                continue
+            # "Santiago", "Elías Piña", "María Trinidad Sánchez"... spaCy las
+            # marca PERSON cuando el span completo es el nombre de una
+            # provincia dominicana (ver _DOMINICAN_PROVINCES).
+            if etype == "PERSON" and nkey in _DOMINICAN_PROVINCES:
                 continue
             # Cifras, montos y porcentajes ("RD$654", "39%") no son nombres:
             # spaCy a veces los etiqueta como PERSON/ORG porque son tokens no

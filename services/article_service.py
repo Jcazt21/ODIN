@@ -135,9 +135,8 @@ def serialize_summary(article: Article) -> ArticleSummary:
     )
 
 
-def serialize_article(article: Article, already_saved: bool) -> ArticleDetail:
+def serialize_article(article: Article) -> ArticleDetail:
     return ArticleDetail(
-        already_saved=already_saved,
         id=article.id,
         source=article.source,
         url=article.url,
@@ -275,7 +274,7 @@ def get_article(article_id: int) -> ArticleDetail:
         article = session.scalar(select(Article).where(Article.id == article_id))
         if not article:
             raise HTTPException(status_code=404, detail="Reporte no encontrado.")
-        return serialize_article(article, already_saved=True)
+        return serialize_article(article)
     finally:
         session.close()
 
@@ -315,7 +314,7 @@ def update_article(article_id: int, payload) -> ArticleDetail:
             else:
                 setattr(article, field, value)
         session.commit()
-        return serialize_article(article, already_saved=True)
+        return serialize_article(article)
     except HTTPException:
         raise
     except Exception:
@@ -358,7 +357,7 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
         # en cada guardado.
         existing = session.scalar(select(Article).where(Article.url == url))
         if existing:
-            return serialize_article(existing, already_saved=True)
+            return serialize_article(existing)
 
         # Canonicaliza también al guardar: cubre ediciones manuales del
         # frontend y unifica contra lo ya conocido en la BD.
@@ -420,7 +419,7 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
         )
         session.add(article)
         session.commit()
-        return serialize_article(article, already_saved=False)
+        return serialize_article(article)
     except HTTPException:
         raise
     except Exception:

@@ -205,12 +205,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Aliases
-         * @description Devuelve alias activos e inactivos, filtrados en SQL (?q=) y paginados.
-         *     `limit` por defecto es generoso (500, tope 1000) para no cambiar el
-         *     comportamiento actual del frontend, que espera la lista completa.
-         */
+        /** List Aliases */
         get: operations["list_aliases_api_aliases_get"];
         put?: never;
         /**
@@ -327,49 +322,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Health
-         * @description Chequeo real: si la BD no responde, `status` refleja el problema en
-         *     vez de devolver "ok" incondicionalmente (antes lo hacía sin tocar la
-         *     BD; un orquestador lo daría por sano mientras todo falla).
-         */
-        get: operations["health_api_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Metrics
-         * @description Métricas en formato Prometheus (§7.1 de task.md): pipeline, latencia y
-         *     tasa de error por endpoint, llamadas/gasto de Gemini.
-         */
-        get: operations["metrics_metrics_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/crawl-runs": {
         parameters: {
             query?: never;
@@ -460,6 +412,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Health
+         * @description Chequeo real: si la BD no responde, `status` refleja el problema en
+         *     vez de devolver "ok" incondicionalmente (antes lo hacía sin tocar la
+         *     BD; un orquestador lo daría por sano mientras todo falla).
+         */
+        get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Metrics
+         * @description Métricas en formato Prometheus (§7.1 de task.md): pipeline, latencia y
+         *     tasa de error por endpoint, llamadas/gasto de Gemini.
+         */
+        get: operations["metrics_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -508,17 +503,45 @@ export interface components {
              */
             status: string;
         };
+        /**
+         * AnalyzePreviewEntity
+         * @description Mención detectada en la vista previa: `id`/`canonical_entity_id` son
+         *     `null` mientras el artículo no se guarde; si la URL ya estaba guardada
+         *     (`AnalyzeResult.already_saved=True`), son los reales de esa fila.
+         */
+        AnalyzePreviewEntity: {
+            /** Id */
+            id: number | null;
+            /** Name */
+            name: string;
+            /** Type */
+            type: string;
+            /** Mentions Count */
+            mentions_count: number;
+            /** Sentiment Toward */
+            sentiment_toward: string | null;
+            /** Sentiment Score */
+            sentiment_score: number | null;
+            /** Context */
+            context: string | null;
+            /** Extraction Confidence */
+            extraction_confidence: number;
+            /** Canonical Entity Id */
+            canonical_entity_id: number | null;
+        };
         /** AnalyzeRequest */
         AnalyzeRequest: {
             /** Url */
             url: string;
         };
         /**
-         * ArticleDetail
-         * @description Reporte completo con sus entidades: respuesta de /api/analyze,
-         *     POST /api/articles y GET/PUT /api/articles/{id}.
+         * AnalyzeResult
+         * @description Respuesta de POST /api/analyze y del `result` de GET /api/jobs/{id}:
+         *     o bien una vista previa recién analizada y sin guardar
+         *     (`already_saved=False`, `id` `null`), o el artículo ya existente que se
+         *     devuelve tal cual en vez de re-analizar (`already_saved=True`, `id` real).
          */
-        ArticleDetail: {
+        AnalyzeResult: {
             /**
              * Already Saved
              * @default false
@@ -564,6 +587,100 @@ export interface components {
             blamed_actor: string | null;
             /** Credited Actor */
             credited_actor: string | null;
+            /** Sentiment Basis */
+            sentiment_basis: string | null;
+            /** Facts Sentiment */
+            facts_sentiment: string | null;
+            /** Quoted Sentiment */
+            quoted_sentiment: string | null;
+            /** Media Stance */
+            media_stance: string | null;
+            /** Media Stance Evidence */
+            media_stance_evidence: string | null;
+            /** Overall Sentiment Reason */
+            overall_sentiment_reason: string | null;
+            /** Content Flags */
+            content_flags: string | null;
+            /** Analyzer Name */
+            analyzer_name: string | null;
+            /** Analyzer Model */
+            analyzer_model: string | null;
+            /** Analyzer Version */
+            analyzer_version: string | null;
+            /** Analysis Schema Version */
+            analysis_schema_version: number | null;
+            /** Analyzed At */
+            analyzed_at: string | null;
+            /**
+             * Entities
+             * @default []
+             */
+            entities: components["schemas"]["AnalyzePreviewEntity"][];
+        };
+        /**
+         * ArticleDetail
+         * @description Reporte completo YA guardado, con sus entidades: respuesta de
+         *     POST /api/articles y GET/PUT /api/articles/{id}. Distinto del schema de
+         *     vista previa de POST /api/analyze (`AnalyzeResult`, más abajo): acá `id` y
+         *     `body` son siempre reales, nunca `null` (esquema separado por caso de uso
+         *     en vez de una sola clase compartida con campos opcionales según quién
+         *     llame).
+         */
+        ArticleDetail: {
+            /** Id */
+            id: number;
+            /** Source */
+            source: string;
+            /** Url */
+            url: string;
+            /** Title */
+            title: string;
+            /** Authors */
+            authors: string | null;
+            /** Section */
+            section: string | null;
+            /** Published At */
+            published_at: string | null;
+            /** Body */
+            body: string;
+            /** Main Topic */
+            main_topic: string | null;
+            /** Topic Keywords */
+            topic_keywords: string | null;
+            /** Overall Sentiment */
+            overall_sentiment: string | null;
+            /** Sentiment Score */
+            sentiment_score: number | null;
+            /** Framing */
+            framing: string | null;
+            /** Headline Intent */
+            headline_intent: string | null;
+            /** Lead Orientation */
+            lead_orientation: string | null;
+            /** Dominant Actor */
+            dominant_actor: string | null;
+            /** Source Quality */
+            source_quality: string | null;
+            /** Has Hard Data */
+            has_hard_data: boolean | null;
+            /** Blamed Actor */
+            blamed_actor: string | null;
+            /** Credited Actor */
+            credited_actor: string | null;
+            /** Sentiment Basis */
+            sentiment_basis: string | null;
+            /** Facts Sentiment */
+            facts_sentiment: string | null;
+            /** Quoted Sentiment */
+            quoted_sentiment: string | null;
+            /** Media Stance */
+            media_stance: string | null;
+            /** Media Stance Evidence */
+            media_stance_evidence: string | null;
+            /** Overall Sentiment Reason */
+            overall_sentiment_reason: string | null;
+            /** Content Flags */
+            content_flags: string | null;
             /** Analyzer Name */
             analyzer_name: string | null;
             /** Analyzer Model */
@@ -852,13 +969,13 @@ export interface components {
         };
         /**
          * EntityMention
-         * @description Una mención de entidad. `id` y `canonical_entity_id` son `null` en la
-         *     vista previa de /api/analyze (el artículo aún no se guardó — `EntityResult`,
-         *     la clase de esa vista previa, ni siquiera tiene esos dos atributos).
+         * @description Una mención de entidad de un artículo YA guardado: `id` es siempre la
+         *     fila real de `Entity` (nunca preview). Ver `AnalyzePreviewEntity` para la
+         *     vista previa sin guardar de POST /api/analyze.
          */
         EntityMention: {
             /** Id */
-            id: number | null;
+            id: number;
             /** Name */
             name: string;
             /** Type */
@@ -932,9 +1049,11 @@ export interface components {
             job_id: string;
             /** Status */
             status: string;
+            /** Stage */
+            stage?: string | null;
             /** Error */
             error?: string | null;
-            result?: components["schemas"]["ArticleDetail"] | null;
+            result?: components["schemas"]["AnalyzeResult"] | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -988,6 +1107,20 @@ export interface components {
             blamed_actor?: string | null;
             /** Credited Actor */
             credited_actor?: string | null;
+            /** Sentiment Basis */
+            sentiment_basis?: string | null;
+            /** Facts Sentiment */
+            facts_sentiment?: string | null;
+            /** Quoted Sentiment */
+            quoted_sentiment?: string | null;
+            /** Media Stance */
+            media_stance?: string | null;
+            /** Media Stance Evidence */
+            media_stance_evidence?: string | null;
+            /** Overall Sentiment Reason */
+            overall_sentiment_reason?: string | null;
+            /** Content Flags */
+            content_flags?: string | null;
             /**
              * Entities
              * @default []
@@ -1170,7 +1303,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArticleDetail"] | components["schemas"]["AnalyzeAccepted"];
+                    "application/json": components["schemas"]["AnalyzeResult"] | components["schemas"]["AnalyzeAccepted"];
                 };
             };
             /** @description Accepted */
@@ -1745,46 +1878,6 @@ export interface operations {
             };
         };
     };
-    health_api_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HealthResponse"];
-                };
-            };
-        };
-    };
-    metrics_metrics_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
     list_crawl_runs_api_crawl_runs_get: {
         parameters: {
             query?: {
@@ -1938,6 +2031,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    metrics_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

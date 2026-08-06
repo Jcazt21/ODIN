@@ -5,7 +5,21 @@ import { SentimentBadge } from "@/components/SentimentBadge"
 import { SentimentSegmented } from "@/components/SentimentSegmented"
 import { ENTITY_TYPE_LABELS } from "@/lib/labels"
 import { isLowConfidence } from "@/lib/format"
-import type { EntityAnalysis } from "@/lib/odin-api"
+
+// Forma mínima independiente del schema del backend, no `EntityAnalysis`
+// (`EntityMention`, entidad ya guardada con `id` real): esta tarjeta también
+// muestra entidades de la vista previa de /api/analyze (`AnalyzePreviewEntity`,
+// `id` posiblemente `null`), y no usa `id`/`canonical_entity_id` para nada —
+// igual criterio que `AnalysisCardFields` en AnalysisCard.tsx.
+export interface EntityFields {
+  name: string
+  type: string
+  mentions_count: number
+  sentiment_toward: string | null
+  sentiment_score: number | null
+  context: string | null
+  extraction_confidence: number
+}
 
 export function EntitiesCard({
   entities,
@@ -13,9 +27,9 @@ export function EntitiesCard({
   onUpdate,
   onRemove,
 }: {
-  entities: EntityAnalysis[]
+  entities: EntityFields[]
   editable: boolean
-  onUpdate?: (index: number, patch: Partial<EntityAnalysis>) => void
+  onUpdate?: (index: number, patch: Partial<EntityFields>) => void
   onRemove?: (index: number) => void
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)

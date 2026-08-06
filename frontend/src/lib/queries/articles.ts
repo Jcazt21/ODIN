@@ -11,6 +11,7 @@ import {
   type ArticleUpdatePayload,
   type SaveArticlePayload,
   type JobStatus,
+  type AnalyzeStage,
 } from "@/lib/odin-api"
 
 export const articleKeys = {
@@ -73,7 +74,7 @@ export function useDeleteArticle() {
  *  NLP, hasta ~60s vía polling de job): mutation, no query, para que nunca se
  *  dispare sola por un refetch/StrictMode y quede modelada con su propio
  *  estado de carga/error igual que el resto de las escrituras. */
-export function useAnalyzeUrl(onStatus?: (status: JobStatus) => void) {
+export function useAnalyzeUrl(onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void) {
   return useMutation({
     mutationFn: (url: string) => analyzeUrl(url, onStatus),
   })

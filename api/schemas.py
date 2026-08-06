@@ -146,11 +146,11 @@ class _ResponseModel(BaseModel):
 
 
 class EntityMention(_ResponseModel):
-    """Una mención de entidad. `id` y `canonical_entity_id` son `null` en la
-    vista previa de /api/analyze (el artículo aún no se guardó — `EntityResult`,
-    la clase de esa vista previa, ni siquiera tiene esos dos atributos)."""
+    """Una mención de entidad de un artículo YA guardado: `id` es siempre la
+    fila real de `Entity` (nunca preview). Ver `AnalyzePreviewEntity` para la
+    vista previa sin guardar de POST /api/analyze."""
 
-    id: int | None = None
+    id: int
     name: str
     type: str
     mentions_count: int
@@ -162,18 +162,21 @@ class EntityMention(_ResponseModel):
 
 
 class ArticleDetail(_ResponseModel):
-    """Reporte completo con sus entidades: respuesta de /api/analyze,
-    POST /api/articles y GET/PUT /api/articles/{id}."""
+    """Reporte completo YA guardado, con sus entidades: respuesta de
+    POST /api/articles y GET/PUT /api/articles/{id}. Distinto del schema de
+    vista previa de POST /api/analyze (`AnalyzeResult`, más abajo): acá `id` y
+    `body` son siempre reales, nunca `null` (esquema separado por caso de uso
+    en vez de una sola clase compartida con campos opcionales según quién
+    llame)."""
 
-    already_saved: bool = False
-    id: int | None = None
+    id: int
     source: str
     url: str
     title: str
     authors: str | None = None
     section: str | None = None
     published_at: datetime | None = None
-    body: str | None = None
+    body: str
     main_topic: str | None = None
     topic_keywords: str | None = None
     overall_sentiment: str | None = None
@@ -201,6 +204,72 @@ class ArticleDetail(_ResponseModel):
     analysis_schema_version: int | None = None
     analyzed_at: datetime | None = None
     entities: list[EntityMention] = []
+
+
+# ── Vista previa de POST /api/analyze ────────────────────────────────────────
+# Esquema separado de ArticleDetail/EntityMention (caso de uso distinto): acá
+# el artículo puede no estar guardado todavía, así que `id`/`body` sí son
+# legítimamente opcionales — si se comparte esa opcionalidad con el schema de
+# /api/articles, ese termina con campos "opcionales" que en realidad siempre
+# vienen presentes ahí.
+
+
+class AnalyzePreviewEntity(_ResponseModel):
+    """Mención detectada en la vista previa: `id`/`canonical_entity_id` son
+    `null` mientras el artículo no se guarde; si la URL ya estaba guardada
+    (`AnalyzeResult.already_saved=True`), son los reales de esa fila."""
+
+    id: int | None = None
+    name: str
+    type: str
+    mentions_count: int
+    sentiment_toward: str | None = None
+    sentiment_score: float | None = None
+    context: str | None = None
+    extraction_confidence: float
+    canonical_entity_id: int | None = None
+
+
+class AnalyzeResult(_ResponseModel):
+    """Respuesta de POST /api/analyze y del `result` de GET /api/jobs/{id}:
+    o bien una vista previa recién analizada y sin guardar
+    (`already_saved=False`, `id` `null`), o el artículo ya existente que se
+    devuelve tal cual en vez de re-analizar (`already_saved=True`, `id` real)."""
+
+    already_saved: bool = False
+    id: int | None = None
+    source: str
+    url: str
+    title: str
+    authors: str | None = None
+    section: str | None = None
+    published_at: datetime | None = None
+    body: str | None = None
+    main_topic: str | None = None
+    topic_keywords: str | None = None
+    overall_sentiment: str | None = None
+    sentiment_score: float | None = None
+    framing: str | None = None
+    headline_intent: str | None = None
+    lead_orientation: str | None = None
+    dominant_actor: str | None = None
+    source_quality: str | None = None
+    has_hard_data: bool | None = None
+    blamed_actor: str | None = None
+    credited_actor: str | None = None
+    sentiment_basis: str | None = None
+    facts_sentiment: str | None = None
+    quoted_sentiment: str | None = None
+    media_stance: str | None = None
+    media_stance_evidence: str | None = None
+    overall_sentiment_reason: str | None = None
+    content_flags: str | None = None
+    analyzer_name: str | None = None
+    analyzer_model: str | None = None
+    analyzer_version: str | None = None
+    analysis_schema_version: int | None = None
+    analyzed_at: datetime | None = None
+    entities: list[AnalyzePreviewEntity] = []
 
 
 class ArticleSummary(_ResponseModel):
@@ -303,8 +372,9 @@ class AnalyzeAccepted(BaseModel):
 class JobResponse(BaseModel):
     job_id: str
     status: str  # pending | running | done | failed
+    stage: str | None = None  # fetching | analyzing | canonicalizing — solo con status=running
     error: str | None = None
-    result: ArticleDetail | None = None
+    result: AnalyzeResult | None = None
 
 
 # ── Reportes: enumeraciones fijas de filtros ─────────────────────────────────

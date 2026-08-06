@@ -9,6 +9,13 @@ import type { components } from "@/lib/api-types"
 
 export type EntityAnalysis = components["schemas"]["EntityMention"]
 
+// Vista previa de POST /api/analyze (aún no guardada, o eco de un artículo ya
+// existente): schema separado de ArticleAnalysis/EntityAnalysis porque son
+// casos de uso distintos — acá `id`/`body` pueden ser `null`, cosa que nunca
+// pasa en un artículo ya persistido (ver api/schemas.py, AnalyzeResult).
+export type AnalyzePreviewEntity = components["schemas"]["AnalyzePreviewEntity"]
+export type AnalyzeResult = components["schemas"]["AnalyzeResult"]
+
 // Enumeraciones fijas del análisis (ver SENTIMENT_VALUES/FRAMING_VALUES/... en
 // api.py): el schema las declara como `string` porque los campos ORM son
 // `String(...)` sin CHECK constraint, así que se mantienen a mano aquí para
@@ -33,7 +40,7 @@ export type SourceQuality =
 export type ArticleAnalysis = components["schemas"]["ArticleDetail"]
 
 export type SaveArticlePayload = Omit<
-  ArticleAnalysis,
+  AnalyzeResult,
   | "id"
   | "already_saved"
   | "analyzer_name"
@@ -194,9 +201,12 @@ export function getMe(): Promise<components["schemas"]["MeResponse"]> {
 // responde 202 de inmediato; `analyzeUrl` hace el polling de
 // GET /api/jobs/{job_id} por dentro, así que quien la llama sigue recibiendo
 // una promesa que resuelve en `ArticleDetail`, igual que antes. `onStatus` es
-// opcional, para que la UI muestre progreso real en vez de un spinner ciego.
+// opcional, para que la UI muestre progreso real en vez de un spinner ciego —
+// recibe también `stage` (fetching/analyzing/canonicalizing, ver ANALYZE_STAGES
+// en services/analyze_service.py) para detallar en qué parte del pipeline va.
 
 export type JobStatus = components["schemas"]["JobResponse"]["status"]
+export type AnalyzeStage = NonNullable<components["schemas"]["JobResponse"]["stage"]>
 
 const JOB_POLL_INTERVAL_MS = 1500
 const JOB_POLL_TIMEOUT_MS = 120_000
@@ -229,12 +239,12 @@ function pollDelay(ms: number): Promise<void> {
 
 async function pollJob(
   jobId: string,
-  onStatus?: (status: JobStatus) => void
-): Promise<ArticleAnalysis> {
+  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+): Promise<AnalyzeResult> {
   const deadline = Date.now() + JOB_POLL_TIMEOUT_MS
   for (;;) {
     const job = await request<components["schemas"]["JobResponse"]>(`/api/jobs/${jobId}`)
-    onStatus?.(job.status)
+    onStatus?.(job.status, job.stage ?? null)
     if (job.status === "done" && job.result) return job.result
     if (job.status === "failed") throw new OdinApiError(job.error ?? "El análisis falló.")
     if (Date.now() > deadline) {
@@ -246,9 +256,9 @@ async function pollJob(
 
 export async function analyzeUrl(
   url: string,
-  onStatus?: (status: JobStatus) => void
-): Promise<ArticleAnalysis> {
-  const res = await postJson<ArticleAnalysis | components["schemas"]["AnalyzeAccepted"]>(
+  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+): Promise<AnalyzeResult> {
+  const res = await postJson<AnalyzeResult | components["schemas"]["AnalyzeAccepted"]>(
     "/api/analyze",
     { url }
   )
@@ -352,69 +362,4 @@ export function mergeCanonicalEntities(
   sourceId: number
 ): Promise<CanonicalEntity> {
   return postJson(`/api/canonical-entities/${targetId}/merge`, { source_id: sourceId })
-}
-
-// ── Scraper de política ─────────────────────────────────────────────────────
-//
-// POST /api/scrape-jobs encola una corrida del scraper de política dominicana
-// sobre las 9 fuentes permitidas (target/tope por fuente/analizador) y
-// responde 202 + job_id de inmediato — la corrida real tarda varios minutos.
-// `pollScrapeJob` hace polling de GET /api/scrape-jobs/{id}, igual patrón que
-// `pollJob` para /api/analyze, pero sin timeout fijo (acá "tardar mucho" es
-// normal, no un error) y con `onUpdate` recibiendo el job completo en cada
-// tick para que la UI dibuje el progreso por fuente.
-
-export type ScrapeJobStartPayload = components["schemas"]["ScrapeJobStartRequest"]
-export type ScrapeJob = components["schemas"]["ScrapeJobResponse"]
-export type ScrapeJobStatus = ScrapeJob["status"]
-export type ScrapeSourceProgress = components["schemas"]["ScrapeSourceProgress"]
-
-const SCRAPE_JOB_POLL_INTERVAL_MS = 2000
-
-const SCRAPE_JOB_TERMINAL_STATUSES: ScrapeJobStatus[] = ["done", "failed", "cancelled"]
-
-export function startScrapeJob(payload: ScrapeJobStartPayload): Promise<components["schemas"]["ScrapeJobAccepted"]> {
-  return postJson("/api/scrape-jobs", payload)
-}
-
-export function getScrapeJob(jobId: string): Promise<ScrapeJob> {
-  return request<ScrapeJob>(`/api/scrape-jobs/${jobId}`)
-}
-
-export function listScrapeJobs(limit = 1): Promise<ScrapeJob[]> {
-  return request<ScrapeJob[]>(`/api/scrape-jobs?limit=${limit}`)
-}
-
-export function cancelScrapeJob(jobId: string): Promise<ScrapeJob> {
-  return postJson(`/api/scrape-jobs/${jobId}/cancel`, {})
-}
-
-/** Hace polling de un job hasta que llega a un estado terminal, invocando
- *  `onUpdate` en cada tick. Devuelve una función `stop()` para cortar el
- *  polling desde afuera (p. ej. si el componente se desmonta). */
-export function pollScrapeJob(
-  jobId: string,
-  onUpdate: (job: ScrapeJob) => void
-): () => void {
-  let stopped = false
-  ;(async () => {
-    while (!stopped) {
-      let job: ScrapeJob
-      try {
-        job = await getScrapeJob(jobId)
-      } catch {
-        // Error de red transitorio durante el polling: reintenta en el
-        // próximo tick en vez de tumbar el polling entero.
-        await pollDelay(SCRAPE_JOB_POLL_INTERVAL_MS)
-        continue
-      }
-      if (stopped) return
-      onUpdate(job)
-      if (SCRAPE_JOB_TERMINAL_STATUSES.includes(job.status)) return
-      await pollDelay(SCRAPE_JOB_POLL_INTERVAL_MS)
-    }
-  })()
-  return () => {
-    stopped = true
-  }
 }

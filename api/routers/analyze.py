@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 
 import auth
 import url_guard
-from api.schemas import AnalyzeAccepted, AnalyzeRequest, ArticleDetail, JobResponse
+from api.schemas import AnalyzeAccepted, AnalyzeRequest, AnalyzeResult, JobResponse
 from services import analyze_service
 from url_guard import UrlNotAllowed
 
@@ -17,7 +17,7 @@ router = APIRouter(tags=["analyze"])
 @router.post(
     "/api/analyze",
     dependencies=[Depends(auth.require_auth)],
-    response_model=ArticleDetail | AnalyzeAccepted,
+    response_model=AnalyzeResult | AnalyzeAccepted,
     status_code=200,
     responses={202: {"model": AnalyzeAccepted}},
 )

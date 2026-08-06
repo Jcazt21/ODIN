@@ -1,11 +1,20 @@
 import { useState, type FormEvent } from "react"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
+import { AnalyzeProgress } from "@/components/AnalyzeProgress"
 import { EntitiesCard } from "@/components/EntitiesCard"
 import { ActionButtons } from "@/components/ActionButtons"
 import { useAnalyzeUrl, useSaveArticle } from "@/lib/queries/articles"
-import { OdinApiError, type ArticleAnalysis, type EntityAnalysis, type JobStatus, type SaveArticlePayload } from "@/lib/odin-api"
+import type { EntityFields } from "@/components/EntitiesCard"
+import {
+  OdinApiError,
+  type AnalyzeResult,
+  type AnalyzeStage,
+  type ArticleAnalysis,
+  type JobStatus,
+  type SaveArticlePayload,
+} from "@/lib/odin-api"
 
-function toDraft(a: ArticleAnalysis): SaveArticlePayload {
+function toDraft(a: AnalyzeResult): SaveArticlePayload {
   const {
     id: _id,
     already_saved: _saved,
@@ -28,16 +37,21 @@ function errorMessage(err: unknown, fallback: string): string {
 export function AnalyzePage() {
   const [url, setUrl] = useState("")
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
-  const [result, setResult] = useState<ArticleAnalysis | null>(null)
+  const [jobStage, setJobStage] = useState<AnalyzeStage | null>(null)
+  const [result, setResult] = useState<AnalyzeResult | ArticleAnalysis | null>(null)
   const [draft, setDraft] = useState<SaveArticlePayload | null>(null)
 
-  const analyzeMutation = useAnalyzeUrl(setJobStatus)
+  const analyzeMutation = useAnalyzeUrl((status, stage) => {
+    setJobStatus(status)
+    setJobStage(stage)
+  })
   const saveMutation = useSaveArticle()
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!url.trim() || analyzeMutation.isPending) return
     setJobStatus(null)
+    setJobStage(null)
     setResult(null)
     setDraft(null)
     try {
@@ -48,6 +62,7 @@ export function AnalyzePage() {
       // el error queda en analyzeMutation.error, mostrado abajo
     } finally {
       setJobStatus(null)
+      setJobStage(null)
     }
   }
 
@@ -62,7 +77,7 @@ export function AnalyzePage() {
     }
   }
 
-  function updateEntity(index: number, patch: Partial<EntityAnalysis>) {
+  function updateEntity(index: number, patch: Partial<EntityFields>) {
     setDraft((d) => {
       if (!d) return d
       const entities = d.entities.map((e, i) => (i === index ? { ...e, ...patch } : e))
@@ -140,46 +155,13 @@ export function AnalyzePage() {
           </div>
         )}
 
-        {loading && (
-          <div className="mt-[18px] border-t pt-[18px]" style={{ borderColor: "var(--border)" }}>
-            <div className="mb-3 flex items-center gap-2.5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
-              <span
-                className="inline-block size-3 rounded-full"
-                style={{
-                  border: "2px solid var(--border-strong)",
-                  borderTopColor: "var(--primary)",
-                  animation: "odinSpin 0.8s linear infinite",
-                }}
-              />
-              {jobStatus === "running"
-                ? "Extrayendo y analizando con el modelo — puede tardar hasta un minuto."
-                : "Encolando el análisis…"}
-            </div>
-            {[
-              { h: 13, w: "55%", delay: "0s" },
-              { h: 11, w: "100%", delay: "0.15s" },
-              { h: 11, w: "88%", delay: "0.3s" },
-              { h: 11, w: "40%", delay: "0.45s" },
-            ].map((bar, i) => (
-              <div
-                key={i}
-                className="mb-2 rounded"
-                style={{
-                  height: bar.h,
-                  width: bar.w,
-                  background: "var(--surface-3)",
-                  animation: `odinPulse 1.6s ease-in-out ${bar.delay} infinite`,
-                }}
-              />
-            ))}
-          </div>
-        )}
+        {loading && <AnalyzeProgress jobStatus={jobStatus} stage={jobStage} />}
       </div>
 
       {view && cardValue && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {view.already_saved ? (
+            {"already_saved" in view && view.already_saved ? (
               <span
                 className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
                 style={{ background: "var(--pos-soft)", color: "var(--pos)", borderColor: "var(--pos)" }}

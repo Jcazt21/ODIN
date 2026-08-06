@@ -22,7 +22,7 @@ from analysis.canonicalize import canonicalize_result
 from analysis.local_analyzer import sentence_mentions_venue_word
 from api import deps
 from api.deps import log
-from api.schemas import ArticleDetail, EntityMention
+from api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
 from config import settings
 from db.models import AnalyzeJob, Article
 from scrapers.base import BaseScraper, _parse_date
@@ -30,6 +30,10 @@ from services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
 from url_guard import UrlNotAllowed
 
 _extractor = BaseScraper()
+
+# Pasos del pipeline de run_analyze_job, en orden — el frontend los muestra
+# como progreso durante el polling de GET /api/jobs/{id} (status="running").
+ANALYZE_STAGES = ("fetching", "analyzing", "canonicalizing")
 
 
 def fetch_and_extract(url: str):
@@ -130,16 +134,23 @@ def run_analyze_job(job_id: str, url: str) -> None:
         if job is None:  # no debería pasar
             return
         job.status = "running"
+        job.stage = "fetching"
         job.started_at = datetime.now(UTC)
         session.commit()
 
         try:
             extracted = fetch_and_extract(url)
+
+            job.stage = "analyzing"
+            session.commit()
             result = analyze_safely(extracted["title"], extracted["body"])
             arbitrate_ambiguous_persons(result)
+
+            job.stage = "canonicalizing"
+            session.commit()
             canonicalize_result(result)
 
-            detail = ArticleDetail(
+            detail = AnalyzeResult(
                 already_saved=False,
                 source=extracted.get("sitename") or "manual",
                 url=url,
@@ -172,7 +183,7 @@ def run_analyze_job(job_id: str, url: str) -> None:
                 analyzer_version=analyzer.version,
                 analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
                 analyzed_at=datetime.now(UTC),
-                entities=[EntityMention.model_validate(e) for e in result.entities],
+                entities=[AnalyzePreviewEntity.model_validate(e) for e in result.entities],
             )
             job.status = "done"
             job.result_json = detail.model_dump_json()
@@ -189,7 +200,19 @@ def run_analyze_job(job_id: str, url: str) -> None:
         session.close()
 
 
-def start_analyze_job(url: str) -> tuple[ArticleDetail | None, str | None]:
+def _to_analyze_result(detail: ArticleDetail, *, already_saved: bool) -> AnalyzeResult:
+    """Adapta el schema de artículo guardado (`ArticleDetail`, de
+    `article_service.serialize_article`) al de vista previa de /api/analyze
+    (`AnalyzeResult`): mismos campos, distinta clase porque son casos de uso
+    distintos (ver comentario en api/schemas.py)."""
+    return AnalyzeResult(
+        already_saved=already_saved,
+        entities=[AnalyzePreviewEntity(**e.model_dump()) for e in detail.entities],
+        **detail.model_dump(exclude={"entities"}),
+    )
+
+
+def start_analyze_job(url: str) -> tuple[AnalyzeResult | None, str | None]:
     """Si la URL ya estaba guardada, devuelve `(detalle, None)`. Si es nueva,
     crea la fila `AnalyzeJob` en estado `pending` y devuelve `(None, job_id)`
     — quien llama debe encolar `run_analyze_job(job_id, url)` en background."""
@@ -199,7 +222,7 @@ def start_analyze_job(url: str) -> tuple[ArticleDetail | None, str | None]:
     try:
         existing = session.scalar(select(Article).where(Article.url == url))
         if existing:
-            return serialize_article(existing, already_saved=True), None
+            return _to_analyze_result(serialize_article(existing), already_saved=True), None
 
         job = AnalyzeJob(id=str(uuid.uuid4()), url=url)
         session.add(job)
@@ -217,7 +240,7 @@ def get_job(job_id: str):
         job = session.get(AnalyzeJob, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job no encontrado.")
-        result = ArticleDetail.model_validate_json(job.result_json) if job.result_json else None
-        return JobResponse(job_id=job.id, status=job.status, error=job.error, result=result)
+        result = AnalyzeResult.model_validate_json(job.result_json) if job.result_json else None
+        return JobResponse(job_id=job.id, status=job.status, stage=job.stage, error=job.error, result=result)
     finally:
         session.close()
