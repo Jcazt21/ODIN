@@ -216,7 +216,12 @@ python main.py --analyzer gemini    # de pago, explícito
 ## Estructura del código
 
 ```
-api.py               API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
+api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
+  __init__.py        app, middleware, monta los routers (uvicorn api:app)
+  schemas.py         requests/respuestas Pydantic
+  deps.py            dependencias compartidas (sesión de BD)
+  routers/           un módulo por grupo de rutas (analyze, articles, aliases...)
+services/            lógica de negocio (queries SQLAlchemy) detrás de cada router
 auth.py              login de usuario único + JWT
 frontend/            React + Vite — pestañas Analizar / Reportes / Siglas
 config.py            configuración por variables de entorno (.env)

@@ -67,10 +67,16 @@ def api_client(monkeypatch, sqlite_sessionmaker):
     `lifespan` de la app (que llama `init_db()` / `load_seed()` contra la
     `DATABASE_URL` real), algo que no queremos ni necesitamos para probar
     endpoints de solo lectura.
+
+    Se parchea `api.deps.get_session` (no `db.session.get_session` directo):
+    todos los routers y servicios importan `get_session` desde `api.deps` —
+    ver el docstring de ese módulo —, así que parchear el nombre ahí cubre a
+    todos sin tener que tocar cada `services/*.py` por separado.
     """
     from fastapi.testclient import TestClient
 
     import api as api_module
+    import api.deps as api_deps
 
-    monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
+    monkeypatch.setattr(api_deps, "get_session", sqlite_sessionmaker)
     return TestClient(api_module.app)

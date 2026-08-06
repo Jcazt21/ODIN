@@ -1,17 +1,15 @@
-import { useState, useEffect, useCallback, useRef, type FormEvent } from "react"
+import { useState, useEffect, useRef, type FormEvent } from "react"
 import { Pencil, Trash2, Plus, Check, X, Search, ToggleLeft, ToggleRight } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
 import {
-  listAliases,
-  createAlias,
-  updateAlias,
-  deleteAlias,
-  toggleAlias,
-  OdinApiError,
-  type EntityAlias,
-  type AliasPayload,
-} from "@/lib/odin-api"
+  useAliases,
+  useCreateAlias,
+  useUpdateAlias,
+  useDeleteAlias,
+  useToggleAlias,
+} from "@/lib/queries/aliases"
+import { OdinApiError, type EntityAlias, type AliasPayload } from "@/lib/odin-api"
 
 const EMPTY_FORM: AliasPayload = { alias: "", canonical_name: "", type: "ORG", is_active: true }
 
@@ -19,32 +17,37 @@ const EMPTY_FORM: AliasPayload = { alias: "", canonical_name: "", type: "ORG", i
 // Row (inline edit)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AliasRow({
-  alias,
-  onUpdated,
-  onDeleted,
-}: {
-  alias: EntityAlias
-  onUpdated: (updated: EntityAlias) => void
-  onDeleted: (id: number) => void
-}) {
+function AliasRow({ alias }: { alias: EntityAlias }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ alias: alias.alias, canonical_name: alias.canonical_name, type: alias.type })
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const confirm = useConfirm()
 
+  const updateMutation = useUpdateAlias()
+  const deleteMutation = useDeleteAlias()
+  const toggleMutation = useToggleAlias()
+
+  const busy = updateMutation.isPending || deleteMutation.isPending || toggleMutation.isPending
+  const err =
+    updateMutation.error instanceof OdinApiError
+      ? updateMutation.error.message
+      : updateMutation.error
+        ? "Error guardando."
+        : deleteMutation.error instanceof OdinApiError
+          ? deleteMutation.error.message
+          : deleteMutation.error
+            ? "Error eliminando."
+            : toggleMutation.error instanceof OdinApiError
+              ? toggleMutation.error.message
+              : toggleMutation.error
+                ? "Error actualizando."
+                : null
+
   async function handleSave() {
-    setBusy(true)
-    setErr(null)
     try {
-      const updated = await updateAlias(alias.id, form)
-      onUpdated(updated)
+      await updateMutation.mutateAsync({ id: alias.id, payload: form })
       setEditing(false)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error guardando.")
-    } finally {
-      setBusy(false)
+    } catch {
+      // el error queda en updateMutation.error
     }
   }
 
@@ -56,26 +59,11 @@ function AliasRow({
       danger: true,
     })
     if (!ok) return
-    setBusy(true)
-    try {
-      await deleteAlias(alias.id)
-      onDeleted(alias.id)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error eliminando.")
-      setBusy(false)
-    }
+    deleteMutation.mutate(alias.id)
   }
 
   async function handleToggle() {
-    setBusy(true)
-    try {
-      const updated = await toggleAlias(alias)
-      onUpdated(updated)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error actualizando.")
-    } finally {
-      setBusy(false)
-    }
+    toggleMutation.mutate(alias)
   }
 
   return (
@@ -129,7 +117,7 @@ function AliasRow({
                 type="button"
                 onClick={() => {
                   setEditing(false)
-                  setErr(null)
+                  updateMutation.reset()
                 }}
                 aria-label="Cancelar"
                 className="rounded p-1.5"
@@ -204,28 +192,24 @@ function AliasRow({
 // New alias form
 // ─────────────────────────────────────────────────────────────────────────────
 
-function NewAliasForm({ onCreated }: { onCreated: (a: EntityAlias) => void }) {
+function NewAliasForm() {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<AliasPayload>(EMPTY_FORM)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
+  const createMutation = useCreateAlias()
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (!form.alias.trim() || !form.canonical_name.trim()) return
-    setBusy(true)
-    setErr(null)
     try {
-      const created = await createAlias({ ...form, alias: form.alias.trim(), canonical_name: form.canonical_name.trim() })
-      onCreated(created)
+      await createMutation.mutateAsync({ ...form, alias: form.alias.trim(), canonical_name: form.canonical_name.trim() })
       setForm(EMPTY_FORM)
       setOpen(false)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error creando.")
-    } finally {
-      setBusy(false)
+    } catch {
+      // el error queda en createMutation.error
     }
   }
+
+  const err = createMutation.error instanceof OdinApiError ? createMutation.error.message : createMutation.error ? "Error creando." : null
 
   if (!open) {
     return (
@@ -299,17 +283,17 @@ function NewAliasForm({ onCreated }: { onCreated: (a: EntityAlias) => void }) {
         <button
           id="alias-save-btn"
           type="submit"
-          disabled={busy}
+          disabled={createMutation.isPending}
           className="rounded-lg px-3 py-1.5 text-[13px] font-semibold disabled:opacity-60"
           style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
         >
-          {busy ? "Guardando…" : "Guardar"}
+          {createMutation.isPending ? "Guardando…" : "Guardar"}
         </button>
         <button
           type="button"
           onClick={() => {
             setOpen(false)
-            setErr(null)
+            createMutation.reset()
             setForm(EMPTY_FORM)
           }}
           className="rounded-lg px-3 py-1.5 text-[13px]"
@@ -327,46 +311,24 @@ function NewAliasForm({ onCreated }: { onCreated: (a: EntityAlias) => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AliasManager() {
-  const [aliases, setAliases] = useState<EntityAlias[]>([])
   const [q, setQ] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async (query?: string) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await listAliases(query || undefined)
-      setAliases(data)
-    } catch (e) {
-      setError(e instanceof OdinApiError ? e.message : "No se pudo conectar con la API.")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const [debouncedQ, setDebouncedQ] = useState("")
 
   const isFirstLoad = useRef(true)
   useEffect(() => {
     if (isFirstLoad.current) {
       isFirstLoad.current = false
-      load(q)
+      setDebouncedQ(q)
       return
     }
-    const t = setTimeout(() => load(q), 300)
+    const t = setTimeout(() => setDebouncedQ(q), 300)
     return () => clearTimeout(t)
-  }, [q, load])
+  }, [q])
 
-  function handleCreated(a: EntityAlias) {
-    setAliases((prev) => [...prev, a].sort((x, y) => x.alias.localeCompare(y.alias)))
-  }
-
-  function handleUpdated(updated: EntityAlias) {
-    setAliases((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
-  }
-
-  function handleDeleted(id: number) {
-    setAliases((prev) => prev.filter((a) => a.id !== id))
-  }
+  const { data, isLoading, isFetching, error } = useAliases(debouncedQ || undefined)
+  const aliases = data ?? []
+  const loading = isLoading || isFetching
+  const errorMessage = error instanceof OdinApiError ? error.message : error ? "No se pudo conectar con la API." : null
 
   const active = aliases.filter((a) => a.is_active).length
 
@@ -383,7 +345,7 @@ export function AliasManager() {
               {loading ? "Cargando…" : `${aliases.length} siglas · ${active} activas`}
             </p>
           </div>
-          <NewAliasForm onCreated={handleCreated} />
+          <NewAliasForm />
         </div>
         <div className="relative mt-3">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2" style={{ color: "var(--faint)" }} />
@@ -398,13 +360,13 @@ export function AliasManager() {
         </div>
       </div>
 
-      {error && (
+      {errorMessage && (
         <div role="alert" className="m-4 rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          {error}
+          {errorMessage}
         </div>
       )}
 
-      {loading ? (
+      {loading && aliases.length === 0 ? (
         <div className="space-y-2 p-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-9 w-full rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
@@ -438,7 +400,7 @@ export function AliasManager() {
             </thead>
             <tbody>
               {aliases.map((a) => (
-                <AliasRow key={a.id} alias={a} onUpdated={handleUpdated} onDeleted={handleDeleted} />
+                <AliasRow key={a.id} alias={a} />
               ))}
             </tbody>
           </table>

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Imagen para el backend FastAPI (api.py) y el scraper CLI (main.py).
+# Imagen para el backend FastAPI (paquete api/) y el scraper CLI (main.py).
 # Mismo código Python, dos usos: ver docker-compose.yml (servicios "backend" y "scraper").
 #
 # 3.13 y no 3.12: requirements.lock (ver README.md#requirementslock) se generó
@@ -72,4 +72,10 @@ USER appuser
 
 EXPOSE 8000
 
+# Sin HEALTHCHECK acá a propósito: esta misma imagen sirve dos comandos
+# distintos (servicio "backend" con uvicorn, servicio "scraper" con
+# main.py como CLI de una sola corrida) y un test fijo a /api/health
+# marcaría al scraper como "unhealthy" para siempre, porque ahí nunca hay
+# nada escuchando en el puerto 8000. El healthcheck real vive en
+# docker-compose.yml, donde sí se puede scopear al servicio "backend".
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

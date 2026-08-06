@@ -18,5 +18,27 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.conf /etc/nginx/conf.d/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+
+# nginx sin privilegios (§5.5 de task.md): el usuario "nginx" ya viene
+# creado en la imagen base, solo falta darle permiso de escritura sobre lo
+# que el proceso toca en runtime (cache, logs, el conf.d que copiamos como
+# root, y el pid file). listen 8080 en nginx.conf porque solo root puede
+# bindear puertos <1024 dentro del contenedor.
+RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d \
+    && touch /var/run/nginx.pid \
+    && chown nginx:nginx /var/run/nginx.pid
+
+USER nginx
+
+EXPOSE 8080
+
+# /healthz (nginx.conf) responde 200 sin depender de que el backend esté
+# arriba — es liveness del propio nginx, no readiness del stack completo.
+# 127.0.0.1 y no localhost: dentro del contenedor "localhost" resuelve a
+# ::1 (IPv6, ver /etc/hosts de la imagen base) pero nginx solo escucha en
+# 0.0.0.0:8080 (IPv4) — con "localhost" el healthcheck fallaba siempre con
+# "connection refused" aunque el servidor respondiera bien.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1

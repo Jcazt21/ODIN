@@ -14,6 +14,7 @@ from __future__ import annotations
 from analysis.base import AnalysisResult
 from auth import create_token
 from db.models import AnalyzeJob, Article
+from services import analyze_service
 
 
 def _auth_headers() -> dict[str, str]:
@@ -33,11 +34,7 @@ def _fake_analysis_result() -> AnalysisResult:
 
 
 class TestAnalyzeAlreadySaved:
-    def test_existing_url_returns_200_directly_no_job(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
-
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
-
+    def test_existing_url_returns_200_directly_no_job(self, api_client, sqlite_sessionmaker):
         session = sqlite_sessionmaker()
         session.add(
             Article(
@@ -63,11 +60,13 @@ class TestAnalyzeAlreadySaved:
 
 
 class TestAnalyzeNewUrlEnqueuesJob:
-    def _patch_pipeline(self, monkeypatch, api_module):
-        monkeypatch.setattr(api_module.url_guard, "validate_url", lambda url: url)
+    def _patch_pipeline(self, monkeypatch):
+        import url_guard
+
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
         monkeypatch.setattr(
-            api_module,
-            "_fetch_and_extract",
+            analyze_service,
+            "fetch_and_extract",
             lambda url: {
                 "title": "Título extraído",
                 "body": "cuerpo extraído",
@@ -77,15 +76,12 @@ class TestAnalyzeNewUrlEnqueuesJob:
                 "sitename": "diario_libre",
             },
         )
-        monkeypatch.setattr(api_module, "_analyze_safely", lambda title, body: _fake_analysis_result())
-        monkeypatch.setattr(api_module, "_arbitrate_ambiguous_persons", lambda result: None)
-        monkeypatch.setattr(api_module, "canonicalize_result", lambda result: None)
+        monkeypatch.setattr(analyze_service, "analyze_safely", lambda title, body: _fake_analysis_result())
+        monkeypatch.setattr(analyze_service, "arbitrate_ambiguous_persons", lambda result: None)
+        monkeypatch.setattr(analyze_service, "canonicalize_result", lambda result: None)
 
     def test_returns_202_with_job_id(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
-
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
-        self._patch_pipeline(monkeypatch, api_module)
+        self._patch_pipeline(monkeypatch)
 
         resp = api_client.post(
             "/api/analyze", json={"url": "https://diariolibre.com/nueva"}, headers=_auth_headers()
@@ -96,10 +92,7 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert body["status"] == "pending"
 
     def test_job_completes_and_result_is_available(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
-
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
-        self._patch_pipeline(monkeypatch, api_module)
+        self._patch_pipeline(monkeypatch)
 
         resp = api_client.post(
             "/api/analyze", json={"url": "https://diariolibre.com/nueva-2"}, headers=_auth_headers()
@@ -116,15 +109,14 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"]["main_topic"] == "elecciones"
 
     def test_job_failure_is_reported_not_raised(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
+        import url_guard
 
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
-        monkeypatch.setattr(api_module.url_guard, "validate_url", lambda url: url)
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
 
         def _boom(url):
             raise RuntimeError("la extracción falló")
 
-        monkeypatch.setattr(api_module, "_fetch_and_extract", _boom)
+        monkeypatch.setattr(analyze_service, "fetch_and_extract", _boom)
 
         resp = api_client.post(
             "/api/analyze", json={"url": "https://diariolibre.com/falla"}, headers=_auth_headers()
@@ -138,15 +130,13 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"] is None
 
     def test_invalid_url_never_creates_a_job(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
+        import url_guard
         from url_guard import UrlNotAllowed
-
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
 
         def _reject(url):
             raise UrlNotAllowed("dominio no permitido")
 
-        monkeypatch.setattr(api_module.url_guard, "validate_url", _reject)
+        monkeypatch.setattr(url_guard, "validate_url", _reject)
 
         resp = api_client.post(
             "/api/analyze", json={"url": "https://noallowed.example.com/x"}, headers=_auth_headers()
@@ -158,10 +148,7 @@ class TestAnalyzeNewUrlEnqueuesJob:
 
 
 class TestGetJob:
-    def test_unknown_job_returns_404(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
-
-        monkeypatch.setattr(api_module, "get_session", sqlite_sessionmaker)
+    def test_unknown_job_returns_404(self, api_client):
         resp = api_client.get("/api/jobs/does-not-exist", headers=_auth_headers())
         assert resp.status_code == 404
 

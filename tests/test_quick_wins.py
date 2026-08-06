@@ -170,6 +170,7 @@ class TestHealthCheck:
         from fastapi.testclient import TestClient
 
         import api as api_module
+        import api.deps as api_deps
 
         class _BrokenSession:
             def execute(self, *_args, **_kwargs):
@@ -178,7 +179,7 @@ class TestHealthCheck:
             def close(self):
                 pass
 
-        monkeypatch.setattr(api_module, "get_session", lambda: _BrokenSession())
+        monkeypatch.setattr(api_deps, "get_session", lambda: _BrokenSession())
         client = TestClient(api_module.app)
 
         resp = client.get("/api/health")

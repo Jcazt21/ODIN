@@ -91,38 +91,76 @@ def _groq_client():
     return _client
 
 
+def _friendly_groq_error(exc) -> str:
+    """Traduce un error HTTP de Groq (APIStatusError) a un mensaje en español
+    apto para mostrar tal cual en el UI — sin el JSON crudo de la API, que
+    trae jerga de facturación (TPM/TPD/tokens) que un usuario no técnico no
+    puede interpretar."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    inner = body.get("error") if isinstance(body.get("error"), dict) else {}
+    code = inner.get("code", "")
+    message = inner.get("message", "") or str(exc)
+
+    if exc.status_code == 429 and code == "rate_limit_exceeded":
+        import re
+
+        m = re.search(r"try again in ([0-9]+m)?([0-9.]+s)?", message)
+        wait = "".join(g for g in (m.group(1), m.group(2)) if g) if m else None
+        if "tokens per day" in message or "TPD" in message:
+            return (
+                "Se alcanzó el límite diario de análisis del servicio de IA. "
+                "Vuelve a intentarlo más tarde (el límite se restablece en 24h)."
+            )
+        return (
+            f"El servicio de IA está saturado por el momento — intenta de "
+            f"nuevo en {wait or 'unos minutos'}."
+        )
+    if exc.status_code == 413:
+        return "El artículo es demasiado largo para analizarlo en este momento. Intenta con otro."
+    return "El servicio de IA no pudo procesar este artículo. Intenta de nuevo más tarde."
+
+
 def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
-    response = _groq_client().chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.0,
-        # OJO: en Groq este tope NO es solo un cap sobre lo generado — se
-        # RESERVA contra el rate limit. El TPM del free tier (8.000) se compara
-        # contra prompt + max_completion_tokens, así que subirlo encarece cada
-        # request aunque el modelo no llegue a usarlo: con 6144 aquí, un
-        # artículo corto ya devolvía 413 (rate_limit_exceeded) antes de
-        # generar un solo token.
-        #
-        # El reparto de los 8.000 se movió hacia la SALIDA porque ahí es donde
-        # estaba fallando: con 2.500 el modelo cortaba a mitad del JSON
-        # (finish_reason="length"), mientras que la entrada entraba de sobra.
-        # Ahora ~3.150 fijos (system+schema) + ~1.000 de cuerpo
-        # (_MAX_BODY_CHARS) + 3.200 ≈ 7.350.
-        #
-        # Un truncado duele especialmente con este esquema:
-        # `overall_sentiment` es el ÚLTIMO campo (el orden va de evidencia a
-        # conclusión), así que se pierde justo la etiqueta global. El log de uso
-        # de abajo dice cuánto se consumió de verdad: ajustar con ese dato, no
-        # a ojo (estimar tokens como chars/4 ya falló una vez).
-        max_completion_tokens=3200,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "analysis", "schema": schema.model_json_schema()},
-        },
-    )
+    from groq import APIStatusError
+
+    try:
+        response = _groq_client().chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.0,
+            # OJO: en Groq este tope NO es solo un cap sobre lo generado — se
+            # RESERVA contra el rate limit. El TPM del free tier (8.000) se compara
+            # contra prompt + max_completion_tokens, así que subirlo encarece cada
+            # request aunque el modelo no llegue a usarlo: con 6144 aquí, un
+            # artículo corto ya devolvía 413 (rate_limit_exceeded) antes de
+            # generar un solo token.
+            #
+            # El reparto de los 8.000 se movió hacia la SALIDA porque ahí es donde
+            # estaba fallando: con 2.500 el modelo cortaba a mitad del JSON
+            # (finish_reason="length"), mientras que la entrada entraba de sobra.
+            # Ahora ~3.150 fijos (system+schema) + ~1.000 de cuerpo
+            # (_MAX_BODY_CHARS) + 3.200 ≈ 7.350.
+            #
+            # Un truncado duele especialmente con este esquema:
+            # `overall_sentiment` es el ÚLTIMO campo (el orden va de evidencia a
+            # conclusión), así que se pierde justo la etiqueta global. El log de uso
+            # de abajo dice cuánto se consumió de verdad: ajustar con ese dato, no
+            # a ojo (estimar tokens como chars/4 ya falló una vez). Con
+            # "confidence"/"confidence_reason" por entidad, un artículo con
+            # muchas entidades (10-15+) puede seguir truncándose dentro de este
+            # presupuesto — si eso vuelve a pasar, subir este número exige
+            # revisar el reparto del TPM de arriba, no solo el valor a ojo.
+            max_completion_tokens=3200,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "analysis", "schema": schema.model_json_schema()},
+            },
+        )
+    except APIStatusError as exc:
+        raise RuntimeError(_friendly_groq_error(exc)) from exc
     # Uso real, para poder ajustar _MAX_BODY_CHARS/max_completion_tokens con
     # datos en vez de estimando tokens a ojo (chars/4 se queda corto y fue lo
     # que llevó al 413 de arriba). `completion` dice cuánto de los 2500 se usó
@@ -137,7 +175,6 @@ def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
             getattr(usage, "total_tokens", "?"),
             response.choices[0].finish_reason,
         )
-
     raw = response.choices[0].message.content
     finish_reason = response.choices[0].finish_reason
     if not raw:

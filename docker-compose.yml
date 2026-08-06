@@ -19,6 +19,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Límites de recursos (§5.5 de task.md): sin esto un proceso descontrolado
+    # en cualquier servicio (fuga de memoria, query sin límite) puede agotar
+    # la RAM del host entero y tumbar todo lo demás. Techos generosos, no
+    # ajustados a punta de perfilar — el objetivo es un piso de contención,
+    # no tuning de producción.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   backend:
     build:
@@ -41,6 +51,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    # spaCy + pysentimiento + torch cargados en memoria de proceso (README
+    # §Fondo Plasma... perdón, §Modelos): el techo más alto del stack.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3G
 
   frontend:
     build:
@@ -50,7 +67,21 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "3000:80"
+      - "3000:8080"
+    healthcheck:
+      # 127.0.0.1 y no localhost: ver comentario del mismo HEALTHCHECK en
+      # frontend/Dockerfile — "localhost" resuelve a ::1 dentro de la imagen
+      # base de nginx y el server solo escucha en 0.0.0.0:8080.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
   scraper:
     build:
@@ -66,6 +97,11 @@ services:
     volumes:
       - hf_cache:/home/appuser/.cache/huggingface
     command: ["python", "main.py"]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3G
 
 volumes:
   pgdata:

@@ -29,13 +29,14 @@ dev = [
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-# Layout plano: módulos sueltos en la raíz + tres paquetes. Se declara explícito
-# porque el autodescubrimiento de setuptools no sabe qué hacer con esta mezcla.
+# Layout plano: módulos sueltos en la raíz + varios paquetes. Se declara
+# explícito porque el autodescubrimiento de setuptools no sabe qué hacer con
+# esta mezcla.
 [tool.setuptools]
-py-modules = ["api", "auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard"]
+py-modules = ["auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard"]
 
 [tool.setuptools.packages.find]
-include = ["analysis*", "db*", "scrapers*"]
+include = ["analysis*", "api*", "db*", "scrapers*", "services*"]
 
 # ── ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
@@ -66,8 +67,8 @@ ignore = [
 [tool.mypy]
 python_version = "3.13"
 files = [
-    "api.py", "auth.py", "config.py", "main.py", "pipeline.py",
-    "report.py", "scrape_jobs.py", "url_guard.py", "analysis", "db", "scrapers", "scripts",
+    "api", "auth.py", "config.py", "main.py", "pipeline.py",
+    "report.py", "scrape_jobs.py", "url_guard.py", "analysis", "db", "scrapers", "scripts", "services",
     "alembic/env.py",
 ]
 exclude = ["^\\.venv/", "^frontend/", "^alembic/versions/"]

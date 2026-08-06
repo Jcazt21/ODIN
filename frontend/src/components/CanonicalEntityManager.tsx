@@ -1,17 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Pencil, Check, X, Search, ChevronDown, ChevronRight, GitMerge } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
 import { ENTITY_TYPE_LABELS } from "@/lib/labels"
 import {
-  listCanonicalEntities,
-  getCanonicalEntity,
-  updateCanonicalEntity,
-  mergeCanonicalEntities,
-  OdinApiError,
-  type CanonicalEntity,
-  type CanonicalEntityDetail,
-} from "@/lib/odin-api"
+  useCanonicalEntities,
+  useCanonicalEntity,
+  useUpdateCanonicalEntity,
+  useMergeCanonicalEntities,
+} from "@/lib/queries/canonical-entities"
+import { OdinApiError, type CanonicalEntity } from "@/lib/odin-api"
 
 function formatDate(iso: string | null) {
   if (!iso) return "—"
@@ -30,13 +28,12 @@ function MergePanel({
 }: {
   entity: CanonicalEntity
   candidates: CanonicalEntity[]
-  onMerged: (mergedAwayId: number) => void
+  onMerged: () => void
   onCancel: () => void
 }) {
   const [q, setQ] = useState("")
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const confirm = useConfirm()
+  const mergeMutation = useMergeCanonicalEntities()
 
   const matches = candidates
     .filter((c) => c.id !== entity.id && c.type === entity.type)
@@ -51,16 +48,15 @@ function MergePanel({
       danger: true,
     })
     if (!ok) return
-    setBusy(true)
-    setErr(null)
     try {
-      await mergeCanonicalEntities(target.id, entity.id)
-      onMerged(entity.id)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error fusionando.")
-      setBusy(false)
+      await mergeMutation.mutateAsync({ targetId: target.id, sourceId: entity.id })
+      onMerged()
+    } catch {
+      // el error queda en mergeMutation.error, mostrado abajo
     }
   }
+
+  const err = mergeMutation.error instanceof OdinApiError ? mergeMutation.error.message : mergeMutation.error ? "Error fusionando." : null
 
   return (
     <div className="rounded-[9px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
@@ -93,7 +89,7 @@ function MergePanel({
             <button
               key={c.id}
               type="button"
-              disabled={busy}
+              disabled={mergeMutation.isPending}
               onClick={() => handleMerge(c)}
               className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm disabled:opacity-50"
               style={{ background: "transparent" }}
@@ -111,7 +107,7 @@ function MergePanel({
       <div className="mt-2 flex justify-end">
         <button
           type="button"
-          disabled={busy}
+          disabled={mergeMutation.isPending}
           onClick={onCancel}
           className="rounded-[6px] px-2.5 py-1 text-xs"
           style={{ color: "var(--muted-foreground)" }}
@@ -130,61 +126,38 @@ function MergePanel({
 function CanonicalEntityRow({
   entity,
   allEntities,
-  onUpdated,
-  onMerged,
 }: {
   entity: CanonicalEntity
   allEntities: CanonicalEntity[]
-  onUpdated: (updated: CanonicalEntity) => void
-  onMerged: (mergedAwayId: number) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [merging, setMerging] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [form, setForm] = useState({ name: entity.name, description: entity.description ?? "" })
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [detail, setDetail] = useState<CanonicalEntityDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
+
+  const updateMutation = useUpdateCanonicalEntity()
+  const { data: detail, isLoading: detailLoading } = useCanonicalEntity(entity.id, expanded)
 
   async function handleSave() {
-    setBusy(true)
-    setErr(null)
     try {
-      const updated = await updateCanonicalEntity(entity.id, {
-        name: form.name.trim(),
-        description: form.description.trim(),
+      await updateMutation.mutateAsync({
+        id: entity.id,
+        payload: { name: form.name.trim(), description: form.description.trim() },
       })
-      onUpdated({ ...updated, article_count: entity.article_count, total_mentions: entity.total_mentions })
       setEditing(false)
-    } catch (e) {
-      setErr(e instanceof OdinApiError ? e.message : "Error guardando.")
-    } finally {
-      setBusy(false)
+    } catch {
+      // el error queda en updateMutation.error, mostrado abajo
     }
   }
 
-  async function handleExpand() {
-    const next = !expanded
-    setExpanded(next)
-    if (next && !detail) {
-      setDetailLoading(true)
-      try {
-        setDetail(await getCanonicalEntity(entity.id))
-      } catch {
-        // silencioso: el detalle es progresivo, no crítico para la fila
-      } finally {
-        setDetailLoading(false)
-      }
-    }
-  }
+  const err = updateMutation.error instanceof OdinApiError ? updateMutation.error.message : updateMutation.error ? "Error guardando." : null
 
   return (
     <div className="border-b" style={{ borderColor: "var(--border)" }}>
       <div className="flex items-center gap-3 px-5 py-3.5">
         <button
           type="button"
-          onClick={handleExpand}
+          onClick={() => setExpanded((v) => !v)}
           className="shrink-0 rounded p-1"
           style={{ color: "var(--muted-foreground)" }}
           aria-label={expanded ? "Contraer" : "Expandir"}
@@ -215,14 +188,14 @@ function CanonicalEntityRow({
                   {err}
                 </span>
               )}
-              <button type="button" disabled={busy} onClick={handleSave} aria-label="Guardar" className="rounded p-1.5" style={{ color: "var(--muted-foreground)" }}>
+              <button type="button" disabled={updateMutation.isPending} onClick={handleSave} aria-label="Guardar" className="rounded p-1.5" style={{ color: "var(--muted-foreground)" }}>
                 <Check className="size-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setEditing(false)
-                  setErr(null)
+                  updateMutation.reset()
                 }}
                 aria-label="Cancelar"
                 className="rounded p-1.5"
@@ -291,10 +264,7 @@ function CanonicalEntityRow({
             entity={entity}
             candidates={allEntities}
             onCancel={() => setMerging(false)}
-            onMerged={(id) => {
-              setMerging(false)
-              onMerged(id)
-            }}
+            onMerged={() => setMerging(false)}
           />
         </div>
       )}
@@ -332,53 +302,31 @@ function CanonicalEntityRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function CanonicalEntityManager() {
-  const [items, setItems] = useState<CanonicalEntity[]>([])
   const [q, setQ] = useState("")
+  const [debouncedQ, setDebouncedQ] = useState("")
   const [typeFilter, setTypeFilter] = useState<"" | "ORG" | "PERSON">("")
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async (query?: string, type?: "" | "ORG" | "PERSON") => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await listCanonicalEntities({
-        q: query || undefined,
-        type: (type || undefined) as "ORG" | "PERSON" | undefined,
-        limit: 200,
-      })
-      setItems(data.items)
-      setTotal(data.total)
-    } catch (e) {
-      setError(e instanceof OdinApiError ? e.message : "No se pudo conectar con la API.")
-    } finally {
-      setLoading(false)
-    }
-  }, [])
 
   const isFirstLoad = useRef(true)
   useEffect(() => {
     if (isFirstLoad.current) {
       isFirstLoad.current = false
-      load(q, typeFilter)
+      setDebouncedQ(q)
       return
     }
-    const t = setTimeout(() => load(q, typeFilter), 300)
+    const t = setTimeout(() => setDebouncedQ(q), 300)
     return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, typeFilter])
+  }, [q])
 
-  function handleUpdated(updated: CanonicalEntity) {
-    setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)))
-  }
+  const { data, isLoading, isFetching, error } = useCanonicalEntities({
+    q: debouncedQ || undefined,
+    type: typeFilter || undefined,
+    limit: 200,
+  })
 
-  function handleMerged(mergedAwayId: number) {
-    // Los conteos del destino cambiaron (ganó las menciones de la fusionada):
-    // más simple y correcto recargar que intentar sumarlos a mano en cliente.
-    setItems((prev) => prev.filter((it) => it.id !== mergedAwayId))
-    load(q, typeFilter)
-  }
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
+  const loading = isLoading || isFetching
+  const errorMessage = error instanceof OdinApiError ? error.message : error ? "No se pudo conectar con la API." : null
 
   return (
     <div
@@ -417,13 +365,13 @@ export function CanonicalEntityManager() {
         </div>
       </div>
 
-      {error && (
+      {errorMessage && (
         <div role="alert" className="m-4 rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          {error}
+          {errorMessage}
         </div>
       )}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <div className="space-y-2 p-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-9 w-full rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
@@ -436,13 +384,7 @@ export function CanonicalEntityManager() {
       ) : (
         <div>
           {items.map((entity) => (
-            <CanonicalEntityRow
-              key={entity.id}
-              entity={entity}
-              allEntities={items}
-              onUpdated={handleUpdated}
-              onMerged={handleMerged}
-            />
+            <CanonicalEntityRow key={entity.id} entity={entity} allEntities={items} />
           ))}
         </div>
       )}
