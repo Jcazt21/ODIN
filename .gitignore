@@ -1,14 +1,38 @@
+# --- Entorno y secretos ---
 .venv/
+.env
+
+# --- Python ---
 __pycache__/
 *.pyc
-.env
+*.egg-info/
+
+# --- Caches de herramientas (se regeneran solas) ---
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# --- Base de datos local y respaldos ---
+# El esquema vive en alembic/ y la semilla en db/seed_aliases.py: la BD se
+# reconstruye desde cero, no se versiona. Los patrones de respaldo cubren el
+# hueco por el que se colaban los .bak con fecha (no terminan en .db).
 *.db
 *.sqlite3
+*.bak-*
+*-backup-*.sql
+backups/
+
+# --- Scratch local ---
+temp/
+
+# --- Frontend ---
+frontend/node_modules/
+frontend/dist/
+/node_modules/
+
+# --- Sistema operativo ---
 .DS_Store
 Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
-frontend/node_modules/
-frontend/dist/
-/node_modules/

@@ -38,12 +38,26 @@ Requisitos:
 """
 from __future__ import annotations
 
+import logging
+
 from pydantic import BaseModel
 
 from analysis.base import AnalysisResult
-from analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _norm_sentiment
+from analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _result_from_llm
 
-_MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo, igual que Gemini
+# 4.000 y no 16.000 (el valor de Gemini): en Groq el límite que muerde no es el
+# coste sino el TPM del free tier — 8.000 tokens POR REQUEST incluido el cupo de
+# salida (ver _call_groq). Se recorta la ENTRADA para poder darle más cupo a la
+# salida, que es donde el análisis se estaba truncando.
+#
+# 4.000 caracteres no es una poda agresiva sobre este corpus: la mediana de los
+# artículos guardados es ~2.700 (el p90, ~4.200), así que la mayoría entra
+# entera; y el recorte es por la cola, de modo que titular y lead —donde vive
+# el encuadre— siempre llegan completos. Si Groq falla igual, el fallback a
+# Gemini (analysis/fallback_analyzer.py) analiza el artículo SIN este recorte.
+_MAX_BODY_CHARS = 4_000
+
+log = logging.getLogger("odin.groq_analyzer")
 
 # Versión del prompt/esquema de salida (§2.1 de task.md): GroqAnalyzer y
 # HybridAnalyzer comparten el mismo prompt/schema (_SYSTEM/_Analysis) de
@@ -52,7 +66,7 @@ _MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo, igual que Gemini
 # idéntico. Aun así, sube en paralelo a gemini_analyzer._PROMPT_VERSION cada
 # vez que cambia el CONTENIDO de _SYSTEM (p.ej. el glosario de
 # analysis/sentiment_lexicon.py), porque ese texto sí es compartido.
-_GROQ_ANALYZER_PROMPT_VERSION = "4"
+_GROQ_ANALYZER_PROMPT_VERSION = "5"
 
 
 _DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -85,18 +99,45 @@ def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
             {"role": "user", "content": prompt},
         ],
         temperature=0.0,
-        # 4096 y no 2048: con "confidence"/"confidence_reason" por entidad
-        # (ver _Entity en gemini_analyzer.py) un artículo con ~10-15
-        # entidades ya no cabe en 2048 — el modelo corta a mitad del JSON
-        # (finish_reason="length") y Pydantic falla con "Field required" en
-        # los campos de encuadre, que van al final del schema y nunca
-        # llegan a escribirse.
-        max_completion_tokens=4096,
+        # OJO: en Groq este tope NO es solo un cap sobre lo generado — se
+        # RESERVA contra el rate limit. El TPM del free tier (8.000) se compara
+        # contra prompt + max_completion_tokens, así que subirlo encarece cada
+        # request aunque el modelo no llegue a usarlo: con 6144 aquí, un
+        # artículo corto ya devolvía 413 (rate_limit_exceeded) antes de
+        # generar un solo token.
+        #
+        # El reparto de los 8.000 se movió hacia la SALIDA porque ahí es donde
+        # estaba fallando: con 2.500 el modelo cortaba a mitad del JSON
+        # (finish_reason="length"), mientras que la entrada entraba de sobra.
+        # Ahora ~3.150 fijos (system+schema) + ~1.000 de cuerpo
+        # (_MAX_BODY_CHARS) + 3.200 ≈ 7.350.
+        #
+        # Un truncado duele especialmente con este esquema:
+        # `overall_sentiment` es el ÚLTIMO campo (el orden va de evidencia a
+        # conclusión), así que se pierde justo la etiqueta global. El log de uso
+        # de abajo dice cuánto se consumió de verdad: ajustar con ese dato, no
+        # a ojo (estimar tokens como chars/4 ya falló una vez).
+        max_completion_tokens=3200,
         response_format={
             "type": "json_schema",
             "json_schema": {"name": "analysis", "schema": schema.model_json_schema()},
         },
     )
+    # Uso real, para poder ajustar _MAX_BODY_CHARS/max_completion_tokens con
+    # datos en vez de estimando tokens a ojo (chars/4 se queda corto y fue lo
+    # que llevó al 413 de arriba). `completion` dice cuánto de los 2500 se usó
+    # de verdad; `total` dice cuán cerca del TPM quedó el request.
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        log.info(
+            "groq_usage model=%s prompt=%s completion=%s total=%s finish=%s",
+            model,
+            getattr(usage, "prompt_tokens", "?"),
+            getattr(usage, "completion_tokens", "?"),
+            getattr(usage, "total_tokens", "?"),
+            response.choices[0].finish_reason,
+        )
+
     raw = response.choices[0].message.content
     finish_reason = response.choices[0].finish_reason
     if not raw:
@@ -121,21 +162,7 @@ def _analyze_full(model: str, title: str, body: str) -> AnalysisResult:
 
     entities = [_entity_from_llm(e) for e in data.entities]
 
-    return AnalysisResult(
-        main_topic=data.main_topic.strip() or None,
-        topic_keywords=[k.strip() for k in data.topic_keywords if k.strip()],
-        overall_sentiment=_norm_sentiment(data.overall_sentiment),
-        sentiment_score=None,
-        entities=entities,
-        framing=data.framing,
-        headline_intent=data.headline_intent,
-        lead_orientation=data.lead_orientation,
-        dominant_actor=data.dominant_actor.strip() or None,
-        source_quality=data.source_quality,
-        has_hard_data=data.has_hard_data,
-        blamed_actor=data.blamed_actor.strip() or None,
-        credited_actor=data.credited_actor.strip() or None,
-    )
+    return _result_from_llm(data, entities)
 
 
 class GroqAnalyzer:

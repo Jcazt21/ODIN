@@ -25,6 +25,12 @@ class TestNormalizeKey:
     def test_lowercases(self):
         assert alias_store.normalize_key("MINERD") == alias_store.normalize_key("minerd")
 
+    def test_strips_periods_in_acronym(self):
+        assert alias_store.normalize_key("P.R.M.") == alias_store.normalize_key("PRM")
+
+    def test_normalizes_hyphens_to_spaces(self):
+        assert alias_store.normalize_key("Jean-Claude") == alias_store.normalize_key("Jean Claude")
+
 
 class TestResolve:
     def test_matches_unaccented_query_against_accented_alias(self, monkeypatch, sqlite_sessionmaker):
@@ -50,3 +56,23 @@ class TestResolve:
         alias_store.invalidate_cache()
 
         assert alias_store.resolve("Policia Nacional") == ("Policía Nacional", "ORG")
+
+
+class TestLoadSeed:
+    def test_load_seed_and_resolve_new_entities(self, monkeypatch, sqlite_sessionmaker):
+        monkeypatch.setattr(alias_store, "get_session", sqlite_sessionmaker)
+        monkeypatch.setattr(alias_store, "init_db", lambda: None)
+        alias_store.invalidate_cache()
+
+        inserted = alias_store.load_seed()
+        assert inserted > 50
+
+        # Verificar algunas entidades clave recién agregadas
+        assert alias_store.resolve("PEPCA") == ("Procuraduría Especializada de Persecución de la Corrupción Administrativa", "ORG")
+        assert alias_store.resolve("INDOMET") == ("Instituto Dominicano de Meteorología", "ORG")
+        assert alias_store.resolve("POLITUR") == ("Dirección Central de Policía de Turismo", "ORG")
+        assert alias_store.resolve("SUPERATE") == ("Programa Supérate", "ORG")
+        assert alias_store.resolve("ADN") == ("Ayuntamiento del Distrito Nacional", "ORG")
+        assert alias_store.resolve("Faride") == ("Faride Raful", "PERSON")
+        assert alias_store.resolve("Guido") == ("Guido Gómez Mazara", "PERSON")
+        assert alias_store.resolve("Hipólito") == ("Hipólito Mejía", "PERSON")

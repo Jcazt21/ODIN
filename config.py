@@ -78,7 +78,12 @@ class Settings:
     # cada análisis (puede estar ahí para el CLI, o simplemente olvidada en el
     # .env). Una credencial no debe ser un interruptor de comportamiento
     # facturable. Ver CLAUDE.md y task.md §3.2.
-    analyzer: str = _choice("ODIN_ANALYZER", "local", ("local", "gemini", "groq", "hybrid"))
+    # "groq+gemini" es el único valor que puede facturar SIN pedirlo de frente:
+    # corre Groq (gratis) y solo cae a Gemini cuando Groq falla — el gasto es la
+    # excepción, pero existe. Se elige igual de explícitamente que "gemini".
+    analyzer: str = _choice(
+        "ODIN_ANALYZER", "local", ("local", "gemini", "groq", "hybrid", "groq+gemini")
+    )
 
     # Árbitro de entidades ambiguas: una llamada EXTRA y facturada a Gemini por
     # cada análisis con personas dudosas, aparte del motor principal. Opt-in
@@ -87,10 +92,13 @@ class Settings:
 
     # --- API: descarga de URLs del usuario (anti-SSRF, ver url_guard.py) ---
     # Allowlist de medios. Se aceptan también los subdominios de cada uno.
+    # El default cubre los medios que el proyecto ya scrapea (ver
+    # `scrapers/SCRAPERS`): si hay un scraper para una fuente, pegar a mano un
+    # link suyo en /api/analyze debe funcionar sin configurar nada extra.
     allowed_domains: tuple[str, ...] = _csv(
         "ODIN_ALLOWED_DOMAINS",
         "listindiario.com,diariolibre.com,elnacional.com.do,hoy.com.do,"
-        "elcaribe.com.do,almomento.net,eldia.com.do,n.com.do",
+        "elcaribe.com.do,almomento.net,eldia.com.do,n.com.do,acento.com.do",
     )
     max_url_length: int = int(os.getenv("ODIN_MAX_URL_LENGTH", "2048"))
     max_download_bytes: int = int(os.getenv("ODIN_MAX_DOWNLOAD_BYTES", str(5 * 1024 * 1024)))

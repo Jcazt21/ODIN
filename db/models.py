@@ -84,6 +84,23 @@ class Article(Base):
     source_quality: Mapped[str | None] = mapped_column(String(30))    # citas_directas | testimonios_anonimos | ...
     has_hard_data: Mapped[bool | None] = mapped_column(Boolean)       # ¿hay cifras verificables?
 
+    # --- Capas de sentimiento (también solo LLM; NULL con LocalAnalyzer) ---
+    # `overall_sentiment` dice cómo queda la nota; esto dice de QUIÉN es esa
+    # carga: los hechos que se reportan, el discurso que se cita, o la voz del
+    # propio medio. Se guardan aparte porque son la señal que permite separar
+    # "el medio critica" de "el medio transmite una crítica ajena".
+    sentiment_basis: Mapped[str | None] = mapped_column(String(20))   # hechos_reportados | discurso_citado | mixto
+    facts_sentiment: Mapped[str | None] = mapped_column(String(10))   # POS | NEG | NEU (hechos reportados)
+    quoted_sentiment: Mapped[str | None] = mapped_column(String(10))  # POS | NEG | NEU (discurso citado)
+    media_stance: Mapped[str | None] = mapped_column(String(30))      # neutra_transmisiva | critica | favorable | editorializante
+    media_stance_evidence: Mapped[str | None] = mapped_column(String(500))  # señal textual que sustenta media_stance
+    overall_sentiment_reason: Mapped[str | None] = mapped_column(String(800))  # justificación de overall_sentiment
+    # Señales acumulables separadas por ", " (mismo idioma que topic_keywords;
+    # 0..N por artículo, a diferencia de headline_intent/source_quality que
+    # eligen una sola categoría): alarmismo | sensacionalismo |
+    # dato_no_verificable | posible_ironia
+    content_flags: Mapped[str | None] = mapped_column(String(200))
+
     # --- Actores del encuadre, como identidad canónica (no string suelto) ---
     # Nula cuando el análisis no señala actor, o cuando el nombre no resolvió
     # a ninguna entidad canónica de las ya vinculadas a este artículo.

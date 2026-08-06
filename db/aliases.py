@@ -40,12 +40,18 @@ _cache: dict[str, tuple[str, str]] | None = None  # None = no cargado aún
 
 
 def normalize_key(text: str) -> str:
-    """Clave de comparación para alias: minúsculas y sin acentos, para que
-    "Policia" y "Policía" (o "MINERD"/"Minerd") generen la misma clave."""
-    text = text.strip().lower()
-    return "".join(
+    """Clave de comparación para alias: minúsculas, sin acentos, sin puntos ni
+    guiones, para que "Policia" y "Policía" (o "MINERD"/"Minerd", o
+    "P.R.M."/"PRM") generen la misma clave.
+
+    Mismo criterio que `analysis/text_norm.norm_key` (guiones -> espacio,
+    puntos fuera): una sigla escrita "P.R.M." debe resolver igual que "PRM".
+    """
+    text = text.replace("-", " ").replace(".", "").strip().lower()
+    normalized = "".join(
         c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
     )
+    return " ".join(normalized.split())
 
 
 def _build_cache() -> dict[str, tuple[str, str]]:

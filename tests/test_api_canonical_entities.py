@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from analysis.base import ANALYSIS_SCHEMA_VERSION
 from auth import create_token
 from db.models import Article, CanonicalEntity, Entity
 
@@ -321,5 +322,9 @@ class TestSaveArticleLinksCanonicalEntity:
         assert body["analyzer_name"] == "local"
         assert body["analyzer_model"]
         assert body["analyzer_version"]
-        assert body["analysis_schema_version"] == 1
+        # Contra la constante, no contra un literal: lo que se prueba es que el
+        # guardado ESTAMPA la versión del esquema, no cuál es su valor hoy —
+        # con un literal, cada bump de ANALYSIS_SCHEMA_VERSION rompe el test
+        # sin que haya nada roto (mismo criterio que tests/test_pipeline.py).
+        assert body["analysis_schema_version"] == ANALYSIS_SCHEMA_VERSION
         assert body["analyzed_at"] is not None

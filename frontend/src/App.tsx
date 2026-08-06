@@ -6,7 +6,7 @@ import { EntitiesCard } from "@/components/EntitiesCard"
 import { AliasManager } from "@/components/AliasManager"
 import { CanonicalEntityManager } from "@/components/CanonicalEntityManager"
 import { ReportsList } from "@/components/ReportsList"
-import { ScrapeTab } from "@/components/ScrapeTab"
+// import { ScrapeTab } from "@/components/ScrapeTab" // tab "Scraper" deshabilitada por ahora, ver App.tsx
 import { LoginScreen } from "@/components/LoginScreen"
 import { DialogProvider } from "@/lib/dialog"
 import {
@@ -39,10 +39,10 @@ const NAV_ITEMS = [
   { label: "Reportes", tab: "reports" },
   { label: "Entidades", tab: "entities" },
   { label: "Siglas", tab: "aliases" },
-  { label: "Scraper", tab: "scrape" },
+  // { label: "Scraper", tab: "scrape" }, // tab deshabilitada por ahora
 ]
 
-const TABS = ["analyze", "reports", "entities", "aliases", "scrape"] as const
+const TABS = ["analyze", "reports", "entities", "aliases" /* , "scrape" */] as const
 type Tab = (typeof TABS)[number]
 
 function isTab(value: string | null): value is Tab {
@@ -376,7 +376,7 @@ function Workspace({ onLogout, theme, onToggleTheme }: WorkspaceProps) {
           {tab === "reports" && <ReportsList />}
           {tab === "entities" && <CanonicalEntityManager />}
           {tab === "aliases" && <AliasManager />}
-          {tab === "scrape" && <ScrapeTab />}
+          {/* {tab === "scrape" && <ScrapeTab />} tab deshabilitada por ahora */}
         </main>
       </div>
     </div>

@@ -28,6 +28,7 @@ import logging
 import socket
 from urllib.parse import urljoin, urlsplit
 
+import charset_normalizer  # dependencia de requests, ver _decode_html
 import requests
 
 from config import settings
@@ -157,6 +158,55 @@ def _content_type_allowed(header: str | None) -> bool:
     return mime in _ALLOWED_CONTENT_TYPES
 
 
+def _charset_from_content_type(header: str | None) -> str | None:
+    """Charset DECLARADO explícitamente en el header, o None.
+
+    A propósito no usa `resp.encoding`: cuando el header no trae charset,
+    `requests` lo rellena con ISO-8859-1 (el default del RFC 2616) en vez de
+    dejarlo vacío. Eso hace indistinguible "el sitio dice que es latin-1" de
+    "el sitio no dijo nada", y era la causa del mojibake — ver `_decode_html`.
+    """
+    if not header:
+        return None
+    for part in header.split(";")[1:]:
+        key, _, value = part.partition("=")
+        if key.strip().lower() == "charset":
+            return value.strip().strip("\"'") or None
+    return None
+
+
+def _decode_html(raw: bytes, resp: requests.Response) -> str:
+    """Decodifica el HTML respetando el charset real de la página.
+
+    El bug que esto arregla: sin charset en el header, `requests` asume
+    ISO-8859-1 aunque el cuerpo sea UTF-8 (p. ej. acento.com.do), y los
+    acentos llegan mojibake ("versiÃ³n" por "versión", "âmentiraâ" por las
+    comillas tipográficas). `scrapers/base.py` ya lo resolvía para el crawler
+    con `apparent_encoding`; aquí no se puede usar esa propiedad porque leería
+    `resp.content` entero y anularía el tope de bytes que aplica
+    `_read_capped`, así que la detección se hace sobre los bytes ya leídos.
+
+    Orden: charset declarado > UTF-8 estricto > detección por contenido. El
+    intento de UTF-8 estricto va antes que la detección estadística porque
+    UTF-8 se autovalida: un texto latin-1 casi nunca decodifica como UTF-8
+    válido, así que un acierto aquí es señal fuerte, no una probabilidad.
+    """
+    charset = _charset_from_content_type(resp.headers.get("Content-Type"))
+    if charset:
+        try:
+            return raw.decode(charset, errors="replace")
+        except LookupError:  # charset inventado o mal escrito por el sitio
+            log.warning("charset desconocido %r; se detecta por contenido", charset)
+
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+
+    detected = charset_normalizer.from_bytes(raw).best()
+    return raw.decode(detected.encoding if detected else "iso-8859-1", errors="replace")
+
+
 def _read_capped(resp: requests.Response, max_bytes: int) -> str:
     """Lee el cuerpo cortando en max_bytes, sin cargar de más en memoria."""
     declared = resp.headers.get("Content-Length")
@@ -171,7 +221,7 @@ def _read_capped(resp: requests.Response, max_bytes: int) -> str:
             raise UrlNotAllowed("La página es demasiado grande.")
         chunks.append(chunk)
 
-    return b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
+    return _decode_html(b"".join(chunks), resp)
 
 
 def fetch_html(url: str, *, session: requests.Session | None = None) -> str:

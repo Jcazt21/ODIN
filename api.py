@@ -162,6 +162,15 @@ if _IS_GEMINI_ANALYZER:
         "de Gemini. Usa ODIN_ANALYZER=local para el motor gratuito."
     )
     _analyzer = GeminiAnalyzer()
+elif settings.analyzer == "groq+gemini":
+    from analysis.fallback_analyzer import GroqWithGeminiFallback
+
+    log.warning(
+        "ODIN_ANALYZER=groq+gemini — GroqAnalyzer (gratis) primero; si falla "
+        "(rate limit, respuesta truncada, error de red) reintenta con Gemini, "
+        "que es una llamada FACTURADA. El linaje guardado dice cuál respondió."
+    )
+    _analyzer = GroqWithGeminiFallback()
 elif settings.analyzer == "groq":
     # Import perezoso: sin esto, correr en modo local exigiría el paquete groq.
     from analysis.groq_analyzer import GroqAnalyzer
@@ -222,6 +231,13 @@ class SaveArticleRequest(BaseModel):
     has_hard_data: bool | None = None
     blamed_actor: str | None = None
     credited_actor: str | None = None
+    sentiment_basis: str | None = None
+    facts_sentiment: str | None = None
+    quoted_sentiment: str | None = None
+    media_stance: str | None = None
+    media_stance_evidence: str | None = None
+    overall_sentiment_reason: str | None = None
+    content_flags: str | None = None
     entities: list[EntityPayload] = []
 
 
@@ -347,6 +363,15 @@ class ArticleDetail(_ResponseModel):
     has_hard_data: bool | None = None
     blamed_actor: str | None = None
     credited_actor: str | None = None
+    # Capas de sentimiento: de quién es la carga (hechos reportados / discurso
+    # citado / voz del medio) y por qué se etiquetó así. NULL con LocalAnalyzer.
+    sentiment_basis: str | None = None
+    facts_sentiment: str | None = None
+    quoted_sentiment: str | None = None
+    media_stance: str | None = None
+    media_stance_evidence: str | None = None
+    overall_sentiment_reason: str | None = None
+    content_flags: str | None = None  # separados por ", " (igual que topic_keywords)
     analyzer_name: str | None = None
     analyzer_model: str | None = None
     analyzer_version: str | None = None
@@ -549,6 +574,13 @@ def _run_analyze_job(job_id: str, url: str) -> None:
                 has_hard_data=result.has_hard_data,
                 blamed_actor=result.blamed_actor,
                 credited_actor=result.credited_actor,
+                sentiment_basis=result.sentiment_basis,
+                facts_sentiment=result.facts_sentiment,
+                quoted_sentiment=result.quoted_sentiment,
+                media_stance=result.media_stance,
+                media_stance_evidence=result.media_stance_evidence,
+                overall_sentiment_reason=result.overall_sentiment_reason,
+                content_flags=", ".join(result.content_flags) or None,
                 analyzer_name=_analyzer.name,
                 analyzer_model=_analyzer.model,
                 analyzer_version=_analyzer.version,
@@ -1382,6 +1414,13 @@ def save_article(req: SaveArticleRequest):
             lead_orientation=req.lead_orientation,
             source_quality=req.source_quality,
             has_hard_data=req.has_hard_data,
+            sentiment_basis=req.sentiment_basis,
+            facts_sentiment=req.facts_sentiment,
+            quoted_sentiment=req.quoted_sentiment,
+            media_stance=req.media_stance,
+            media_stance_evidence=req.media_stance_evidence,
+            overall_sentiment_reason=req.overall_sentiment_reason,
+            content_flags=req.content_flags,
             analyzer_name=_analyzer.name,
             analyzer_model=_analyzer.model,
             analyzer_version=_analyzer.version,
@@ -1487,6 +1526,13 @@ def _serialize(article: Article, already_saved: bool) -> ArticleDetail:
         has_hard_data=article.has_hard_data,
         blamed_actor=article.blamed_actor.name if article.blamed_actor else None,
         credited_actor=article.credited_actor.name if article.credited_actor else None,
+        sentiment_basis=article.sentiment_basis,
+        facts_sentiment=article.facts_sentiment,
+        quoted_sentiment=article.quoted_sentiment,
+        media_stance=article.media_stance,
+        media_stance_evidence=article.media_stance_evidence,
+        overall_sentiment_reason=article.overall_sentiment_reason,
+        content_flags=article.content_flags,
         analyzer_name=article.analyzer_name,
         analyzer_model=article.analyzer_model,
         analyzer_version=article.analyzer_version,

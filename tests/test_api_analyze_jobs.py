@@ -11,6 +11,7 @@ ya corrió y quedó en su estado final. Sin red, sin spaCy/pysentimiento/Gemini:
 """
 from __future__ import annotations
 
+from analysis.base import AnalysisResult
 from auth import create_token
 from db.models import AnalyzeJob, Article
 
@@ -20,20 +21,15 @@ def _auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-class _FakeAnalysisResult:
-    main_topic = "elecciones"
-    topic_keywords: list[str] = []
-    overall_sentiment = "NEU"
-    sentiment_score = 0.5
-    framing = None
-    headline_intent = None
-    lead_orientation = None
-    dominant_actor = None
-    source_quality = None
-    has_hard_data = None
-    blamed_actor = None
-    credited_actor = None
-    entities: list = []
+def _fake_analysis_result() -> AnalysisResult:
+    """Doble del análisis, construido con el `AnalysisResult` REAL.
+
+    Antes era una clase aparte que redeclaraba a mano cada atributo; cada campo
+    nuevo del análisis había que acordarse de copiarlo aquí, y si no, el job
+    fallaba con AttributeError en un test que no tenía nada que ver con ese
+    campo. Usando el dataclass real, los campos nuevos llegan con su valor por
+    defecto y el doble no puede volver a quedarse atrás."""
+    return AnalysisResult(main_topic="elecciones", overall_sentiment="NEU", sentiment_score=0.5)
 
 
 class TestAnalyzeAlreadySaved:
@@ -81,7 +77,7 @@ class TestAnalyzeNewUrlEnqueuesJob:
                 "sitename": "diario_libre",
             },
         )
-        monkeypatch.setattr(api_module, "_analyze_safely", lambda title, body: _FakeAnalysisResult())
+        monkeypatch.setattr(api_module, "_analyze_safely", lambda title, body: _fake_analysis_result())
         monkeypatch.setattr(api_module, "_arbitrate_ambiguous_persons", lambda result: None)
         monkeypatch.setattr(api_module, "canonicalize_result", lambda result: None)
 
