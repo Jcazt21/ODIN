@@ -144,7 +144,7 @@ def serialize_article(article: Article) -> ArticleDetail:
         authors=article.authors,
         section=article.section,
         published_at=article.published_at,
-        body=article.body,
+        body=article.body or "",
         main_topic=article.main_topic,
         topic_keywords=article.topic_keywords,
         overall_sentiment=article.overall_sentiment,
