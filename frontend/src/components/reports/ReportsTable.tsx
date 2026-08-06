@@ -82,7 +82,7 @@ export function ReportsTable({
                   <td className="max-w-[380px] px-[14px] py-3 align-top">
                     <p className="font-medium leading-[1.4]">{a.title}</p>
                     {a.main_topic && (
-                      <p className="mt-0.5 text-[12px]" style={{ color: "var(--muted-foreground)" }}>
+                      <p className="mt-0.5 text-[12px] capitalize" style={{ color: "var(--muted-foreground)" }}>
                         {a.main_topic}
                       </p>
                     )}

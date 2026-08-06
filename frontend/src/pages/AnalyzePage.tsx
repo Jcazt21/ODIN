@@ -72,6 +72,7 @@ export function AnalyzePage() {
       const saved = await saveMutation.mutateAsync(draft)
       setResult(saved)
       setDraft(null)
+      setUrl("")
     } catch {
       // el error queda en saveMutation.error, mostrado abajo
     }

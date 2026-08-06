@@ -141,7 +141,7 @@ export function AnalysisCard({
               style={{ borderColor: "var(--border-strong)" }}
             />
           ) : (
-            <p className="text-[13.5px] font-medium">{value.main_topic ?? "—"}</p>
+            <p className="text-[13.5px] font-medium capitalize">{value.main_topic ?? "—"}</p>
           )}
         </div>
         <div className="space-y-1.5">

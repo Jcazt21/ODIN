@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from "react"
+import { Link } from "react-router-dom"
 import { Pencil, Check, X, Search, ChevronDown, ChevronRight, GitMerge } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
 import { ENTITY_TYPE_LABELS } from "@/lib/labels"
+import { computeSentimentAggregate } from "@/lib/sentiment-aggregate"
+import { SentimentCompositionBar } from "@/components/SentimentCompositionBar"
 import {
   useCanonicalEntities,
   useCanonicalEntity,
@@ -278,18 +281,28 @@ function CanonicalEntityRow({
               Sin artículos vinculados.
             </p>
           ) : (
-            <ul className="space-y-1 text-xs">
-              {detail.articles.map((a) => (
-                <li key={a.article_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1">
-                  <a href={a.url} target="_blank" rel="noreferrer" className="truncate hover:underline">
-                    {a.title}
-                  </a>
-                  <span className="shrink-0" style={{ color: "var(--muted-foreground)" }}>
-                    {formatDate(a.published_at)} · {a.mentions_count} menc.
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              {(() => {
+                const aggregate = computeSentimentAggregate(detail.articles)
+                return aggregate ? (
+                  <div className="mb-3">
+                    <SentimentCompositionBar aggregate={aggregate} />
+                  </div>
+                ) : null
+              })()}
+              <ul className="space-y-1 text-xs">
+                {detail.articles.map((a) => (
+                  <li key={a.article_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1">
+                    <Link to={`/reports/${a.article_id}`} className="truncate hover:underline">
+                      {a.title}
+                    </Link>
+                    <span className="shrink-0" style={{ color: "var(--muted-foreground)" }}>
+                      {formatDate(a.published_at)} · {a.mentions_count} menc.
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}

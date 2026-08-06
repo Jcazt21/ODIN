@@ -108,6 +108,8 @@ export type CanonicalEntity = components["schemas"]["CanonicalEntityResponse"]
 
 export type CanonicalEntityDetail = components["schemas"]["CanonicalEntityDetailResponse"]
 
+export type CanonicalEntityArticleMention = components["schemas"]["CanonicalEntityArticleMention"]
+
 export type CanonicalEntityListResponse = components["schemas"]["CanonicalEntityListResponse"]
 
 export interface CanonicalEntityListParams {

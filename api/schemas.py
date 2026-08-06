@@ -341,6 +341,7 @@ class CanonicalEntityArticleMention(_ResponseModel):
     source: str
     published_at: datetime | None = None
     sentiment_toward: str | None = None
+    sentiment_score: float | None = None
     mentions_count: int
 
 

@@ -121,6 +121,7 @@ def get_canonical_entity(entity_id: int) -> CanonicalEntityDetailResponse:
                     source=article.source,
                     published_at=article.published_at,
                     sentiment_toward=mention.sentiment_toward,
+                    sentiment_score=mention.sentiment_score,
                     mentions_count=mention.mentions_count,
                 )
                 for mention, article in mention_rows

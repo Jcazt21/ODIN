@@ -821,6 +821,8 @@ export interface components {
             published_at: string | null;
             /** Sentiment Toward */
             sentiment_toward: string | null;
+            /** Sentiment Score */
+            sentiment_score: number | null;
             /** Mentions Count */
             mentions_count: number;
         };
