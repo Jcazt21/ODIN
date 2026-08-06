@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import math
 import uuid
+from collections.abc import Sequence
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -35,8 +36,12 @@ from scrape_jobs import has_active_scrape_job
 log = get_logger("odin.api")
 
 
-def list_crawl_runs(limit: int) -> list[CrawlRunResponse]:
-    """Historial de corridas del pipeline, más reciente primero."""
+def list_crawl_runs(limit: int) -> Sequence[CrawlRun]:
+    """Historial de corridas del pipeline, más reciente primero.
+
+    Devuelve las filas ORM tal cual: la conversión a `CrawlRunResponse` la
+    hace `response_model=` en la ruta (`api/routers/scrape_jobs.py`), igual
+    que el resto de los endpoints de solo lectura."""
     session = deps.get_session()
     try:
         runs = session.scalars(

@@ -40,7 +40,7 @@ Definidas en [`config.py`](../config.py). Las que más importan en operación:
 | `DATABASE_URL` | sqlite local / postgres en compose | conexión a la BD |
 | `ODIN_ANALYZER` | `local` | motor activo (`local`\|`gemini`\|`groq`\|`hybrid`); inválido = falla el arranque |
 | `ODIN_GEMINI_ARBITER` | `false` | arbitraje extra de personas ambiguas — **facturable**, opt-in aparte |
-| `ODIN_ALLOWED_DOMAINS` | 9 dominios de los 8 medios | allowlist anti-SSRF de `POST /api/analyze` |
+| `ODIN_ALLOWED_DOMAINS` | 9 dominios (uno por medio) | allowlist anti-SSRF de `POST /api/analyze` |
 | `ODIN_MAX_DOWNLOAD_BYTES` | 5 MB | corta la descarga de artículos por tamaño |
 | `ODIN_CORS_ORIGINS` | — | orígenes permitidos del frontend |
 | `ODIN_JWT_SECRET` | efímero si no se define | **si no se define, cada reinicio invalida todas las sesiones activas** |

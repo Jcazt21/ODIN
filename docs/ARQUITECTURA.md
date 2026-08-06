@@ -24,7 +24,7 @@ resultado en una API y una UI para revisar/corregir antes de guardar.
                           ▼                                           ▼               ▼
                  ┌─────────────────┐                       ┌──────────────────┐ ┌────────────┐
                  │ Medios digitales │                       │  PostgreSQL /    │ │  Gemini /   │
-                 │ (8 fuentes: RD)  │◀── scrapers/base.py ──│  SQLite (db/)    │ │  Groq API   │
+                 │ (9 fuentes: RD)  │◀── scrapers/base.py ──│  SQLite (db/)    │ │  Groq API   │
                  └─────────────────┘   (solo si el usuario  └──────────────────┘ │ (opt-in,    │
                                         pega una URL o corre                     │  facturado) │
                                         un scrape job)                           └────────────┘
@@ -133,7 +133,18 @@ y `task.md` §3.2). Un valor inválido falla el arranque en vez de degradar en
 silencio. El árbitro de personas ambiguas (`ODIN_GEMINI_ARBITER`) es un
 interruptor de costo aparte, apagado por defecto.
 
-## 5. Seguridad (resumen; detalle en `task.md` §5 y [LEGAL.md](LEGAL.md))
+Cinco valores válidos: `local` (spaCy+pysentimiento, gratis, sin campos de
+encuadre), `gemini` (LLM, facturado), `groq` (LLM, gratis con límites),
+`hybrid` (local + Groq solo para entidades/encuadre) y `groq+gemini`
+(`analysis/fallback_analyzer.py::GroqWithGeminiFallback` — Groq primero,
+Gemini como red de seguridad cuando Groq falla por rate limit o truncado; el
+linaje guardado dice cuál de los dos respondió). El rastreo masivo
+(`POST /api/scrape-jobs`) restringe el motor a `local`/`groq`/`hybrid` a nivel
+de schema — ni `gemini` ni `groq+gemini` son valores aceptados ahí.
+
+## 5. Seguridad
+
+Resumen; detalle en `task.md` §5 y [LEGAL.md](LEGAL.md).
 
 - **Anti-SSRF** (`url_guard.py`): allowlist de dominios + bloqueo de IP no
   pública revalidado en cada redirección + límites de tamaño/puerto/esquema.

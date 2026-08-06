@@ -37,6 +37,7 @@ def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks, response: Re
     existing, job_id = analyze_service.start_analyze_job(url)
     if existing is not None:
         return existing
+    assert job_id is not None  # invariante de start_analyze_job: nunca ambos None
 
     background_tasks.add_task(analyze_service.run_analyze_job, job_id, url)
     response.status_code = 202

@@ -7,7 +7,7 @@
 
 ## 1. Contenido de terceros (copyright de los medios)
 
-Odin descarga y conserva el **cuerpo completo** de artículos de 8 medios
+Odin descarga y conserva el **cuerpo completo** de artículos de 9 medios
 dominicanos (`articles.body`, sin límite de tamaño ni retención — ver
 [DATA_DICTIONARY.md](DATA_DICTIONARY.md)). Ese texto tiene copyright del
 medio que lo publicó.
@@ -108,7 +108,7 @@ de la primera entrega a cliente, no reactivamente ante un reclamo.
 `url_guard.py` (allowlist de dominios + bloqueo de IP privada + límites de
 tamaño) es una defensa **técnica** contra SSRF/abuso, no una política legal,
 pero define de facto "qué se le puede pedir al sistema que descargue" — el
-alcance del negocio (8 medios dominicanos) está codificado ahí
+alcance del negocio (9 medios dominicanos) está codificado ahí
 (`ODIN_ALLOWED_DOMAINS`). Cualquier expansión de fuentes debe pasar primero
 por §1 de este documento (revisión de ToS) antes de agregarse a la allowlist.
 

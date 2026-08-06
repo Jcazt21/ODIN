@@ -31,10 +31,10 @@ flowchart LR
 
 | Servicio   | Imagen base         | Rol                                                             | Puerto host |
 |------------|----------------------|------------------------------------------------------------------|-------------|
-| `db`       | `postgres:17-alpine`| Base de datos                                                    | `5432`      |
-| `backend`  | `python:3.12-slim`  | API FastAPI (`api.py`), sirve `/api/*`                           | `8000`      |
-| `frontend` | `node:20-alpine` → `nginx:alpine` | SPA de React compilada, servida por nginx, con proxy a `backend` | `3000` → `80` |
-| `scraper`  | `python:3.12-slim` (misma imagen que `backend`) | Corre `main.py` (el pipeline de scraping) bajo demanda | — |
+| `db`       | `postgres:17-alpine`| Base de datos                                                    | `5433` → `5432` |
+| `backend`  | `python:3.13-slim`  | API FastAPI (paquete `api/` + `services/`), sirve `/api/*`       | `8000`      |
+| `frontend` | `node:20-alpine` → `nginx` no-root | SPA de React compilada, servida por nginx en `8080` (sin privilegios de root para bindear <1024) | `3000` → `8080` |
+| `scraper`  | `python:3.13-slim` (misma imagen que `backend`) | Corre `main.py` (el pipeline de scraping) bajo demanda | — |
 
 `scraper` usa el **perfil** `tools` (`profiles: ["tools"]`), así que **no se
 levanta** con un `docker compose up` normal — solo cuando se lo pide

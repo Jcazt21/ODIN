@@ -49,3 +49,14 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      # Checkpoint de documentación (task.md §10.1): avisa —sin bloquear el
+      # commit— cuando se toca una ruta que suele dejar un doc desactualizado
+      # (db/models.py, api/schemas.py, scrapers/, etc.) sin tocar ningún doc
+      # en el mismo commit. Ver scripts/check_docs_freshness.py.
+      - id: docs-freshness-checkpoint
+        name: docs freshness checkpoint
+        entry: python scripts/check_docs_freshness.py
+        language: system
+        pass_filenames: false
+        verbose: true

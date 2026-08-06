@@ -24,13 +24,15 @@ español), sin API de pago.
 ## Stack tecnológico
 
 **Backend**
-- **Python 3.12/3.13** — Python 3.12 en Docker (`Dockerfile.backend`); Python 3.13 recomendado en local (ver [Instalación](#instalación))
-- **FastAPI** + **Uvicorn** — API HTTP (`api.py`)
-- **SQLAlchemy 2** — ORM, portable entre SQLite / PostgreSQL / SQL Server
+- **Python 3.13** — en Docker (`Dockerfile.backend`) y recomendado en local (ver [Instalación](#instalación))
+- **FastAPI** + **Uvicorn** — API HTTP: paquete `api/` (routers en `api/routers/`, schemas en `api/schemas.py`) con la lógica de negocio en `services/`
+- **SQLAlchemy 2** + **Alembic** — ORM y migraciones versionadas, portable entre SQLite / PostgreSQL / SQL Server
 - **requests**, **feedparser**, **trafilatura**, **beautifulsoup4**, **lxml** — scraping y extracción de artículos
 - **spaCy** (`es_core_news_lg`) — NER en español (figuras públicas y empresas)
 - **pysentimiento** (BETO/RoBERTuito) — análisis de sentimiento en español
-- **google-genai** (opcional, de pago) — `GeminiAnalyzer` como motor de análisis alternativo
+- **google-genai** (opcional, de pago) — `GeminiAnalyzer`
+- **groq** (opcional, gratis con límites) — `GroqAnalyzer`/`HybridAnalyzer`; en modo `groq+gemini` corre primero y cae a Gemini como red de seguridad si falla
+- **structlog** + **prometheus-client** + Sentry (opcional) — logging estructurado, métricas en `/metrics`, reporte de errores
 
 **Frontend**
 - **React 19** + **TypeScript** + **Vite**
@@ -179,37 +181,49 @@ Para un artículo sobre un incendio, Odin guardaría algo así:
 
 ## El análisis es intercambiable
 
-Todo el análisis (paso 4) está detrás de una **interfaz** `Analyzer`. El resto
-del programa no sabe cuál se usa, así que puedes cambiar el motor sin tocar nada
-más:
+Todo el análisis (paso 4) está detrás de una **interfaz** `Analyzer`
+(`analysis/base.py`). El resto del programa no sabe cuál se usa, así que puedes
+cambiar el motor sin tocar nada más. Hay cinco:
 
-- **`LocalAnalyzer`** (por defecto, **gratis**): spaCy + pysentimiento en local.
-- **`GeminiAnalyzer`** (opcional, **de pago**): la **API de Google Gemini**,
-  mucho más precisa para "¿hablan bien o mal de esta figura?".
+| Motor | Costo | Qué hace |
+|---|---|---|
+| `local` *(por defecto)* | **Gratis** | `LocalAnalyzer`: spaCy + pysentimiento en local. No calcula los campos de encuadre (framing, capas de sentimiento) — exigen comprensión del texto, no extracción de patrones. |
+| `gemini` | **De pago** | `GeminiAnalyzer`: API de Google Gemini (`gemini-3.5-flash`). Una llamada por artículo; mucho más precisa para "¿hablan bien o mal de esta figura?" y produce todos los campos de encuadre. |
+| `groq` | Gratis, con límites | `GroqAnalyzer`: mismo esquema que Gemini vía la API de Groq (`openai/gpt-oss-120b`), free tier con rate limit propio (TPM). |
+| `hybrid` | Gratis, con límites | `HybridAnalyzer`: tema/palabras clave/sentimiento global con `LocalAnalyzer` (gratis) + entidades y encuadre con Groq en la misma llamada — NER pura con patrones se rompe con nombres compuestos y homónimos, así que esa parte sí pasa por el LLM. |
+| `groq+gemini` | Gratis, con excepción facturada | `GroqWithGeminiFallback`: intenta con Groq primero; si falla (rate limit, JSON truncado, error de red) reintenta con Gemini. El linaje guardado (`analyzer_name`) dice cuál de los dos respondió realmente. |
 
 ### Cuál se usa, y por qué nunca por accidente
 
-El motor se elige **siempre de forma explícita**. Tener `GEMINI_API_KEY` en el
-`.env` **no** activa el modo de pago: la llave puede estar ahí para el CLI, o
+El motor se elige **siempre de forma explícita** vía `ODIN_ANALYZER`. Tener
+`GEMINI_API_KEY`/`GROQ_API_KEY` en el `.env` **no** activa un modo de pago o
+con límites: la llave puede estar ahí para el CLI, para el árbitro puntual, o
 simplemente olvidada. Una credencial no debe ser un interruptor de gasto.
 
 | Variable | Valor | Qué hace |
 |---|---|---|
-| `ODIN_ANALYZER` | `local` *(por defecto)* | spaCy + pysentimiento. **Gratis.** |
-| `ODIN_ANALYZER` | `gemini` | Una llamada **facturada** a Gemini por cada análisis. |
+| `ODIN_ANALYZER` | `local` *(por defecto)* | Ver tabla de arriba. **Gratis.** |
+| `ODIN_ANALYZER` | `gemini` \| `groq` \| `hybrid` \| `groq+gemini` | Ver tabla de arriba. |
 | `ODIN_GEMINI_ARBITER` | `0` *(por defecto)* | Sin llamadas extra. |
-| `ODIN_GEMINI_ARBITER` | `1` | Llamada **facturada** adicional para desambiguar personas dudosas (solo aplica con `ODIN_ANALYZER=local`). |
+| `ODIN_GEMINI_ARBITER` | `1` | Llamada **facturada** adicional a Gemini para desambiguar personas dudosas. Se salta si el motor principal ya es `gemini` (ya excluye lugares/homenajes en su propio prompt) y solo se llama desde `/api/analyze`, nunca desde el rastreo masivo. |
 
 Un valor inválido (`ODIN_ANALYZER=gemeni`) **falla al arrancar** en vez de caer
 en un default silencioso. Y al iniciar, la API escribe en el log qué motor está
-usando, con aviso explícito si es el de pago.
+usando, con aviso explícito si puede facturar.
 
 En la consola es el mismo criterio, con `--analyzer`:
 
 ```bash
 python main.py                      # local, gratis (por defecto)
 python main.py --analyzer gemini    # de pago, explícito
+python main.py --analyzer groq      # gratis, con límites
+python main.py --analyzer hybrid    # gratis, con límites
 ```
+
+> El rastreo masivo (`main.py`, `POST /api/scrape-jobs`) restringe el motor a
+> `local`/`groq`/`hybrid` — `gemini` y `groq+gemini` no son valores aceptados
+> ahí, a propósito: una corrida de varios cientos de artículos con un motor
+> facturado sin querer sería un gasto grande por accidente.
 
 ---
 
@@ -217,36 +231,55 @@ python main.py --analyzer gemini    # de pago, explícito
 
 ```
 api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
-  __init__.py        app, middleware, monta los routers (uvicorn api:app)
-  schemas.py         requests/respuestas Pydantic
+  __init__.py        app, middleware (CORS, correlation-id, métricas), monta los routers
+  schemas.py         requests/respuestas Pydantic (fuente de los tipos TS del frontend)
   deps.py            dependencias compartidas (sesión de BD)
-  routers/           un módulo por grupo de rutas (analyze, articles, aliases...)
-services/            lógica de negocio (queries SQLAlchemy) detrás de cada router
+  routers/           un módulo por grupo de rutas: analyze, articles, entities, aliases,
+                     canonical_entities, scrape_jobs, misc (health/metrics)
+services/            lógica de negocio (SQLAlchemy) detrás de cada router — los routers
+                     no hablan a la BD directo
+  analyzer_registry.py  instancia única del Analyzer activo del proceso
 auth.py              login de usuario único + JWT
-frontend/            React + Vite — pestañas Analizar / Reportes / Siglas
+frontend/            React + Vite + React Query — páginas Analizar / Reportes / Entidades
+                     / Siglas / Scraper, rutas reales con react-router-dom
 config.py            configuración por variables de entorno (.env)
 scrapers/
-  base.py            descarga (reintentos) + extracción con trafilatura
-  do_scrapers.py     las 8 fuentes dominicanas (descubrimiento por RSS/sitemap)
+  base.py            descarga (reintentos, throttle por dominio, robots.txt) + extracción
+  do_scrapers.py     7 de las 9 fuentes dominicanas (descubrimiento por RSS/sitemap)
+  diario_libre.py, listin.py   las otras 2
 analysis/
-  base.py            interfaz Analyzer  <-- pieza intercambiable
+  base.py            interfaz Analyzer + AnalysisResult  <-- pieza intercambiable
   local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
   gemini_analyzer.py Google Gemini (opcional, de pago)
+  groq_analyzer.py   Groq: GroqAnalyzer + HybridAnalyzer (opcional, gratis con límites)
+  fallback_analyzer.py  GroqWithGeminiFallback: Groq primero, Gemini como red de seguridad
   canonicalize.py    unificación de nombres de entidades
   entity_arbiter.py  desambiguación puntual (solo flujo manual)
 db/
-  models.py          tablas: Article, Entity, EntityAlias (SQLAlchemy)
+  models.py          7 tablas — ver docs/DATA_DICTIONARY.md
   session.py         conexión (SQLite / PostgreSQL / SQL Server)
-  aliases.py         resolución de siglas
+  canonical_entities.py, aliases.py   dimensión de entidad y resolución de siglas
+alembic/             migraciones versionadas del esquema
 report.py            consultas rápidas de resultados
-scripts/             utilidades sueltas (hash de contraseña, fusión de entidades)
+scripts/             utilidades sueltas (hash de contraseña, fusión de entidades, eval)
+url_guard.py         anti-SSRF: allowlist + bloqueo de IP privada (único punto de red hacia URLs de usuario)
+observability.py     logging estructurado, correlation-id, métricas Prometheus, Sentry opt-in
 
 --- rastreo masivo, opcional y manual ---
 main.py              punto de entrada (CLI)
 pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
+scrape_jobs.py        puente API↔pipeline.run() para corridas encoladas desde el frontend
 
-docs/PROCESOS.md     documentación técnica de cada proceso
-docs/docker.md       cómo funciona la dockerización (servicios, cache, comandos)
+docs/
+  ARQUITECTURA.md    vista C4 (contexto, contenedores, componentes)
+  PROCESOS.md        cada proceso del pipeline paso a paso, con diagramas
+  DATA_DICTIONARY.md  cada columna de cada tabla: significado, quién la produce
+  RUNBOOK.md          operación: fuente caída, jobs, migraciones, backups
+  LEGAL.md             ToS por medio, datos personales, retención
+  PRECISION.md          metodología de evaluación y estado del golden set
+  GUIA_DE_USO.md         guía paso a paso para el usuario final
+  docker.md               cómo funciona la dockerización (servicios, cache, comandos)
+  adr/                     decisiones arquitectónicas (por qué se eligió cada cosa)
 ```
 
 ---
@@ -387,10 +420,13 @@ La configuración de las tres herramientas vive en [pyproject.toml](pyproject.to
 Las dependencias de ejecución siguen declarándose en `requirements.txt`, que
 `pyproject.toml` lee — una sola lista, sin copias que se desincronizan.
 
-**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) corre estos
-mismos cuatro checks (lint, tipos, tests, `pip-audit`) en cada push y pull
-request a `main`, instalando desde `requirements.lock` con
-`--require-hashes`.
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) corre 5 jobs en
+cada push y pull request a `main`: `lint` (ruff), `types` (mypy), `test`
+(pytest en Linux), `test-windows` (pytest en Windows — el cliente corre Odin
+ahí, es la red de seguridad de portabilidad) y `pip-audit`. Los jobs de tipos y
+tests instalan desde `requirements.lock` con `--require-hashes` (menos
+`test-windows`, que usa `requirements-ci.txt` sin pin de hash porque el lock
+está fijado a Linux).
 
 **`ruff format` está apagado a propósito.** Reformatear todo el backend antes de
 tener pruebas produce un diff enorme que esconde los cambios reales; se activa
@@ -428,13 +464,59 @@ uv pip compile requirements.txt --generate-hashes --python-version 3.13 \
 
 ---
 
+## Documentación
+
+Este README es la puerta de entrada. El detalle técnico vive en `docs/`:
+
+| Documento | Para qué |
+|---|---|
+| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Vista C4: contexto, contenedores, componentes |
+| [docs/PROCESOS.md](docs/PROCESOS.md) | Cada proceso del pipeline paso a paso, con diagramas |
+| [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) | Cada columna de cada tabla: significado, quién la produce |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operación: fuente caída, reintentar/cancelar jobs, migraciones, backups |
+| [docs/LEGAL.md](docs/LEGAL.md) | ToS por medio, datos personales (Ley 172-13/GDPR), retención |
+| [docs/PRECISION.md](docs/PRECISION.md) | Metodología de evaluación y estado real del golden set |
+| [docs/GUIA_DE_USO.md](docs/GUIA_DE_USO.md) | Guía paso a paso para el usuario final |
+| [docs/docker.md](docs/docker.md) | Dockerización: servicios, cache, comandos, troubleshooting |
+| [docs/adr/](docs/adr/) | Por qué se eligió cada decisión no obvia (ADRs) |
+
+### Checkpoint de documentación (§10.1 de task.md)
+
+La documentación de Odin ya se desactualizó una vez en silencio (README
+describía 2 fuentes cuando había 8; `api.py` seguía citado meses después de
+partirse en `api/` + `services/`). El motivo no fue falta de prosa, fue falta
+de un punto donde alguien se preguntara "¿esto invalida algún doc?". Antes de
+cerrar cualquier cambio que toque uno de estos puntos, actualiza el documento
+correspondiente **en el mismo cambio**, no después:
+
+| Si cambias… | Actualiza… |
+|---|---|
+| `db/models.py` (columna nueva, tabla nueva) | [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) |
+| `api/schemas.py`, un router, o un servicio nuevo | [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) |
+| Un scraper (`scrapers/`) o el conteo de fuentes | Este README (Stack, Estructura, allowlist) + [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) |
+| Un analizador (`analysis/`) o `ODIN_ANALYZER` | Este README (El análisis es intercambiable) + [docs/PROCESOS.md](docs/PROCESOS.md) |
+| Una decisión no obvia y difícil de revertir | Un [ADR nuevo](docs/adr/) — no un comentario largo en el código |
+| Un cambio operativo (variable de entorno, comando, migración) | [docs/RUNBOOK.md](docs/RUNBOOK.md) |
+| Algo que toque datos personales o retención | [docs/LEGAL.md](docs/LEGAL.md) |
+
+No hace falta un proceso de PR formal para que esto valga: es un solo dueño
+del repo hoy. Para que el checkpoint no dependa solo de acordarse,
+[`scripts/check_docs_freshness.py`](scripts/check_docs_freshness.py) corre en
+cada commit (`.pre-commit-config.yaml`) y avisa — **sin bloquear** — cuando el
+commit toca una de las rutas de la tabla de arriba sin tocar ningún archivo en
+`docs/` o este README. No es un gate duro: qué cuenta como "cambio que amerita
+doc" es juicio humano (un fix de un typo no necesita ARQUITECTURA.md), así que
+el script recuerda en el punto más barato para actuar, no impone.
+
+---
+
 ## Qué URLs se pueden analizar
 
 `POST /api/analyze` descarga una URL que escribe el usuario y le devuelve el
 contenido. Sin control, eso convierte al servidor en un proxy de lectura hacia
 su propia red interna. [url_guard.py](url_guard.py) lo evita con tres capas:
 
-1. **Allowlist de dominios** (`ODIN_ALLOWED_DOMAINS`) — por defecto los 8 medios
+1. **Allowlist de dominios** (`ODIN_ALLOWED_DOMAINS`) — por defecto los 9 medios
    dominicanos que Odin cubre, más sus subdominios. Todo lo demás: `400`.
 2. **Bloqueo de destinos internos** — el dominio se resuelve *antes* de conectar
    y se rechaza si alguna de sus IPs es loopback, privada, link-local
@@ -455,17 +537,17 @@ sitemaps y feeds de las fuentes ya configuradas en el código, no de un usuario.
 
 ## Notas sobre precisión
 
-| Campo | Calidad con modelos locales (gratis) |
-|---|---|
-| Autor, título, fecha, sección, cuerpo | Excelente |
-| Tema / palabras clave | Buena |
-| Sentimiento global | Buena (~75-85%) |
-| Figuras y empresas | Buena (~80%) |
-| **Opinión hacia una figura concreta** | **Aproximada (~60-70%)** |
+`sentiment_toward` (con `LocalAnalyzer`) se calcula con el sentimiento de las
+frases donde aparece la entidad — es el campo más difícil de acertar solo con
+código; para máxima precisión, usar un motor LLM (`gemini`/`groq`/`hybrid`) en
+vez de `local` — misma interfaz.
 
-`sentiment_toward` se calcula con el sentimiento de las frases donde aparece la
-entidad. Es el punto más difícil solo con código; para máxima precisión, usar
-`GeminiAnalyzer` (Google Gemini) en vez de `LocalAnalyzer` — misma interfaz.
+**No hay una cifra de precisión publicable todavía.** El golden set etiquetado
+a mano (`tests/eval/golden_set.jsonl`) tiene 7 artículos — insuficiente para un
+número defendible; ver metodología, estado real y cómo correr la evaluación en
+**[docs/PRECISION.md](docs/PRECISION.md)**. No repitas un porcentaje de
+precisión frente a un cliente sin haberlo corrido primero sobre una muestra
+representativa.
 
 ---
 
@@ -477,11 +559,13 @@ entidad. Es el punto más difícil solo con código; para máxima precisión, us
 - El rastreo masivo (`main.py`, `pipeline.py`) respeta un throttle real **por
   dominio**: `REQUEST_DELAY` es el intervalo mínimo entre dos peticiones
   exitosas al mismo host, sin importar cuántos `FETCH_WORKERS` concurrentes
-  haya — antes solo se usaba como base del backoff en reintentos
-  ([scrapers/base.py](scrapers/base.py)).
+  haya ([scrapers/base.py](scrapers/base.py)).
 - También se lee y respeta `robots.txt` de cada dominio (`urllib.robotparser`,
   cacheado por proceso): las rutas que excluye no se piden, y si declara
   `Crawl-delay` se usa ese valor cuando es mayor que `REQUEST_DELAY`.
   Desactivable solo para pruebas locales con `ODIN_RESPECT_ROBOTS_TXT=0`.
-- Se guarda el texto íntegro de artículos con copyright. Revisa los términos de
-  uso de cada sitio antes de un despliegue a gran escala.
+- Se guarda el texto íntegro de artículos con copyright, sin política de
+  retención todavía. **Revisión de ToS por medio, base legal del tratamiento de
+  datos personales (Ley 172-13/GDPR) y checklist antes de entregar a un
+  cliente: [docs/LEGAL.md](docs/LEGAL.md)** — la tabla de ToS por medio sigue
+  pendiente ahí, no está resuelta por este README.

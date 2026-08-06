@@ -302,10 +302,25 @@ class TestSaveArticleLinksCanonicalEntity:
     def test_stamps_analyzer_lineage(self, monkeypatch, api_client, sqlite_sessionmaker):
         import analysis.canonicalize as canonicalize
         import db.session as db_session_module
+        import services.article_service as article_service
+
+        class _FakeAnalyzer:
+            name = "fake"
+            model = "fake-model"
+            version = "fake-version"
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
         monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
+        # `article_service.analyzer` es el analizador activo del proceso,
+        # importado por valor desde `services.analyzer_registry` (bindeado en
+        # el momento del import, ver api/deps.py para el mismo gotcha con
+        # `get_session`). Su identidad depende de ODIN_ANALYZER, que en la
+        # máquina de un desarrollador puede no ser "local" (p.ej. "hybrid" en
+        # .env para uso manual) — este test solo verifica que el linaje se
+        # graba con el analizador activo, no cuál es, así que se fija a un
+        # valor conocido en vez de asumir el default.
+        monkeypatch.setattr(article_service, "analyzer", _FakeAnalyzer())
 
         resp = api_client.post(
             "/api/articles",
@@ -319,9 +334,9 @@ class TestSaveArticleLinksCanonicalEntity:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["analyzer_name"] == "local"
-        assert body["analyzer_model"]
-        assert body["analyzer_version"]
+        assert body["analyzer_name"] == "fake"
+        assert body["analyzer_model"] == "fake-model"
+        assert body["analyzer_version"] == "fake-version"
         # Contra la constante, no contra un literal: lo que se prueba es que el
         # guardado ESTAMPA la versión del esquema, no cuál es su valor hoy —
         # con un literal, cada bump de ANALYSIS_SCHEMA_VERSION rompe el test

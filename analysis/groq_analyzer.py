@@ -97,7 +97,8 @@ def _friendly_groq_error(exc) -> str:
     trae jerga de facturación (TPM/TPD/tokens) que un usuario no técnico no
     puede interpretar."""
     body = exc.body if isinstance(exc.body, dict) else {}
-    inner = body.get("error") if isinstance(body.get("error"), dict) else {}
+    error = body.get("error")
+    inner = error if isinstance(error, dict) else {}
     code = inner.get("code", "")
     message = inner.get("message", "") or str(exc)
 

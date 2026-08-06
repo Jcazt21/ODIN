@@ -55,7 +55,7 @@ por sección. Con 7 casos:
 - Cualquier métrica calculada tiene un intervalo de confianza demasiado
   ancho para ser accionable (un solo artículo mal clasificado mueve el F1 en
   ~14 puntos).
-- No hay representación de las 8 fuentes ni de secciones variadas (política,
+- No hay representación de las 9 fuentes ni de secciones variadas (política,
   economía, sucesos, etc.) — el rendimiento real puede variar mucho por
   sección (titulares de sucesos vs. columnas de opinión, por ejemplo).
 - **No se debe publicar ningún número derivado de esta muestra como cifra de
