@@ -44,7 +44,7 @@ export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
     <div className="relative grid min-h-screen place-items-center" style={{ background: "var(--bg)" }}>
       <div className="pointer-events-none absolute inset-0">
         <div style={{ opacity: theme === "dark" ? 0.6 : 0.45, width: "100%", height: "100%" }}>
-          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.5} blend={0.6} amplitude={1.0} />
+          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.3} blend={0.6} amplitude={1.0} />
         </div>
         <div
           className="absolute inset-0"

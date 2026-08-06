@@ -40,7 +40,7 @@ export function Layout({ onLogout, theme, onToggleTheme }: LayoutProps) {
           className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[420px] overflow-hidden"
           style={{ opacity: theme === "dark" ? 0.5 : 0.35 }}
         >
-          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.4} blend={0.55} amplitude={0.9} />
+          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.3} blend={0.55} amplitude={0.9} />
           <div
             className="absolute inset-0"
             style={{ background: "linear-gradient(to bottom, transparent 0%, var(--bg) 88%)" }}
