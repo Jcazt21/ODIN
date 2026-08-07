@@ -20,6 +20,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Disparo manual desde la pestaña Actions. Sin esto, la única forma de
+  # relanzar el CI cuando una corrida se queda encolada o se pierde el evento
+  # de push es hacer un commit vacío.
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: "3.13"

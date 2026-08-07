@@ -112,9 +112,10 @@ analizada).
 |---|---|---|---|
 | `id` | String(36) PK (UUID) | no | UUID, no autoincrement — evita revelar volumen total de análisis |
 | `status` | String(20), default `pending` | no | `pending` \| `running` \| `done` \| `failed` |
+| `stage` | String(20) | sí | paso del pipeline dentro de `status=running`: `fetching` \| `analyzing` \| `canonicalizing` (`ANALYZE_STAGES` en `services/analyze_service.py`); `NULL` fuera de `running`. Lo consume el polling del frontend para mostrar progreso, no solo "corriendo" |
 | `url` | String(2048) | no | URL solicitada |
 | `created_at` / `started_at` / `finished_at` | DateTime(tz) | sí (excepto `created_at`) | timestamps del ciclo de vida |
-| `result_json` | Text | sí | `ArticleDetail` serializado, si terminó en `done` |
+| `result_json` | Text | sí | `AnalyzeResult` serializado (la vista previa sin guardar, no `ArticleDetail`), si terminó en `done` |
 | `error` | Text | sí | mensaje de error, si terminó en `failed` |
 
 No hay operación de reintento: un job fallido se reintenta creando uno nuevo

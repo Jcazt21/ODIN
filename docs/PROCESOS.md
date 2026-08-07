@@ -88,15 +88,19 @@ sequenceDiagram
         API->>DB: crea AnalyzeJob(status=pending)
         API-->>U: 202 + job_id
         API->>BG: encola run_analyze_job(job_id, url)
+        BG->>DB: status=running, stage=fetching
         BG->>G: validate_url() + fetch_html()
         G-->>BG: HTML (o 400 si falla el guard)
         BG->>BG: trafilatura.extract()
+        BG->>DB: stage=analyzing
         BG->>AN: analyze(title, body)
         AN-->>BG: AnalysisResult
-        BG->>DB: AnalyzeJob.status=done, result_json
+        BG->>DB: stage=canonicalizing
+        BG->>BG: canonicalize_result()
+        BG->>DB: AnalyzeJob.status=done, result_json (AnalyzeResult)
         loop polling
             U->>API: GET /api/jobs/{job_id}
-            API-->>U: status + resultado cuando done
+            API-->>U: status + stage (progreso) + resultado cuando done
         end
     end
     U->>U: revisa y corrige en el frontend
@@ -117,7 +121,14 @@ Puntos clave:
 - **No hay descubrimiento**: no se consulta ningún sitemap ni feed. La única
   URL que se toca es la que pegó el usuario.
 - **Guardar es un paso aparte y explícito** (`POST /api/articles`): la vista
-  previa de `/api/analyze` nunca escribe en la BD por sí sola.
+  previa de `/api/analyze` nunca escribe en la BD por sí sola. Por eso son dos
+  schemas distintos: `AnalyzeResult`/`AnalyzePreviewEntity` para la vista previa
+  (`id` `null` mientras no se guarde) y `ArticleDetail`/`EntityMention` para el
+  artículo ya persistido (`id` y `body` siempre reales).
+- **El polling reporta progreso, no solo "corriendo"**: `AnalyzeJob.stage`
+  (`fetching` → `analyzing` → `canonicalizing`, ver `ANALYZE_STAGES` en
+  `services/analyze_service.py`) viaja en cada respuesta de
+  `GET /api/jobs/{id}` mientras `status=running`.
 
 ---
 

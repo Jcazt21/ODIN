@@ -227,7 +227,9 @@ class AnalyzeJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    # Resultado serializado como JSON de texto (el shape de ArticleDetail):
+    # Resultado serializado como JSON de texto (el shape de AnalyzeResult, la
+    # vista previa sin guardar — no el de ArticleDetail, que es el artículo ya
+    # persistido):
     # no amerita columnas propias por ser de solo un consumidor (el propio
     # endpoint que lo produjo) y de vida corta.
     result_json: Mapped[str | None] = mapped_column(Text)

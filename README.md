@@ -434,7 +434,7 @@ cuando exista la red de seguridad.
 
 ### requirements.lock
 
-[requirements.lock](requirements.lock) fija las **117 dependencias transitivas**
+[requirements.lock](requirements.lock) fija las **120 dependencias transitivas**
 con hash, para que dos instalaciones en fechas distintas den el mismo entorno.
 Se regenera cuando cambie `requirements.txt`:
 

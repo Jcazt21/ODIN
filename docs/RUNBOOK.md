@@ -38,7 +38,7 @@ Definidas en [`config.py`](../config.py). Las que más importan en operación:
 | Variable | Default | Qué hace |
 |---|---|---|
 | `DATABASE_URL` | sqlite local / postgres en compose | conexión a la BD |
-| `ODIN_ANALYZER` | `local` | motor activo (`local`\|`gemini`\|`groq`\|`hybrid`); inválido = falla el arranque |
+| `ODIN_ANALYZER` | `local` | motor activo (`local`\|`gemini`\|`groq`\|`hybrid`\|`groq+gemini`); inválido = falla el arranque. `gemini` y `groq+gemini` pueden facturar — ver [ARQUITECTURA.md §4](ARQUITECTURA.md#4-selección-del-analizador) |
 | `ODIN_GEMINI_ARBITER` | `false` | arbitraje extra de personas ambiguas — **facturable**, opt-in aparte |
 | `ODIN_ALLOWED_DOMAINS` | 9 dominios (uno por medio) | allowlist anti-SSRF de `POST /api/analyze` |
 | `ODIN_MAX_DOWNLOAD_BYTES` | 5 MB | corta la descarga de artículos por tamaño |

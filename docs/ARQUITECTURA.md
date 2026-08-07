@@ -54,6 +54,11 @@ api/                    — capa HTTP (FastAPI)
 ├── __init__.py         — app, lifespan, middleware (CORS, correlation-id, métricas)
 ├── deps.py             — get_session, log (punto único que parchean los tests)
 ├── schemas.py          — modelos Pydantic + enums (Sentiment, Framing, HeadlineIntent, ...)
+│                         Guardado y vista previa tienen schemas separados:
+│                         ArticleDetail/EntityMention (artículo ya persistido,
+│                         `id`/`body` siempre reales) vs AnalyzeResult/
+│                         AnalyzePreviewEntity (respuesta de /api/analyze, donde
+│                         `id` es null mientras no se guarde)
 └── routers/
     ├── analyze.py       — POST /api/analyze, GET /api/jobs/{id}
     ├── articles.py      — GET/PUT/DELETE /api/articles, POST /api/articles
@@ -74,11 +79,12 @@ services/                — lógica de negocio (los routers no hablan SQLAlchem
 ├── scrape_job_service.py     — arranque/cancelación de corridas masivas
 └── alias_service.py           — CRUD de siglas con invalidación de caché
 
-analysis/                — Analyzer como Protocol (base.py) + 4 implementaciones
+analysis/                — Analyzer como Protocol (base.py) + 5 implementaciones
 ├── base.py               — Protocol Analyzer, AnalysisResult, EntityResult, ANALYSIS_SCHEMA_VERSION
 ├── local_analyzer.py       — spaCy (NER) + pysentimiento (sentimiento), sin costo
 ├── gemini_analyzer.py       — LLM, agrega framing/headline_intent/lead_orientation (facturado)
 ├── groq_analyzer.py          — GroqAnalyzer + HybridAnalyzer (local + Groq solo para encuadre)
+├── fallback_analyzer.py       — GroqWithGeminiFallback: Groq primero, Gemini si Groq falla
 ├── canonicalize.py             — unifica nombres (siglas, apellido único) antes de persistir
 ├── text_norm.py                 — norm_key, comparación insensible a acentos
 ├── entity_arbiter.py             — arbitraje Gemini opcional para PERSON ambiguas
@@ -87,7 +93,7 @@ analysis/                — Analyzer como Protocol (base.py) + 4 implementacion
 
 scrapers/                — descubrimiento + extracción, un módulo por fuente
 ├── base.py               — BaseScraper: sitemap/RSS, throttle por dominio, robots.txt, trafilatura
-└── do_scrapers.py, diario_libre.py, listin.py — 8 scrapers concretos
+└── do_scrapers.py, diario_libre.py, listin.py — 9 scrapers concretos (registro: scrapers/__init__.py::SCRAPERS)
 
 pipeline.py              — run(): orquesta scrapers en paralelo, persiste, agrega CrawlRun
 scrape_jobs.py            — puente API↔pipeline.run() para corridas masivas en background
@@ -108,12 +114,18 @@ observability.py            — structlog, correlation-id, métricas Prometheus,
 
 1. `api/routers/analyze.py` valida y encola vía `analyze_service.start_analyze_job`
    (`AnalyzeJob` con `id` UUID, `status=pending`).
-2. `BackgroundTasks` corre `run_analyze_job`: `url_guard.fetch_html` (anti-SSRF)
-   → `trafilatura.extract` → `analyzer_registry` (motor activo del proceso) →,
-   si aplica, `entity_arbiter` para personas ambiguas.
-3. El cliente hace polling a `GET /api/jobs/{id}` hasta `status=done|failed`.
+2. `BackgroundTasks` corre `run_analyze_job`, que va marcando `AnalyzeJob.stage`
+   a medida que avanza: `fetching` (`url_guard.fetch_html`, anti-SSRF →
+   `trafilatura.extract`) → `analyzing` (`analyzer_registry`, el motor activo
+   del proceso, y si aplica `entity_arbiter` para personas ambiguas) →
+   `canonicalizing` (`canonicalize_result` sobre la vista previa).
+3. El cliente hace polling a `GET /api/jobs/{id}` hasta `status=done|failed`;
+   mientras `status=running`, `stage` le dice en qué paso va. El `result` es un
+   `AnalyzeResult` (vista previa sin guardar), no un `ArticleDetail`.
 4. El usuario revisa el resultado en el frontend y confirma con
-   `POST /api/articles`, que corre `canonicalize_entities` antes de persistir.
+   `POST /api/articles`, que vuelve a correr `canonicalize_entities` sobre las
+   entidades ya editadas antes de persistir (el paso 2 canonicaliza lo que se
+   le muestra al usuario; este canonicaliza lo que realmente se guarda).
 
 ### Flujo masivo (parcialmente vigente): `POST /api/scrape-jobs`
 

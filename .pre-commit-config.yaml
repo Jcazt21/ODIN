@@ -54,9 +54,15 @@ repos:
       # commit— cuando se toca una ruta que suele dejar un doc desactualizado
       # (db/models.py, api/schemas.py, scrapers/, etc.) sin tocar ningún doc
       # en el mismo commit. Ver scripts/check_docs_freshness.py.
+      #
+      # Ruta explícita a .venv/bin/python por el mismo motivo que mypy arriba:
+      # con `python` a secas, un commit disparado desde un PATH sin el venv
+      # (el panel de Source Control de VSCode) muere con "Executable `python`
+      # not found" — y este hook, que por diseño nunca debe bloquear un commit,
+      # terminaba bloqueándolo.
       - id: docs-freshness-checkpoint
         name: docs freshness checkpoint
-        entry: python scripts/check_docs_freshness.py
+        entry: .venv/bin/python scripts/check_docs_freshness.py
         language: system
         pass_filenames: false
         verbose: true
