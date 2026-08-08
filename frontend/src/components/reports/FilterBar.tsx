@@ -55,8 +55,8 @@ export function FilterBar({
 }) {
   return (
     <div
-      className="rounded-xl border p-[18px]"
-      style={{ background: "var(--panel)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
+      className="odin-glass rounded-xl border p-[18px]"
+      style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2.5">

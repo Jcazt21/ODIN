@@ -24,6 +24,8 @@ Funciona con cualquier objeto que tenga los atributos `name`, `type`,
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import Any
 
 from sqlalchemy import select
@@ -58,10 +60,42 @@ def _strip_title_prefix(name: str) -> str:
     return name
 
 
+# Caché del mapa apellido -> nombre completo. Mismo diseño que el catálogo de
+# aliases (`db/aliases.py`): se construye a demanda y se invalida
+# explícitamente desde los puntos que escriben entidades. El mapa se consulta
+# en CADA análisis y se arma con un escaneo de todos los PERSON guardados; con
+# el corpus pequeño no se nota, pero es una consulta que crece con el histórico
+# para responder siempre casi lo mismo.
+#
+# Además del descarte explícito hay un TTL, y no es redundante: la
+# invalidación solo alcanza al proceso que hizo la escritura. Un crawl del CLI
+# (`main.py`) mete entidades en la misma BD desde OTRO proceso, y el servidor
+# de la API no se entera de eso por más que se invalide bien en su propio
+# código. El TTL es el techo de cuánto puede quedarse atrás en ese caso.
+_PERSON_MAP_TTL_SECONDS = 600
+
+_map_lock = threading.Lock()
+_person_map_cache: dict[str, str] | None = None
+_person_map_built_at = 0.0
+
+
+def invalidate_person_map() -> None:
+    """Descarta la caché de `known_person_fullname_map`. La llaman los puntos
+    que agregan o renombran entidades PERSON: es lo que mantiene vivo el ciclo
+    de retroalimentación descrito abajo (una corrección manual debe verse en el
+    análisis siguiente, no cuando venza el TTL)."""
+    global _person_map_cache
+    with _map_lock:
+        _person_map_cache = None
+
+
 def known_person_fullname_map() -> dict[str, str]:
     """Mapa apellido -> nombre completo, construido con los PERSON ya guardados
     en la BD, los `canonical_entities` PERSON (incluye renombrados manuales) y
     los canónicos PERSON del catálogo de aliases.
+
+    El resultado queda cacheado hasta que alguien llame a
+    `invalidate_person_map()` (ver arriba).
 
     Solo se indexa la ÚLTIMA palabra significativa de cada nombre completo
     ("abinader" para "Luis Abinader"): es el patrón con que la prensa abrevia
@@ -69,9 +103,9 @@ def known_person_fullname_map() -> dict[str, str]:
     se resuelven vía el catálogo curado de aliases, no aquí — indexar todas
     las palabras produciría falsos positivos. Los apellidos que apuntan a MÁS
     de un nombre completo distinto se descartan por ambiguos ("Fernández" con
-    Leonel, Omar y César en la BD no se toca). Se consulta en cada análisis
-    (las tablas son pequeñas); si la BD no está disponible, devuelve vacío en
-    lugar de romper el análisis.
+    Leonel, Omar y César en la BD no se toca). Si la BD no está disponible,
+    devuelve vacío en lugar de romper el análisis — y en ese caso NO se cachea,
+    para no dejar clavado un mapa vacío por un fallo pasajero.
 
     Incluir `canonical_entities` (no solo `Entity.name`) es lo que cierra el
     ciclo de retroalimentación: si un usuario corrige el nombre de una figura
@@ -79,6 +113,13 @@ def known_person_fullname_map() -> dict[str, str]:
     siguiente análisis — no hace falta esperar a que la prensa repita el
     nombre completo en un artículo nuevo para que vuelva a resolverse bien.
     """
+    global _person_map_cache, _person_map_built_at
+
+    with _map_lock:
+        fresh = time.monotonic() - _person_map_built_at < _PERSON_MAP_TTL_SECONDS
+        if _person_map_cache is not None and fresh:
+            return _person_map_cache
+
     from db.models import CanonicalEntity, Entity
     from db.session import get_session
 
@@ -90,6 +131,7 @@ def known_person_fullname_map() -> dict[str, str]:
             return  # un nombre de una sola palabra no desambigua nada
         candidates.setdefault(words[-1], set()).add(full_name)
 
+    db_available = True
     try:
         session = get_session()
         try:
@@ -103,6 +145,7 @@ def known_person_fullname_map() -> dict[str, str]:
             session.close()
     except Exception:
         log.warning("no se pudo leer entidades PERSON de la BD", exc_info=True)
+        db_available = False
         names = []
         canonical_names = []
 
@@ -114,7 +157,12 @@ def known_person_fullname_map() -> dict[str, str]:
         if etype == "PERSON":
             _index(canonical)
 
-    return {w: next(iter(fulls)) for w, fulls in candidates.items() if len(fulls) == 1}
+    person_map = {w: next(iter(fulls)) for w, fulls in candidates.items() if len(fulls) == 1}
+    if db_available:
+        with _map_lock:
+            _person_map_cache = person_map
+            _person_map_built_at = time.monotonic()
+    return person_map
 
 
 def _apply_alias_catalog(entities: list) -> None:

@@ -41,12 +41,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--analyzer",
-        choices=["local", "gemini", "groq", "hybrid"],
+        choices=["local", "gemini", "groq", "hybrid", "groq+gemini"],
         default="local",
         help="Motor de análisis: 'local' (gratis, por defecto), 'gemini' "
         "(Google Gemini, de pago, requiere google-genai + GEMINI_API_KEY), "
-        "'groq' (todo vía Groq, free tier, requiere groq + GROQ_API_KEY) o "
-        "'hybrid' (LocalAnalyzer + Groq solo para el encuadre, recomendado).",
+        "'groq' (todo vía Groq, free tier, requiere groq + GROQ_API_KEY), "
+        "'hybrid' (LocalAnalyzer + Groq solo para el encuadre, recomendado) o "
+        "'groq+gemini' (Groq primero, Gemini FACTURADO solo si Groq falla).",
     )
     parser.add_argument("--init-db", action="store_true", help="Solo crear las tablas y salir.")
     parser.add_argument("--list-sources", action="store_true", help="Listar fuentes y salir.")
@@ -82,6 +83,10 @@ def main() -> None:
         from analysis.groq_analyzer import HybridAnalyzer
 
         analyzer = HybridAnalyzer()
+    elif args.analyzer == "groq+gemini":
+        from analysis.fallback_analyzer import GroqWithGeminiFallback
+
+        analyzer = GroqWithGeminiFallback()
     else:
         from analysis import LocalAnalyzer
 

@@ -87,8 +87,25 @@ class Settings:
 
     # Árbitro de entidades ambiguas: una llamada EXTRA y facturada a Gemini por
     # cada análisis con personas dudosas, aparte del motor principal. Opt-in
-    # explícito, por la misma razón.
+    # explícito, por la misma razón. Solo tiene efecto con ODIN_ANALYZER=local:
+    # los motores LLM ya excluyen los nombres que solo bautizan un lugar (ver
+    # `arbitrate_ambiguous_persons` en services/analyze_service.py).
     gemini_arbiter: bool = _flag("ODIN_GEMINI_ARBITER", default=False)
+
+    # --- Jobs de POST /api/analyze (services/analyze_service.py) ---
+    # Reusar el análisis de una URL ya analizada y NO guardada, si es reciente:
+    # analizar dos veces la misma nota es pagar/gastar rate limit dos veces por
+    # el mismo resultado. La ventana es corta a propósito — un medio puede
+    # editar la nota, y pasado ese rato conviene volver a leerla. 0 lo apaga.
+    analyze_reuse_minutes: int = int(os.getenv("ODIN_ANALYZE_REUSE_MINUTES", "60"))
+    # Un job que lleva demasiado en `running` ya no va a terminar: o el proceso
+    # se reinició a mitad (BackgroundTasks vive en memoria) o la llamada quedó
+    # colgada. Se marca como fallido al arrancar en vez de dejar al cliente
+    # esperando hasta su propio timeout.
+    analyze_job_stale_minutes: int = int(os.getenv("ODIN_ANALYZE_JOB_STALE_MINUTES", "15"))
+    # Los jobs terminados guardan el CUERPO COMPLETO del artículo en
+    # `result_json`; sin poda la tabla crece sin techo. 0 desactiva el borrado.
+    analyze_job_ttl_hours: int = int(os.getenv("ODIN_ANALYZE_JOB_TTL_HOURS", "48"))
 
     # --- API: descarga de URLs del usuario (anti-SSRF, ver url_guard.py) ---
     # Allowlist de medios. Se aceptan también los subdominios de cada uno.

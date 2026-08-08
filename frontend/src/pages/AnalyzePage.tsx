@@ -112,13 +112,13 @@ export function AnalyzePage() {
   return (
     <div className="flex w-full flex-col gap-[22px]">
       <div
-        className="rounded-xl border p-[22px]"
-        style={{ background: "var(--panel)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
+        className="odin-glass rounded-xl border p-[22px]"
+        style={{ boxShadow: "var(--shadow-sm)" }}
       >
         <div className="flex items-baseline gap-2">
           <h1 className="text-[19px] font-semibold">Analizar artículo</h1>
           <span className="font-mono text-[11px]" style={{ color: "var(--faint)" }}>
-            POST /api/articles/analyze
+            POST /api/analyze
           </span>
         </div>
         <p className="mt-1 mb-4 max-w-[70ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>

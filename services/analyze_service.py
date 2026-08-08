@@ -8,13 +8,16 @@ transporte y la lógica.
 from __future__ import annotations
 
 import json
+import threading
+import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 import requests
 import trafilatura
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 import url_guard
 from analysis.base import ANALYSIS_SCHEMA_VERSION
@@ -25,15 +28,37 @@ from api.deps import log
 from api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
 from config import settings
 from db.models import AnalyzeJob, Article
-from scrapers.base import BaseScraper, _parse_date
-from services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
+from observability import (
+    ANALYZE_JOB_DURATION_SECONDS,
+    ANALYZE_JOBS_TOTAL,
+)
+from scrapers.base import _parse_date
+from services.analyzer_registry import ANALYZER_READS_WHOLE_ARTICLE, analyzer
 from url_guard import UrlNotAllowed
-
-_extractor = BaseScraper()
 
 # Pasos del pipeline de run_analyze_job, en orden — el frontend los muestra
 # como progreso durante el polling de GET /api/jobs/{id} (status="running").
 ANALYZE_STAGES = ("fetching", "analyzing", "canonicalizing")
+
+_thread_state = threading.local()
+
+
+def _http_session() -> requests.Session:
+    """Una `requests.Session` por hilo.
+
+    Antes había UNA sola sesión a nivel de módulo (la de un `BaseScraper`)
+    compartida por todos los jobs. Los jobs de /api/analyze corren en el
+    threadpool de `BackgroundTasks`, así que dos análisis simultáneos usaban la
+    misma sesión a la vez, y `requests.Session` no promete ser segura entre
+    hilos. Una por hilo mantiene el reuso de conexiones (el threadpool
+    recicla sus hilos) sin compartir estado mutable.
+    """
+    session = getattr(_thread_state, "http_session", None)
+    if session is None:
+        session = requests.Session()
+        session.headers["User-Agent"] = settings.user_agent
+        _thread_state.http_session = session
+    return session
 
 
 def fetch_and_extract(url: str):
@@ -41,7 +66,7 @@ def fetch_and_extract(url: str):
     # (allowlist de dominios, bloqueo de IPs internas, tope de tamaño), no con
     # el fetch del scraper, que confía en las URLs de sus propios sitemaps.
     try:
-        html = url_guard.fetch_html(url, session=_extractor.session)
+        html = url_guard.fetch_html(url, session=_http_session())
     except UrlNotAllowed as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except requests.RequestException as exc:
@@ -85,10 +110,29 @@ def fetch_and_extract(url: str):
 
 
 def analyze_safely(title: str, body: str):
+    """Ejecuta el analizador activo traduciendo cualquier fallo a un mensaje
+    presentable.
+
+    `RuntimeError` es el error "esperado" —los analizadores lo usan para lo que
+    el usuario sí puede entender: "el servicio de IA está saturado", "no se
+    pudo parsear la respuesta"— y su texto va tal cual al UI. Lo que no lo es
+    (un error del SDK de Groq/Gemini, un timeout de httpx, un fallo de
+    validación) antes también terminaba en pantalla como `str(exc)`: jerga
+    inútil para quien pegó un link, y detalle interno de más. Se registra
+    completo en el log y al usuario le llega una frase que puede accionar.
+    """
     try:
         return analyzer.analyze(title, body)
+    except HTTPException:
+        raise
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("analyzer_failed", analyzer=analyzer.name)
+        raise HTTPException(
+            status_code=502,
+            detail="El servicio de análisis no está disponible en este momento. Intenta de nuevo.",
+        ) from exc
 
 
 def arbitrate_ambiguous_persons(result) -> None:
@@ -98,13 +142,20 @@ def arbitrate_ambiguous_persons(result) -> None:
 
     Está APAGADO por defecto: se activa con `ODIN_GEMINI_ARBITER=1`, nunca por
     tener GEMINI_API_KEY en el entorno (antes bastaba con eso y se facturaba sin
-    pedirlo). También se salta si el análisis principal ya lo hizo
-    GeminiAnalyzer: su prompt ya excluye lugares/homenajes y repetirlo sería
-    pagar dos veces. Solo se llama desde /api/analyze, nunca desde el crawl
+    pedirlo). Solo se llama desde /api/analyze, nunca desde el crawl
     (main.py/pipeline.py).
 
+    Se salta con CUALQUIER motor LLM, no solo con Gemini: el prompt que
+    comparten Gemini y Groq ya excluye los nombres que solo bautizan un lugar o
+    reciben un homenaje, así que preguntarlo de nuevo es pagar dos veces por la
+    misma decisión. Antes el guard miraba solo `ODIN_ANALYZER=gemini`, de modo
+    que con `groq`/`hybrid`/`groq+gemini` el árbitro sí corría — y encima sobre
+    un `context` que en esos motores es una cita de 12 palabras más la razón
+    entre corchetes, no la oración completa: el chequeo de palabras de lugar
+    sobre ese texto dispara casi al azar.
+
     Todos los casos ambiguos del artículo van en UNA sola llamada a Gemini."""
-    if IS_GEMINI_ANALYZER or not settings.gemini_arbiter:
+    if ANALYZER_READS_WHOLE_ARTICLE or not settings.gemini_arbiter:
         return
 
     ambiguous = [
@@ -122,17 +173,23 @@ def arbitrate_ambiguous_persons(result) -> None:
     result.entities = [e for e in result.entities if id(e) not in dropped]
 
 
-def run_analyze_job(job_id: str, url: str) -> None:
+def run_analyze_job(job_id: str) -> None:
     """Cuerpo del trabajo encolado por POST /api/analyze: descarga, analiza y
     guarda el resultado en la fila `AnalyzeJob`. Corre en el threadpool de
     `BackgroundTasks`, fuera del ciclo request/response — cualquier excepción
     de aquí NUNCA debe propagarse (no hay a quién devolvérsela), se guarda
-    como `error` en el job para que el polling la muestre."""
+    como `error` en el job para que el polling la muestre.
+
+    La URL se lee de la fila, no se recibe por parámetro: es la ya
+    canonicalizada por `start_analyze_job`, y pasarla aparte abría la puerta a
+    analizar una URL distinta de la que quedó registrada en el job."""
     session = deps.get_session()
+    started = time.perf_counter()
     try:
         job = session.get(AnalyzeJob, job_id)
         if job is None:  # no debería pasar
             return
+        url = job.url
         job.status = "running"
         job.stage = "fetching"
         job.started_at = datetime.now(UTC)
@@ -190,12 +247,20 @@ def run_analyze_job(job_id: str, url: str) -> None:
         except HTTPException as exc:
             job.status = "failed"
             job.error = str(exc.detail)
-        except Exception as exc:
+        except Exception:
+            # Detalle completo al log; al usuario, algo que pueda leer. Antes
+            # el `str(exc)` de cualquier excepción interna se mostraba tal cual
+            # en el UI.
             log.exception("analyze_job_failed", job_id=job_id, url=url)
             job.status = "failed"
-            job.error = str(exc)
+            job.error = "El análisis falló por un error interno. Intenta de nuevo."
+        job.stage = None  # solo tiene sentido mientras el job corre
         job.finished_at = datetime.now(UTC)
         session.commit()
+        ANALYZE_JOBS_TOTAL.labels(status=job.status).inc()
+        ANALYZE_JOB_DURATION_SECONDS.labels(status=job.status).observe(
+            time.perf_counter() - started
+        )
     finally:
         session.close()
 
@@ -212,35 +277,170 @@ def _to_analyze_result(detail: ArticleDetail, *, already_saved: bool) -> Analyze
     )
 
 
-def start_analyze_job(url: str) -> tuple[AnalyzeResult | None, str | None]:
-    """Si la URL ya estaba guardada, devuelve `(detalle, None)`. Si es nueva,
-    crea la fila `AnalyzeJob` en estado `pending` y devuelve `(None, job_id)`
-    — quien llama debe encolar `run_analyze_job(job_id, url)` en background."""
+class StartedAnalysis(NamedTuple):
+    """Qué hacer tras `start_analyze_job`.
+
+    Tres desenlaces, y el tercero es la razón de que esto no sea una tupla
+    suelta: puede haber un `job_id` que NO hay que encolar, porque ya lo está
+    corriendo otro request."""
+
+    result: AnalyzeResult | None  # respuesta inmediata: no hay nada que encolar
+    job_id: str | None
+    enqueue: bool = False
+
+
+def start_analyze_job(url: str) -> StartedAnalysis:
+    """Decide si hay que analizar la URL o si ya existe una respuesta.
+
+    En orden, del más barato al más caro:
+
+      1. el artículo ya está guardado -> se devuelve tal cual;
+      2. la misma URL se analizó hace poco y no se guardó -> se reusa ese
+         resultado en vez de volver a llamar al LLM (ver
+         `ODIN_ANALYZE_REUSE_MINUTES`);
+      3. hay un job de esa URL corriendo ahora mismo -> se devuelve SU id para
+         que este cliente haga polling del mismo trabajo, sin lanzar un
+         segundo análisis en paralelo;
+      4. nada de lo anterior -> se crea el job y quien llama lo encola.
+
+    Los pasos 2 y 3 son los que evitan pagar (o gastar rate limit) dos veces
+    por el mismo artículo: sin ellos, dos clics seguidos en "Analizar", o dos
+    usuarios con el mismo link, disparaban dos análisis completos.
+    """
     from services.article_service import serialize_article
 
+    canonical = url_guard.canonical_url(url)
     session = deps.get_session()
     try:
-        existing = session.scalar(select(Article).where(Article.url == url))
+        # Las dos formas de la URL: las notas guardadas antes de que existiera
+        # la canonicalización están con la URL tal como llegó.
+        existing = session.scalar(
+            select(Article).where(Article.url.in_({url, canonical}))
+        )
         if existing:
-            return _to_analyze_result(serialize_article(existing), already_saved=True), None
+            return StartedAnalysis(
+                _to_analyze_result(serialize_article(existing), already_saved=True), None
+            )
 
-        job = AnalyzeJob(id=str(uuid.uuid4()), url=url)
+        now = datetime.now(UTC)
+        if settings.analyze_reuse_minutes > 0:
+            reusable = session.scalar(
+                select(AnalyzeJob)
+                .where(
+                    AnalyzeJob.url == canonical,
+                    AnalyzeJob.status == "done",
+                    AnalyzeJob.result_json.is_not(None),
+                    AnalyzeJob.created_at
+                    >= now - timedelta(minutes=settings.analyze_reuse_minutes),
+                )
+                .order_by(AnalyzeJob.created_at.desc())
+            )
+            if reusable is not None and reusable.result_json:
+                log.info("analyze_result_reused", url=canonical, job_id=reusable.id)
+                ANALYZE_JOBS_TOTAL.labels(status="reused").inc()
+                return StartedAnalysis(
+                    AnalyzeResult.model_validate_json(reusable.result_json), None
+                )
+
+        in_flight = session.scalar(
+            select(AnalyzeJob)
+            .where(
+                AnalyzeJob.url == canonical,
+                AnalyzeJob.status.in_(("pending", "running")),
+                # Un job más viejo que esto está colgado (ver reap_stale_jobs):
+                # engancharse a él dejaría al cliente esperando para siempre.
+                AnalyzeJob.created_at
+                >= now - timedelta(minutes=settings.analyze_job_stale_minutes),
+            )
+            .order_by(AnalyzeJob.created_at.desc())
+        )
+        if in_flight is not None:
+            log.info("analyze_job_joined", url=canonical, job_id=in_flight.id)
+            return StartedAnalysis(None, in_flight.id, enqueue=False)
+
+        job = AnalyzeJob(id=str(uuid.uuid4()), url=canonical)
         session.add(job)
         session.commit()
-        return None, job.id
+        return StartedAnalysis(None, job.id, enqueue=True)
     finally:
         session.close()
 
 
-def get_job(job_id: str):
-    from api.schemas import JobResponse
-
+def get_job_row(job_id: str) -> AnalyzeJob:
+    """La fila del job, o 404. Se devuelve la fila y no un schema para que el
+    router pueda entregar `result_json` tal cual, sin parsearlo (ver
+    `api/routers/analyze.py`)."""
     session = deps.get_session()
     try:
         job = session.get(AnalyzeJob, job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job no encontrado.")
-        result = AnalyzeResult.model_validate_json(job.result_json) if job.result_json else None
-        return JobResponse(job_id=job.id, status=job.status, stage=job.stage, error=job.error, result=result)
+        session.expunge(job)
+        return job
+    finally:
+        session.close()
+
+
+def get_job(job_id: str):
+    """Versión tipada de `get_job_row`, para quien necesite el objeto ya
+    validado (tests, un cliente Python) en vez del JSON crudo."""
+    from api.schemas import JobResponse
+
+    job = get_job_row(job_id)
+    result = AnalyzeResult.model_validate_json(job.result_json) if job.result_json else None
+    return JobResponse(
+        job_id=job.id, status=job.status, stage=job.stage, error=job.error, result=result
+    )
+
+
+def reap_stale_jobs() -> int:
+    """Marca como fallidos los jobs que quedaron a medias y borra los viejos.
+
+    `BackgroundTasks` vive en la memoria del proceso: si el servidor se
+    reinicia con un análisis en curso, la fila se queda en `running` para
+    siempre y el cliente hace polling hasta rendirse por su propio timeout.
+    Esto se ejecuta al arrancar (ver el lifespan en `api/__init__.py`), que es
+    justo cuando esos jobs quedaron huérfanos.
+
+    Aprovecha el mismo barrido para podar los terminados: `result_json` guarda
+    el cuerpo completo del artículo, así que la tabla crece sin techo si nadie
+    la limpia. Devuelve cuántas filas tocó, entre reparadas y borradas.
+    """
+    now = datetime.now(UTC)
+    session = deps.get_session()
+    try:
+        stale = session.scalars(
+            select(AnalyzeJob).where(
+                AnalyzeJob.status.in_(("pending", "running")),
+                AnalyzeJob.created_at
+                <= now - timedelta(minutes=settings.analyze_job_stale_minutes),
+            )
+        ).all()
+        for job in stale:
+            job.status = "failed"
+            job.stage = None
+            job.error = "El análisis se interrumpió. Vuelve a intentarlo."
+            job.finished_at = now
+            ANALYZE_JOBS_TOTAL.labels(status="reaped").inc()
+
+        purged = 0
+        if settings.analyze_job_ttl_hours > 0:
+            purged = session.execute(
+                delete(AnalyzeJob)
+                .where(
+                    AnalyzeJob.status.in_(("done", "failed")),
+                    AnalyzeJob.created_at
+                    <= now - timedelta(hours=settings.analyze_job_ttl_hours),
+                )
+                # Sin sincronizar la sesión: es un DELETE masivo y justo arriba
+                # se marcaron filas como `failed`, así que la sincronización por
+                # defecto ("evaluate") intentaría reevaluar el filtro de fechas
+                # en Python contra esos objetos. La sesión se cierra enseguida.
+                .execution_options(synchronize_session=False)
+            ).rowcount  # type: ignore[attr-defined]  # DELETE siempre devuelve CursorResult
+        session.commit()
+        if stale or purged:
+            log.info("analyze_jobs_reaped", interrupted=len(stale), purged=purged)
+        return len(stale) + purged
     finally:
         session.close()

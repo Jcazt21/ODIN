@@ -89,8 +89,7 @@ export function ReportsPage() {
 
       {!loading && items.length === 0 ? (
         <div
-          className="flex flex-col items-center gap-3 rounded-xl border py-14 text-center"
-          style={{ borderColor: "var(--border)", background: "var(--panel)" }}
+          className="odin-glass flex flex-col items-center gap-3 rounded-xl border py-14 text-center"
         >
           <p className="text-[14.5px] font-semibold">Sin resultados</p>
           <p className="max-w-[38ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>

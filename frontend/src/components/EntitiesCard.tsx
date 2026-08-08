@@ -36,8 +36,8 @@ export function EntitiesCard({
 
   return (
     <div
-      className="overflow-hidden rounded-xl border px-6 py-5"
-      style={{ background: "var(--panel)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
+      className="odin-glass overflow-hidden rounded-xl border px-6 py-5"
+      style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <div className="mb-3 flex items-baseline gap-2">
         <h3 className="text-[15px] font-semibold">Figuras y empresas mencionadas</h3>

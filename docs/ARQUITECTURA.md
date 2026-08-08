@@ -112,13 +112,24 @@ observability.py            — structlog, correlation-id, métricas Prometheus,
 
 ### Flujo principal: `POST /api/analyze`
 
-1. `api/routers/analyze.py` valida y encola vía `analyze_service.start_analyze_job`
-   (`AnalyzeJob` con `id` UUID, `status=pending`).
+1. `api/routers/analyze.py` valida la URL y llama a
+   `analyze_service.start_analyze_job`, que antes de encolar nada busca una
+   respuesta más barata sobre la URL ya canonicalizada
+   (`url_guard.canonical_url` quita `utm_*`, fragmento y barra final, para que
+   el mismo link compartido por WhatsApp no se analice dos veces):
+   artículo ya guardado → job `done` reciente de esa URL
+   (`ODIN_ANALYZE_REUSE_MINUTES`) → job de esa URL ya corriendo (el cliente se
+   engancha a ÉL). Solo si no hay nada de eso se crea el `AnalyzeJob`
+   (`status=pending`) y se encola.
 2. `BackgroundTasks` corre `run_analyze_job`, que va marcando `AnalyzeJob.stage`
    a medida que avanza: `fetching` (`url_guard.fetch_html`, anti-SSRF →
    `trafilatura.extract`) → `analyzing` (`analyzer_registry`, el motor activo
-   del proceso, y si aplica `entity_arbiter` para personas ambiguas) →
-   `canonicalizing` (`canonicalize_result` sobre la vista previa).
+   del proceso, y si aplica `entity_arbiter` para personas ambiguas — solo con
+   `ODIN_ANALYZER=local`) → `canonicalizing` (`canonicalize_result` sobre la
+   vista previa). Con los motores LLM, las entidades devueltas se contrastan
+   contra el texto del artículo (`analysis/entity_verify.py`) antes de llegar
+   al paso 3: se descarta lo que no aparece y `mentions_count` se cuenta de
+   verdad en vez de quedarse con la estimación del modelo.
 3. El cliente hace polling a `GET /api/jobs/{id}` hasta `status=done|failed`;
    mientras `status=running`, `stage` le dice en qué paso va. El `result` es un
    `AnalyzeResult` (vista previa sin guardar), no un `ArticleDetail`.
@@ -126,6 +137,14 @@ observability.py            — structlog, correlation-id, métricas Prometheus,
    `POST /api/articles`, que vuelve a correr `canonicalize_entities` sobre las
    entidades ya editadas antes de persistir (el paso 2 canonicaliza lo que se
    le muestra al usuario; este canonicaliza lo que realmente se guarda).
+
+Al arrancar, el `lifespan` de la API llama a `analyze_service.reap_stale_jobs()`:
+`BackgroundTasks` vive en la memoria del proceso, así que un reinicio a mitad de
+un análisis deja la fila en `running` para siempre. El mismo barrido borra los
+jobs terminados que pasaron su TTL (`result_json` guarda el cuerpo completo del
+artículo). También se calientan los modelos locales en un hilo aparte, para que
+el primer análisis tras el despliegue no pague la carga de spaCy y
+pysentimiento.
 
 ### Flujo masivo (parcialmente vigente): `POST /api/scrape-jobs`
 

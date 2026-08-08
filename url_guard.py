@@ -26,7 +26,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import charset_normalizer  # dependencia de requests, ver _decode_html
 import requests
@@ -149,6 +149,48 @@ def _assert_resolves_to_public_ip(host: str) -> None:
             raise UrlNotAllowed(
                 f"El dominio '{host}' apunta a una dirección interna."
             )
+
+
+# Parámetros de rastreo que las redes sociales y las campañas pegan al link.
+# No cambian la nota que devuelve el servidor, pero sí el string de la URL, y
+# eso basta para que la misma nota entre dos veces al sistema.
+_TRACKING_PARAMS = (
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "utm_id", "utm_name", "utm_reader", "fbclid", "gclid", "gbraid", "wbraid",
+    "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "ref_src", "s", "smid",
+    "spm", "yclid", "_ga",
+)
+
+
+def canonical_url(url: str) -> str:
+    """Forma canónica de la URL de un artículo, para que la MISMA nota no se
+    analice (ni se guarde) dos veces por llegar escrita distinto.
+
+    Un link copiado de WhatsApp trae `?utm_source=...`, uno copiado del
+    navegador puede traer `#comentarios` o una barra final. Para el servidor
+    del medio son la misma página; para un `WHERE url = ...` son tres URLs
+    distintas, y cada una se lleva su propio análisis —con su llamada al LLM— y
+    su propia fila en `articles`, que tiene la URL como clave única.
+
+    Deliberadamente conservador: se quita solo lo que con certeza no cambia el
+    contenido (esquema y dominio en minúsculas, fragmento, parámetros de
+    rastreo conocidos, barra final). Los demás parámetros se conservan y se
+    ordenan — hay medios que sirven la nota por `?id=1234`, y ahí quitar el
+    query sería apuntar a otra página.
+
+    NO valida nada: eso sigue siendo trabajo de `validate_url`.
+    """
+    parts = urlsplit(url.strip())
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key.lower() not in _TRACKING_PARAMS
+    ]
+    netloc = (parts.hostname or "").lower()
+    if parts.port and parts.port not in (80, 443):
+        netloc = f"{netloc}:{parts.port}"
+    path = parts.path.rstrip("/") or "/"
+    return urlunsplit((parts.scheme.lower(), netloc, path, urlencode(sorted(query)), ""))
 
 
 def _content_type_allowed(header: str | None) -> bool:

@@ -18,6 +18,7 @@ from analysis.local_analyzer import (
     _is_named_after_place,
     _norm_key,
     _preceded_by_venue_noun,
+    _Sentences,
 )
 
 
@@ -121,12 +122,11 @@ class TestEntitySentimentBoost:
     _POS_LEANING = {"POS": 0.40, "NEU": 0.45, "NEG": 0.15}
 
     @staticmethod
-    def _run(nlp, text: str, default: dict[str, float]):
+    def _run(nlp, text: str, default: dict[str, float] | None):
         doc = nlp(text)
-        sents = list(doc.sents)
-        probas_by_index = [dict(default) for _ in sents]
-        start_to_index = {s.start_char: i for i, s in enumerate(sents)}
-        results = LocalAnalyzer()._entities(doc, probas_by_index, start_to_index)
+        sentences = _Sentences.from_doc(doc)
+        probas_by_index = [dict(default) if default else None for _ in sentences.texts]
+        results = LocalAnalyzer()._entities(doc, probas_by_index, sentences)
         return {e.name: e for e in results}
 
     def test_accused_entity_leans_negative(self, nlp):
@@ -163,3 +163,65 @@ class TestEntitySentimentBoost:
         entities = self._run(nlp, text, self._NEG_LEANING)
         assert entities["Ramón Pérez"].sentiment_toward == "NEG"
         assert entities["Rosa Martínez"].sentiment_toward == "NEU"
+
+    def test_accuser_in_the_same_sentence_does_not_get_the_boost(self, nlp):
+        # El patrón relacional se lo lleva la mención que lo precede (el
+        # acusado), no el agente que va después: acusar a alguien no deja mal
+        # parado a quien acusa. Con una sola etiqueta por frase, ambos caían
+        # en NEG.
+        text = (
+            "Ramón Pérez fue acusado de corrupción por la Procuraduría "
+            "General de la República."
+        )
+        entities = self._run(nlp, text, self._NEG_LEANING)
+        assert entities["Ramón Pérez"].sentiment_toward == "NEG"
+        procuraduria = next(e for name, e in entities.items() if "Procuraduría" in name)
+        assert procuraduria.sentiment_toward == "NEU"
+
+    def test_opposite_patterns_on_the_same_entity_cancel_out(self, nlp):
+        # Señal contradictoria en la misma frase: no se fuerza ninguna
+        # dirección (mismo criterio que `lexicon_label`).
+        text = "Ramón Pérez, acusado de corrupción y reconocido por su gestión, habló ayer."
+        entities = self._run(nlp, text, self._NEG_LEANING)
+        assert entities["Ramón Pérez"].sentiment_toward == "NEU"
+
+    def test_entity_without_scored_sentences_has_no_opinion(self, nlp):
+        # Sin probabilidades para ninguna de sus frases (p.ej. menciones más
+        # allá de _MAX_SENTENCES) el sentimiento es None, no un "NEU 0.0" que
+        # no se distingue de un neutro real.
+        entities = self._run(nlp, "El senador Ramón Pérez asistió a la sesión.", None)
+        assert entities["Ramón Pérez"].sentiment_toward is None
+        assert entities["Ramón Pérez"].sentiment_score is None
+
+
+class TestAnalyzeTopics:
+    """`HybridAnalyzer` solo usa tema y palabras clave de este analizador; el
+    resto del pipeline local (NER + pysentimiento sobre cada frase) era trabajo
+    que se hacía para tirarlo."""
+
+    _TEXTO = (
+        "El Ministerio de Salud amplía el plan de agua potable. "
+        "El plan de agua potable llegará a 30 mil familias este año. "
+        "Las obras de agua potable comenzaron en marzo."
+    )
+
+    def test_does_not_load_the_sentiment_model(self, nlp, monkeypatch):
+        analyzer = LocalAnalyzer()
+        monkeypatch.setattr(type(analyzer), "nlp", property(lambda self: nlp))
+
+        analyzer.analyze_topics("Agua potable", self._TEXTO)
+
+        # Tocar `analyzer.sent` lo cargaría; que siga en None prueba que este
+        # camino no pasa por pysentimiento.
+        assert analyzer._sent is None
+
+    def test_returns_the_same_topic_as_the_full_analysis(self, nlp, monkeypatch):
+        analyzer = LocalAnalyzer()
+        monkeypatch.setattr(type(analyzer), "nlp", property(lambda self: nlp))
+
+        main_topic, keywords = analyzer.analyze_topics("Agua potable", self._TEXTO)
+
+        doc = nlp(f"Agua potable.\n\n{self._TEXTO}".strip())
+        expected_keywords = analyzer._keywords(doc)
+        assert keywords == expected_keywords
+        assert main_topic == analyzer._main_topic(doc, expected_keywords)

@@ -179,6 +179,48 @@ GEMINI_TOKENS_TOTAL = Counter(
     registry=registry,
 )
 
+# Groq: mismo par de contadores que Gemini. Groq es gratis, pero su consumo es
+# lo que explica el gasto de al lado: cada request que aquí falla o se trunca es
+# un candidato a irse al fallback FACTURADO de Gemini.
+GROQ_REQUESTS_TOTAL = Counter(
+    "odin_groq_requests_total",
+    "Llamadas a la API de Groq, por modelo y resultado",
+    ["model", "status"],  # success | truncated | empty | error | http_<código>
+    registry=registry,
+)
+GROQ_TOKENS_TOTAL = Counter(
+    "odin_groq_tokens_total",
+    "Tokens consumidos en llamadas a Groq, por modelo y tipo",
+    ["model", "kind"],  # kind: prompt | output
+    registry=registry,
+)
+
+# El número que gobierna la factura: cuántas veces el motor gratuito falló y se
+# recurrió al de pago. Sin esto solo se veía el total de llamadas a Gemini, sin
+# saber si venían de ODIN_ANALYZER=gemini o de un fallback que se podía evitar.
+ANALYZER_FALLBACK_TOTAL = Counter(
+    "odin_analyzer_fallback_total",
+    "Veces que el analizador gratuito falló y se usó el de pago, por causa",
+    ["reason"],  # rate_limit | truncated | timeout | other
+    registry=registry,
+)
+
+# /api/analyze de punta a punta: cuánto tarda un job y en qué acaba. La latencia
+# que importa no es la del POST (responde 202 al instante) sino esta.
+ANALYZE_JOB_DURATION_SECONDS = Histogram(
+    "odin_analyze_job_duration_seconds",
+    "Duración de un job de POST /api/analyze, de encolado a resultado",
+    ["status"],  # done | failed
+    buckets=(1, 2.5, 5, 10, 20, 30, 60, 120, 300),
+    registry=registry,
+)
+ANALYZE_JOBS_TOTAL = Counter(
+    "odin_analyze_jobs_total",
+    "Jobs de POST /api/analyze finalizados, por resultado",
+    ["status"],  # done | failed | reused | reaped
+    registry=registry,
+)
+
 CRAWL_RUN_IN_PROGRESS = Gauge(
     "odin_crawl_run_in_progress",
     "1 si hay una corrida de crawl en curso, 0 si no",

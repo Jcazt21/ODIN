@@ -39,29 +39,61 @@ Requisitos:
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel
 
 from analysis.base import AnalysisResult
-from analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _result_from_llm
+from analysis.gemini_analyzer import (
+    _SYSTEM,
+    ANALYSIS_JSON_SCHEMA,
+    _Analysis,
+    _result_from_llm,
+)
 
-# 5.000 y no 16.000 (el valor de Gemini): en Groq el límite que muerde no es el
-# coste sino el TPM del free tier — 8.000 tokens POR REQUEST incluido el cupo de
-# salida (ver _call_groq). Se recorta la ENTRADA para poder darle más cupo a la
-# salida, que es donde el análisis se estaba truncando.
+# --- Reparto del TPM del free tier de Groq -----------------------------------
+# El límite que muerde aquí no es el coste (es gratis) sino el TPM: 8.000 tokens
+# POR REQUEST, y en Groq eso incluye `max_completion_tokens`, que se RESERVA
+# contra el límite aunque el modelo no lo use (ver _call_groq).
 #
-# Subido de 4.000 a 5.000: con 4.000, artículos con listados/cifras al final
-# del cuerpo (p.ej. un listado de nombres tras el desarrollo, tipo "los
-# senadores son: ...") perdían justo esa cola — el LLM ni la veía, así que no
-# podía extraer esas entidades por más que el prompt se lo pidiera. No se subió
-# a 6.000: con cuerpo completo Y muchas entidades (20+, listados largos de
-# personas) el cuello de botella pasa a ser la SALIDA, no la entrada —
-# _call_groq necesita margen para max_completion_tokens. 5.000 caracteres
-# (~1.070 tokens) deja prompt fijo (~3.150) + cuerpo ≈ 4.220 tokens de
-# entrada, dejando ~3.700 para salida sin pasar el TPM de 8.000. Si Groq
-# empieza a devolver 429 por esto en artículos largos, el fallback a Gemini
-# (analysis/fallback_analyzer.py) analiza el artículo SIN este recorte.
-_MAX_BODY_CHARS = 5_000
+#   prompt fijo (system + schema compacto) ~3.330
+#   + cuerpo 7.000 chars                   ~2.000
+#   + reserva de salida                     2.400
+#   = ~7.730 de 8.000
+#
+# Antes la cuenta era ~3.600 + 1.430 (cuerpo de 5.000) + 3.700 = ~8.730: por
+# encima del TPM, o sea que un artículo largo daba 429 de forma estructural y
+# se iba al fallback FACTURADO de Gemini. Los dos números se movieron a la vez:
+#
+#   - La reserva de salida baja de 3.700 a 2.400 porque 3.700 nunca hizo falta:
+#     el JSON de un artículo con 15 entidades (el tope que pide el prompt) ronda
+#     los 1.300-1.500 tokens. Reservar el doble de lo que se usa se paga en
+#     entrada recortada, no en calidad.
+#   - El cuerpo sube de 5.000 a 7.000 chars con lo liberado: es entrada que el
+#     modelo SÍ lee, y era la causa de que se perdieran las entidades del final
+#     del artículo (listados de nombres después del desarrollo).
+#
+# Si aun así la salida se trunca, `_analyze_full` reintenta con el reparto
+# invertido (_RETRY_*) — gratis, antes de recurrir a Gemini. El log de
+# `groq_usage` dice el consumo real: ajustar con ese dato, no estimando tokens a
+# ojo (chars/4 ya falló una vez; la cuenta de arriba usa chars/3.5).
+_MAX_BODY_CHARS = 7_000
+_MAX_OUTPUT_TOKENS = 2_400
+
+# Segundo intento cuando el modelo corta el JSON por límite de tokens: menos
+# artículo a cambio de más cupo de salida (~860 + 3.700 + 3.330 = ~7.900).
+_RETRY_BODY_CHARS = 3_000
+_RETRY_OUTPUT_TOKENS = 3_700
+
+# Techo de tiempo por llamada. Sin esto, el default del SDK (60s de lectura y 2
+# reintentos = hasta ~180s) más el fallback a Gemini se pasa del tiempo que el
+# frontend espera por un job, y el usuario ve "está tardando demasiado" mientras
+# el análisis —posiblemente ya pagado— termina bien y queda sin mostrarse. Ver
+# JOB_POLL_TIMEOUT_MS en frontend/src/lib/odin-api.ts.
+_REQUEST_TIMEOUT_SECONDS = 25.0
+# 1 y no el default 2: el reintento del SDK sirve para un 429 puntual con
+# Retry-After corto, pero encadenar dos solo alarga la espera antes del fallback.
+_MAX_RETRIES = 1
 
 log = logging.getLogger("odin.groq_analyzer")
 
@@ -72,7 +104,7 @@ log = logging.getLogger("odin.groq_analyzer")
 # idéntico. Aun así, sube en paralelo a gemini_analyzer._PROMPT_VERSION cada
 # vez que cambia el CONTENIDO de _SYSTEM (p.ej. el glosario de
 # analysis/sentiment_lexicon.py), porque ese texto sí es compartido.
-_GROQ_ANALYZER_PROMPT_VERSION = "5"
+_GROQ_ANALYZER_PROMPT_VERSION = "6"
 
 
 _DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -93,7 +125,7 @@ def _groq_client():
         from groq import Groq  # import perezoso: solo si se usa algún analizador de Groq
 
         # Toma la API key de GROQ_API_KEY del entorno.
-        _client = Groq()
+        _client = Groq(timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_RETRIES)
     return _client
 
 
@@ -127,8 +159,27 @@ def _friendly_groq_error(exc) -> str:
     return "El servicio de IA no pudo procesar este artículo. Intenta de nuevo más tarde."
 
 
-def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
+class _TruncatedOutput(RuntimeError):
+    """El modelo cortó el JSON por límite de tokens (finish_reason=length).
+
+    Excepción propia y no un RuntimeError genérico porque tiene arreglo local
+    y gratis —reintentar con otro reparto del TPM (ver `_analyze_full`)— y no
+    debe confundirse con los fallos que sí justifican caer al fallback pagado.
+    """
+
+
+def _call_groq(
+    model: str,
+    system: str,
+    prompt: str,
+    schema: type[BaseModel],
+    *,
+    json_schema: dict,
+    max_output_tokens: int,
+):
     from groq import APIStatusError
+
+    from observability import GROQ_REQUESTS_TOTAL, GROQ_TOKENS_TOTAL
 
     try:
         response = _groq_client().chat.completions.create(
@@ -139,40 +190,30 @@ def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
             ],
             temperature=0.0,
             # OJO: en Groq este tope NO es solo un cap sobre lo generado — se
-            # RESERVA contra el rate limit. El TPM del free tier (8.000) se compara
-            # contra prompt + max_completion_tokens, así que subirlo encarece cada
-            # request aunque el modelo no llegue a usarlo: con 6144 aquí, un
-            # artículo corto ya devolvía 413 (rate_limit_exceeded) antes de
-            # generar un solo token.
-            #
-            # El reparto de los 8.000 se movió hacia la SALIDA porque ahí es donde
-            # estaba fallando: con 2.500 el modelo cortaba a mitad del JSON
-            # (finish_reason="length"), mientras que la entrada entraba de sobra.
-            #
-            # Subido de 3.200 a 3.700 junto con _MAX_BODY_CHARS (4.000 -> 6.000):
-            # con cuerpo completo, un artículo con listado largo de personas
-            # (p.ej. 10 senadores + varias organizaciones = 20+ entidades) generaba
-            # bastante más JSON que antes y volvía a cortarse en finish_reason=
-            # "length" con 3.200. Con _MAX_BODY_CHARS=6.000, prompt fijo
-            # (system+schema ~3.150) + cuerpo (hasta ~1.280 tokens) puede llegar a
-            # ~4.400; sumando 3.700 de salida da ~8.100 — puede rozar el TPM de
-            # 8.000 en el peor caso (artículo largo Y con muchas entidades). El log
-            # de uso de abajo dice cuánto se consumió de verdad: ajustar con ese
-            # dato, no a ojo (estimar tokens como chars/4 ya falló una vez). Si
-            # vuelve a aparecer finish_reason="length" o 429 por TPM, hay que bajar
-            # uno de los dos números, no solo subir este.
-            max_completion_tokens=3700,
+            # RESERVA contra el rate limit. El TPM del free tier (8.000) se
+            # compara contra prompt + max_completion_tokens, así que subirlo
+            # encarece cada request aunque el modelo no llegue a usarlo: con
+            # 6144 aquí, un artículo corto ya devolvía 413 antes de generar un
+            # solo token. El reparto entre entrada y salida está razonado en
+            # los comentarios de _MAX_BODY_CHARS.
+            max_completion_tokens=max_output_tokens,
             response_format={
                 "type": "json_schema",
-                "json_schema": {"name": "analysis", "schema": schema.model_json_schema()},
+                "json_schema": {"name": "analysis", "schema": json_schema},
             },
         )
     except APIStatusError as exc:
+        GROQ_REQUESTS_TOTAL.labels(model=model, status=f"http_{exc.status_code}").inc()
         raise RuntimeError(_friendly_groq_error(exc)) from exc
-    # Uso real, para poder ajustar _MAX_BODY_CHARS/max_completion_tokens con
-    # datos en vez de estimando tokens a ojo (chars/4 se queda corto y fue lo
-    # que llevó al 413 de arriba). `completion` dice cuánto de los 2500 se usó
-    # de verdad; `total` dice cuán cerca del TPM quedó el request.
+    except Exception:
+        GROQ_REQUESTS_TOTAL.labels(model=model, status="error").inc()
+        raise
+
+    # Uso real, para poder ajustar _MAX_BODY_CHARS/max_output_tokens con datos
+    # en vez de estimando tokens a ojo (chars/4 se queda corto y fue lo que
+    # llevó al 413 de arriba). `completion` dice cuánto del cupo se usó de
+    # verdad; `total` dice cuán cerca del TPM quedó el request.
+    finish_reason = response.choices[0].finish_reason
     usage = getattr(response, "usage", None)
     if usage is not None:
         log.info(
@@ -181,33 +222,69 @@ def _call_groq(model: str, system: str, prompt: str, schema: type[BaseModel]):
             getattr(usage, "prompt_tokens", "?"),
             getattr(usage, "completion_tokens", "?"),
             getattr(usage, "total_tokens", "?"),
-            response.choices[0].finish_reason,
+            finish_reason,
         )
+        GROQ_TOKENS_TOTAL.labels(model=model, kind="prompt").inc(
+            getattr(usage, "prompt_tokens", 0) or 0
+        )
+        GROQ_TOKENS_TOTAL.labels(model=model, kind="output").inc(
+            getattr(usage, "completion_tokens", 0) or 0
+        )
+
     raw = response.choices[0].message.content
-    finish_reason = response.choices[0].finish_reason
-    if not raw:
-        raise RuntimeError(f"Groq no devolvió contenido (finish_reason={finish_reason})")
     if finish_reason == "length":
-        raise RuntimeError(
-            "Groq cortó la respuesta por límite de tokens antes de completar "
-            "el JSON (finish_reason=length) — sube max_completion_tokens en "
-            "_call_groq si esto se repite con artículos largos/con muchas "
-            "entidades."
+        GROQ_REQUESTS_TOTAL.labels(model=model, status="truncated").inc()
+        raise _TruncatedOutput(
+            "Groq cortó la respuesta por límite de tokens antes de completar el JSON"
         )
+    if not raw:
+        GROQ_REQUESTS_TOTAL.labels(model=model, status="empty").inc()
+        raise RuntimeError(f"Groq no devolvió contenido (finish_reason={finish_reason})")
+    GROQ_REQUESTS_TOTAL.labels(model=model, status="success").inc()
     return schema.model_validate_json(raw)
 
 
 def _analyze_full(model: str, title: str, body: str) -> AnalysisResult:
     """Análisis completo (tema, entidades, sentimiento, encuadre) vía Groq —
     usado tal cual por `GroqAnalyzer` y por `HybridAnalyzer` para la parte
-    que sí delega al LLM (entidades + encuadre)."""
-    body = (body or "")[:_MAX_BODY_CHARS]
-    prompt = f"Analiza este artículo de periódico.\n\nTITULAR: {title}\n\nCUERPO:\n{body}"
-    data = _call_groq(model, _SYSTEM, prompt, _Analysis)
+    que sí delega al LLM (entidades + encuadre).
 
-    entities = [_entity_from_llm(e) for e in data.entities]
-
-    return _result_from_llm(data, entities)
+    Si la salida se trunca, reintenta UNA vez con menos artículo y más cupo de
+    salida. Es gratis y evita el único desenlace que sí cuesta dinero: caer al
+    fallback de Gemini (`analysis/fallback_analyzer.py`) por un problema de
+    reparto de tokens, no por un fallo del análisis.
+    """
+    full_body = body or ""
+    attempts = (
+        (_MAX_BODY_CHARS, _MAX_OUTPUT_TOKENS),
+        (_RETRY_BODY_CHARS, _RETRY_OUTPUT_TOKENS),
+    )
+    for attempt, (body_chars, output_tokens) in enumerate(attempts, start=1):
+        prompt = (
+            "Analiza este artículo de periódico.\n\n"
+            f"TITULAR: {title}\n\nCUERPO:\n{full_body[:body_chars]}"
+        )
+        try:
+            data = _call_groq(
+                model,
+                _SYSTEM,
+                prompt,
+                _Analysis,
+                json_schema=ANALYSIS_JSON_SCHEMA,
+                max_output_tokens=output_tokens,
+            )
+        except _TruncatedOutput:
+            if attempt == len(attempts):
+                raise
+            log.warning(
+                "groq_salida_truncada: reintento con cuerpo=%d chars y salida=%d tokens",
+                *attempts[attempt],
+            )
+            continue
+        # El texto COMPLETO, no el recorte: `_result_from_llm` cuenta menciones
+        # sobre él, así que las del final del artículo también suman.
+        return _result_from_llm(data, f"{title}\n{full_body}")
+    raise AssertionError("inalcanzable: el bucle sale por return o por raise")
 
 
 class GroqAnalyzer:
@@ -263,16 +340,27 @@ class HybridAnalyzer:
         return f"{self._local.model}+{self._groq_model}"
 
     def analyze(self, title: str, body: str) -> AnalysisResult:
-        local_result = self._local.analyze(title, body)
-        groq_result = _analyze_full(self._groq_model, title, body)
+        # Los dos motores arrancan a la vez: uno es CPU (spaCy) y el otro es
+        # espera de red (Groq), así que en serie se sumaban dos tiempos que no
+        # compiten por el mismo recurso. El hilo extra vive solo lo que dura
+        # esta llamada.
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="odin-topics") as pool:
+            topics = pool.submit(self._local.analyze_topics, title, body)
+            try:
+                groq_result = _analyze_full(self._groq_model, title, body)
+            except BaseException:
+                topics.cancel()
+                raise
+            main_topic, keywords = topics.result()
 
         # Solo tema/keywords vienen de LocalAnalyzer: es extracción pura de
         # sustantivos frecuentes, sin ambigüedad semántica que un LLM resuelva
-        # mejor. overall_sentiment/sentiment_score se dejan tal cual los
-        # devuelve Groq (ya lee el artículo completo con contexto entre
-        # frases) — pysentimiento en LocalAnalyzer agrega probabilidades por
-        # frase de forma independiente, sin ver el artículo completo, así que
-        # es la señal menos confiable de las dos para este campo.
-        groq_result.main_topic = local_result.main_topic
-        groq_result.topic_keywords = local_result.topic_keywords
+        # mejor. Por eso se llama `analyze_topics` y no `analyze`: el análisis
+        # local completo también corría pysentimiento sobre cada frase (~60%
+        # de su tiempo) para tirar el resultado a la basura, porque
+        # overall_sentiment/sentiment_score se dejan tal cual los devuelve Groq
+        # — ya lee el artículo completo con contexto entre frases, mientras que
+        # pysentimiento agrega probabilidades por frase de forma independiente.
+        groq_result.main_topic = main_topic
+        groq_result.topic_keywords = keywords
         return groq_result

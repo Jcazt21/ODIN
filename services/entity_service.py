@@ -6,6 +6,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from analysis.canonicalize import invalidate_person_map
 from api import deps
 from api.deps import log
 from api.schemas import EntityMention, EntityUpdatePayload
@@ -44,6 +45,7 @@ def update_entity(entity_id: int, payload: EntityUpdatePayload) -> EntityMention
         for field, value in data.items():
             setattr(entity, field, value)
         session.commit()
+        invalidate_person_map()  # el nombre corregido entra al mapa de apellidos
         return EntityMention.model_validate(entity)
     except HTTPException:
         raise
@@ -65,6 +67,7 @@ def delete_entity(entity_id: int) -> None:
             raise HTTPException(status_code=404, detail="Mención no encontrada.")
         session.delete(entity)
         session.commit()
+        invalidate_person_map()
     except HTTPException:
         raise
     except Exception:

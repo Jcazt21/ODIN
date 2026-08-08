@@ -113,13 +113,20 @@ analizada).
 | `id` | String(36) PK (UUID) | no | UUID, no autoincrement — evita revelar volumen total de análisis |
 | `status` | String(20), default `pending` | no | `pending` \| `running` \| `done` \| `failed` |
 | `stage` | String(20) | sí | paso del pipeline dentro de `status=running`: `fetching` \| `analyzing` \| `canonicalizing` (`ANALYZE_STAGES` en `services/analyze_service.py`); `NULL` fuera de `running`. Lo consume el polling del frontend para mostrar progreso, no solo "corriendo" |
-| `url` | String(2048) | no | URL solicitada |
+| `url` | String(2048) | no | URL solicitada, ya canonicalizada (`url_guard.canonical_url`: sin `utm_*`, fragmento ni barra final) — es la clave con que se busca un análisis reciente o un job en curso de la misma nota |
 | `created_at` / `started_at` / `finished_at` | DateTime(tz) | sí (excepto `created_at`) | timestamps del ciclo de vida |
 | `result_json` | Text | sí | `AnalyzeResult` serializado (la vista previa sin guardar, no `ArticleDetail`), si terminó en `done` |
-| `error` | Text | sí | mensaje de error, si terminó en `failed` |
+| `error` | Text | sí | mensaje de error, si terminó en `failed`. Siempre redactado para el usuario: el detalle de una excepción interna va al log, no aquí |
+
+Índices: `(url, created_at)` para el reuso y el dedupe de jobs en curso;
+`(status, created_at)` para el barrido de arranque.
 
 No hay operación de reintento: un job fallido se reintenta creando uno nuevo
 (`POST /api/analyze` de nuevo). Ver [RUNBOOK.md](RUNBOOK.md).
+
+Las filas no son eternas: al arrancar, la API marca como `failed` los jobs que
+quedaron colgados (`ODIN_ANALYZE_JOB_STALE_MINUTES`) y borra los terminados que
+pasaron su TTL (`ODIN_ANALYZE_JOB_TTL_HOURS`).
 
 ## `crawl_runs`
 

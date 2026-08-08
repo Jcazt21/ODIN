@@ -20,7 +20,9 @@ Campos:
     el léxico RELACIONAL de `analysis/sentiment_lexicon.py` ("acusado de",
     "reconocido por"): a diferencia del léxico general (que se aplica a toda
     frase por igual), este solo aplica sobre las frases ya asociadas a esa
-    entidad puntual, porque su dirección depende de a quién mencionan.
+    entidad puntual, y dentro de la frase solo a la mención que RECIBE la
+    acción — la más cercana antes del patrón (ver `_relational_boosts`), para
+    no dejar mal parado también a quien acusa.
 
 NOTA: `sentiment_toward` es una aproximación por frase (aspect-based sentiment
 sencillo). Para máxima precisión, sustituir por el analizador con LLM (misma
@@ -29,12 +31,13 @@ interfaz Analyzer); ver analysis/gemini_analyzer.py.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from analysis.base import AnalysisResult, EntityResult
 from analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
-from analysis.sentiment_lexicon import (
-    apply_entity_relation_boost as _apply_entity_relation_boost,
-)
+from analysis.sentiment_lexicon import apply_label_boost as _apply_label_boost
+from analysis.sentiment_lexicon import entity_relation_hits as _entity_relation_hits
 from analysis.text_norm import norm_key as _norm_key
 from analysis.text_norm import strip_accents as _strip_accents
 
@@ -43,7 +46,7 @@ from analysis.text_norm import strip_accents as _strip_accents
 # _merge_aliases, umbrales de _extraction_confidence, el glosario de
 # analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
 # se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "5"
+_LOCAL_ANALYZER_VERSION = "6"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
@@ -204,7 +207,46 @@ def _extraction_confidence(display_name: str, etype: str, count: int) -> float:
     return round(max(score, 0.1), 2)
 
 
-def _aggregate(probas_list: list[dict | None]) -> tuple[str, float]:
+@dataclass
+class _Sentences:
+    """Las frases del documento ya recortadas, más lo necesario para ubicar
+    una entidad DENTRO de ellas.
+
+    Existe para que el sentimiento por frase y la búsqueda de patrones
+    relacionales trabajen sobre exactamente el mismo texto: antes las
+    probabilidades se calculaban sobre la frase recortada a `_MAX_SENT_CHARS`
+    y el léxico relacional se buscaba sobre la frase completa, así que un
+    patrón que cayera después del corte ajustaba un sentimiento calculado
+    sobre un texto donde ese patrón no estaba.
+    """
+
+    texts: list[str]                 # frase recortada, sin espacios al borde
+    doc_starts: list[int]            # offset en el doc del primer carácter de texts[i]
+    index_by_start: dict[int, int]   # start_char de la frase de spaCy -> índice
+
+    @classmethod
+    def from_doc(cls, doc) -> _Sentences:
+        texts: list[str] = []
+        doc_starts: list[int] = []
+        index_by_start: dict[int, int] = {}
+        for i, sent in enumerate(list(doc.sents)[:_MAX_SENTENCES]):
+            raw = sent.text
+            lead = len(raw) - len(raw.lstrip())
+            texts.append(raw.strip()[:_MAX_SENT_CHARS])
+            doc_starts.append(sent.start_char + lead)
+            index_by_start[sent.start_char] = i
+        return cls(texts, doc_starts, index_by_start)
+
+    def index_of(self, sent) -> int | None:
+        """Índice de la frase, o None si quedó fuera del tope de frases."""
+        return self.index_by_start.get(sent.start_char)
+
+    def offset_of(self, index: int, ent) -> int:
+        """Posición de la entidad dentro de `texts[index]`."""
+        return ent.start_char - self.doc_starts[index]
+
+
+def _aggregate(probas_list: Sequence[dict | None]) -> tuple[str, float]:
     """Agrega sentimiento sumando probabilidades de varias frases."""
     totals: dict[str, float] = defaultdict(float)
     n = 0
@@ -280,13 +322,25 @@ class LocalAnalyzer:
         texts = [f"{title}.\n\n{body}".strip() for title, body in items]
         return [self._analyze_doc(doc) for doc in self.nlp.pipe(texts)]
 
+    def analyze_topics(self, title: str, body: str) -> tuple[str | None, list[str]]:
+        """Solo `(main_topic, topic_keywords)`, sin entidades ni sentimiento.
+
+        Para quien combina este analizador con otro motor y descarta el resto
+        (`HybridAnalyzer`, que toma las entidades y el encuadre de Groq):
+        corre spaCy con el NER apagado —el componente más caro de los que aquí
+        no se usan— y NO toca pysentimiento, que era ~60% del tiempo de
+        `analyze()` y terminaba en la basura.
+        """
+        text = f"{title}.\n\n{body}".strip()
+        doc = self.nlp(text, disable=["ner"])
+        keywords = self._keywords(doc)
+        return self._main_topic(doc, keywords), keywords
+
     def _analyze_doc(self, doc) -> AnalysisResult:
-        sents = list(doc.sents)[:_MAX_SENTENCES]
-        sent_texts = [s.text.strip()[:_MAX_SENT_CHARS] for s in sents]
+        sentences = _Sentences.from_doc(doc)
 
         # --- sentimiento de cada frase, UNA sola vez y en batch ---
-        probas_by_index = self._sentiment_per_sentence(sent_texts)
-        start_to_index = {s.start_char: i for i, s in enumerate(sents)}
+        probas_by_index = self._sentiment_per_sentence(sentences.texts)
 
         # --- sentimiento global ---
         overall_label, overall_score = _aggregate(probas_by_index)
@@ -296,7 +350,7 @@ class LocalAnalyzer:
         main_topic = self._main_topic(doc, keywords)
 
         # --- entidades + opinión hacia cada una ---
-        entities = self._entities(doc, probas_by_index, start_to_index)
+        entities = self._entities(doc, probas_by_index, sentences)
 
         return AnalysisResult(
             main_topic=main_topic,
@@ -386,9 +440,7 @@ class LocalAnalyzer:
             return chunk_counts.most_common(1)[0][0]
         return top
 
-    def _entities(self, doc, probas_by_index, start_to_index) -> list[EntityResult]:
-        sents = list(doc.sents)
-
+    def _entities(self, doc, probas_by_index, sentences: _Sentences) -> list[EntityResult]:
         # 1) recolectar menciones agrupadas por (clave normalizada, tipo)
         groups: dict[tuple[str, str], dict] = {}
         for ent in doc.ents:
@@ -432,40 +484,41 @@ class LocalAnalyzer:
                 continue
             key = (nkey, etype)
             g = groups.setdefault(
-                key, {"display": Counter(), "count": 0, "sent_idx": set()}
+                key,
+                {"display": Counter(), "count": 0, "mentions": defaultdict(list)},
             )
             g["display"][name] += 1
             g["count"] += 1
             if ent.sent is not None:
-                idx = start_to_index.get(ent.sent.start_char)
+                idx = sentences.index_of(ent.sent)
                 if idx is not None:
-                    g["sent_idx"].add(idx)
+                    # La posición, no solo el índice de la frase: es lo que
+                    # permite saber si esta mención va antes o después de un
+                    # patrón relacional (ver _relational_boosts).
+                    g["mentions"][idx].append(sentences.offset_of(idx, ent))
 
         # 2) fusionar alias: nombre corto contenido en uno más largo (mismo tipo)
         groups = self._merge_aliases(groups)
 
-        # 3) construir resultados agregando el sentimiento ya calculado
+        # 3) repartir el léxico relacional entre las entidades de cada frase
+        boosts = self._relational_boosts(sentences, groups)
+
+        # 4) construir resultados agregando el sentimiento ya calculado
         results: list[EntityResult] = []
-        for (_nkey, etype), g in groups.items():
+        for key, g in groups.items():
+            _nkey, etype = key
             display = g["display"].most_common(1)[0][0]  # variante más usada
-            sent_indices = sorted(g["sent_idx"])
-            # Léxico relacional ("acusado de", "reconocido por"): solo tiene
-            # sentido aquí, sobre las frases YA asociadas a esta entidad
-            # puntual — a diferencia del léxico general (aplicado en
-            # _predict_batch a TODA frase), la dirección de estas frases
-            # depende de a quién mencionan, así que no puede aplicarse al
-            # documento completo.
+            sent_indices = sorted(g["mentions"])
             probas = [
-                _apply_entity_relation_boost(sents[i].text, probas_by_index[i])
-                if probas_by_index[i] is not None
-                else None
+                _apply_label_boost(probas_by_index[i], boosts.get((key, i)))
                 for i in sent_indices
+                if probas_by_index[i] is not None
             ]
-            label, score = _aggregate(probas)
-            context = None
-            if sent_indices:
-                first = sent_indices[0]
-                context = sents[first].text.strip()[:_MAX_SENT_CHARS]
+            # Sin ninguna frase puntuada (p.ej. la entidad solo aparece más
+            # allá de _MAX_SENTENCES) no hay opinión que reportar: None, no
+            # un "NEU 0.0" indistinguible de un neutro de verdad.
+            label, score = _aggregate(probas) if probas else (None, None)
+            context = sentences.texts[sent_indices[0]] if sent_indices else None
             results.append(
                 EntityResult(
                     name=display,
@@ -479,6 +532,45 @@ class LocalAnalyzer:
             )
         results.sort(key=lambda e: e.mentions_count, reverse=True)
         return results
+
+    @staticmethod
+    def _relational_boosts(
+        sentences: _Sentences, groups: dict[tuple[str, str], dict]
+    ) -> dict[tuple[tuple[str, str], int], str | None]:
+        """Decide, frase por frase, QUÉ entidad recibe cada patrón del léxico
+        relacional. Devuelve `(clave de entidad, índice de frase) -> etiqueta`.
+
+        Antes el ajuste se aplicaba a la frase entera, así que en "Ramón Pérez
+        fue acusado de corrupción por la Procuraduría" tanto el acusado como
+        quien acusa se iban a NEG — justo la confusión que el léxico relacional
+        existe para evitar.
+
+        Regla: cada patrón se lo lleva la mención más cercana que lo PRECEDE.
+        Todos los patrones del léxico son participios con preposición ("acusado
+        de", "señalado por", "reconocido por"), donde el que recibe la acción va
+        antes y el agente —si aparece— va después. Una entidad sin ninguna
+        mención delante del patrón no recibe nada, y si dos patrones opuestos
+        apuntan a la misma entidad en la misma frase se anulan (mismo criterio
+        que `lexicon_label` ante señales contradictorias: no forzar nada).
+        """
+        mentions_by_sentence: dict[int, list[tuple[int, tuple[str, str]]]] = defaultdict(list)
+        for key, g in groups.items():
+            for idx, offsets in g["mentions"].items():
+                mentions_by_sentence[idx].extend((offset, key) for offset in offsets)
+
+        boosts: dict[tuple[tuple[str, str], int], str | None] = {}
+        for idx, mentions in mentions_by_sentence.items():
+            hits = _entity_relation_hits(sentences.texts[idx])
+            if not hits:
+                continue
+            mentions.sort()
+            for position, label in hits:
+                preceding = [key for offset, key in mentions if offset < position]
+                if not preceding:
+                    continue
+                target = (preceding[-1], idx)
+                boosts[target] = label if boosts.get(target, label) == label else None
+        return boosts
 
     @staticmethod
     def _initials(nkey: str) -> str:
@@ -516,5 +608,6 @@ class LocalAnalyzer:
                 src = groups[key]
                 dst["display"].update(src["display"])
                 dst["count"] += src["count"]
-                dst["sent_idx"] |= src["sent_idx"]
+                for idx, offsets in src["mentions"].items():
+                    dst["mentions"][idx].extend(offsets)
         return merged

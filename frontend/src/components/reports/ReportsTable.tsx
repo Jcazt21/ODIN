@@ -19,8 +19,7 @@ export function ReportsTable({
 }) {
   return (
     <div
-      className="overflow-hidden rounded-xl border"
-      style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+      className="odin-glass overflow-hidden rounded-xl border"
     >
       <table className="w-full border-collapse text-[13px]">
         <thead>

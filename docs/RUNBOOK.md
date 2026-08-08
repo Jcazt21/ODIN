@@ -39,7 +39,10 @@ Definidas en [`config.py`](../config.py). Las que más importan en operación:
 |---|---|---|
 | `DATABASE_URL` | sqlite local / postgres en compose | conexión a la BD |
 | `ODIN_ANALYZER` | `local` | motor activo (`local`\|`gemini`\|`groq`\|`hybrid`\|`groq+gemini`); inválido = falla el arranque. `gemini` y `groq+gemini` pueden facturar — ver [ARQUITECTURA.md §4](ARQUITECTURA.md#4-selección-del-analizador) |
-| `ODIN_GEMINI_ARBITER` | `false` | arbitraje extra de personas ambiguas — **facturable**, opt-in aparte |
+| `ODIN_GEMINI_ARBITER` | `false` | arbitraje extra de personas ambiguas — **facturable**, opt-in aparte. Solo aplica con `ODIN_ANALYZER=local`: los motores LLM ya lo resuelven por prompt y se ignora (queda avisado en el log al arrancar) |
+| `ODIN_ANALYZE_REUSE_MINUTES` | `60` | ventana para reusar el análisis de una URL ya analizada y no guardada, en vez de volver a llamar al LLM. `0` lo desactiva |
+| `ODIN_ANALYZE_JOB_STALE_MINUTES` | `15` | a partir de aquí un job `running` se considera colgado: el barrido de arranque lo marca `failed` y un cliente nuevo no se engancha a él |
+| `ODIN_ANALYZE_JOB_TTL_HOURS` | `48` | antigüedad a la que se borran los jobs terminados (guardan el cuerpo completo del artículo). `0` desactiva el borrado |
 | `ODIN_ALLOWED_DOMAINS` | 9 dominios (uno por medio) | allowlist anti-SSRF de `POST /api/analyze` |
 | `ODIN_MAX_DOWNLOAD_BYTES` | 5 MB | corta la descarga de artículos por tamaño |
 | `ODIN_CORS_ORIGINS` | — | orígenes permitidos del frontend |
@@ -80,7 +83,11 @@ forma de reintentar es crear un job nuevo:
 
 - Análisis puntual (`analyze_jobs`): volver a `POST /api/analyze` con la
   misma URL. Si el artículo ya se guardó, el endpoint responde `200` directo
-  sin re-analizar (no reprocesa artículos ya persistidos).
+  sin re-analizar (no reprocesa artículos ya persistidos). Ojo: si el job
+  anterior terminó BIEN y no se guardó, dentro de la ventana de
+  `ODIN_ANALYZE_REUSE_MINUTES` se devuelve ese mismo resultado en vez de
+  analizar de nuevo — para forzar un análisis fresco antes de que venza, poner
+  la variable en `0` o esperar la ventana.
 - Corrida masiva (`scrape_jobs`): `POST /api/scrape-jobs` de nuevo. Bloqueado
   con `409` mientras haya un job `pending`/`running` — confirma primero que
   el anterior terminó (`GET /api/scrape-jobs/{id}`) o cancélalo (siguiente

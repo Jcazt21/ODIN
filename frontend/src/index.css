@@ -72,8 +72,16 @@
     --surface: #ffffff;
     --surface-2: oklch(0.965 0.005 262);
     --surface-3: oklch(0.945 0.007 262);
-    --panel: oklch(1 0 0 / 0.8);
-    --panel-strong: oklch(1 0 0 / 0.9);
+    /* Superficies "glass": esmeriladas sobre la aurora del fondo. El alpha va
+       alto a propósito (el vidrio difumina, no transparenta) y el desenfoque
+       se aplica con la utilidad .odin-glass más abajo. */
+    /* Alpha bastante más bajo que en oscuro: sobre un fondo claro el texto
+       mantiene contraste igual, y con blanco al 76% la aurora no se veía. */
+    --panel: oklch(1 0 0 / 0.55);
+    --panel-strong: oklch(1 0 0 / 0.72);
+    /* Borde de las superficies glass: hairline que recoge la luz del fondo.
+       Distinto de --border, que sigue siendo el separador interno opaco. */
+    --panel-border: oklch(0.86 0.008 262 / 0.7);
     --border-strong: oklch(0.84 0.01 262);
     --text: oklch(0.24 0.016 265);
     --faint: oklch(0.65 0.012 265);
@@ -92,8 +100,10 @@
     --warn: oklch(0.52 0.12 75);
     --warn-soft: oklch(0.96 0.05 85);
 
-    --shadow: 0 1px 2px oklch(0.24 0.02 265 / 0.06), 0 8px 24px -12px oklch(0.24 0.02 265 / 0.14);
-    --shadow-sm: 0 1px 2px oklch(0.24 0.02 265 / 0.07);
+    /* El `inset` es el brillo superior del glass (el filo iluminado de la
+       tarjeta). Va en la sombra para que todas las superficies lo hereden. */
+    --shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), 0 1px 2px oklch(0.24 0.02 265 / 0.06), 0 8px 24px -12px oklch(0.24 0.02 265 / 0.14);
+    --shadow-sm: inset 0 1px 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0.24 0.02 265 / 0.07);
 
     /* alias semánticos de shadcn -> primitivos, para no reescribir button/badge/card/alert/input/separator/skeleton */
     --background: var(--bg);
@@ -137,8 +147,9 @@
     --surface: oklch(0.225 0.013 265);
     --surface-2: oklch(0.255 0.014 265);
     --surface-3: oklch(0.285 0.015 265);
-    --panel: oklch(0.225 0.013 265 / 0.78);
-    --panel-strong: oklch(0.225 0.013 265 / 0.9);
+    --panel: oklch(0.225 0.013 265 / 0.66);
+    --panel-strong: oklch(0.225 0.013 265 / 0.82);
+    --panel-border: oklch(1 0 0 / 0.14);
     --border: oklch(0.315 0.014 265);
     --border-strong: oklch(0.4 0.016 265);
     --text: oklch(0.955 0.004 265);
@@ -160,8 +171,8 @@
     --warn: oklch(0.82 0.12 80);
     --warn-soft: oklch(0.33 0.05 80);
 
-    --shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -14px oklch(0 0 0 / 0.6);
-    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.35);
+    --shadow: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -14px oklch(0 0 0 / 0.6);
+    --shadow-sm: inset 0 1px 0 oklch(1 0 0 / 0.08), 0 1px 2px oklch(0 0 0 / 0.35);
 
     --primary-foreground: var(--accent-fg);
     --muted: var(--surface-2);
@@ -202,6 +213,53 @@
 [data-theme="dark"][data-accent="teal"] {
     --primary: #03DAC6;
     --accent-fg: #000000;
+}
+
+/* ── Superficies glass ──────────────────────────────────────────────────────
+   Un solo lugar donde vive la receta del vidrio esmerilado: fondo translúcido
+   + hairline + desenfoque del fondo. Los dos knobs son --glass-blur y
+   --glass-saturate; el alpha se ajusta en --panel / --panel-strong.
+
+   Sobre el costo: backdrop-filter recalcula el desenfoque cada vez que cambia
+   lo que hay detrás, y detrás hay una aurora animada. Por eso el fondo corre a
+   fps y resolución reducidos (ver SOFT_AURORA_QUALITY en lib/aurora-config.ts)
+   y ningún overlay a pantalla completa lleva blur — el gasto queda acotado al
+   área real de las tarjetas. */
+:root {
+  --glass-blur: 16px;
+  /* En claro el vidrio lava el color del fondo, así que satura más para que
+     el tinte de la aurora se siga leyendo a través de la tarjeta. */
+  --glass-saturate: 1.8;
+}
+
+[data-theme="dark"] {
+  --glass-saturate: 1.35;
+}
+
+@layer components {
+  .odin-glass,
+  .odin-glass-strong {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-color: var(--panel-border);
+  }
+  .odin-glass {
+    background: var(--panel);
+  }
+  .odin-glass-strong {
+    background: var(--panel-strong);
+  }
+
+  /* Sin soporte de backdrop-filter no hay difuminado que compense la
+     transparencia, así que las superficies se vuelven casi opacas. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .odin-glass {
+      background: color-mix(in oklab, var(--surface) 92%, transparent);
+    }
+    .odin-glass-strong {
+      background: color-mix(in oklab, var(--surface) 96%, transparent);
+    }
+  }
 }
 
 @layer base {

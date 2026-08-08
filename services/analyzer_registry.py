@@ -18,6 +18,15 @@ log = get_logger("odin.api")
 
 IS_GEMINI_ANALYZER = settings.analyzer == "gemini"
 
+# ¿El motor activo LEE el artículo completo con un LLM? Todos menos "local":
+# `LocalAnalyzer` extrae entidades con spaCy (patrones de mayúsculas, POS y
+# dependencias), sin entender el texto. La distinción decide si vale la pena
+# el árbitro pagado de entidades ambiguas: el prompt de los motores LLM ya
+# excluye los nombres que solo bautizan un lugar o reciben un homenaje (ver
+# `_SYSTEM` en analysis/gemini_analyzer.py), así que preguntárselo otra vez a
+# Gemini es pagar dos veces por la misma decisión.
+ANALYZER_READS_WHOLE_ARTICLE = settings.analyzer != "local"
+
 # Carga perezosa: los modelos se inicializan aquí. El tipo declarado es el
 # puerto (`Analyzer`), no la implementación: es lo que permite intercambiarlas.
 analyzer: Analyzer
@@ -57,8 +66,16 @@ else:
     log.info("ODIN_ANALYZER=local — LocalAnalyzer (spaCy + pysentimiento), sin costo")
     analyzer = LocalAnalyzer()
 
-if settings.gemini_arbiter and not IS_GEMINI_ANALYZER:
-    log.warning(
-        "ODIN_GEMINI_ARBITER activo — se hará una llamada FACTURADA extra a "
-        "Gemini en los análisis con personas ambiguas."
-    )
+if settings.gemini_arbiter:
+    if ANALYZER_READS_WHOLE_ARTICLE:
+        log.warning(
+            "ODIN_GEMINI_ARBITER está activo pero se IGNORA con "
+            "ODIN_ANALYZER=%s: ese motor ya descarta por prompt los nombres "
+            "que solo bautizan un lugar. Solo aplica con ODIN_ANALYZER=local.",
+            settings.analyzer,
+        )
+    else:
+        log.warning(
+            "ODIN_GEMINI_ARBITER activo — se hará una llamada FACTURADA extra a "
+            "Gemini en los análisis con personas ambiguas."
+        )

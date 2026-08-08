@@ -80,6 +80,12 @@ def invalidate_cache() -> None:
     global _cache
     with _lock:
         _cache = None
+    # El mapa de apellidos también se arma con los canónicos de este catálogo
+    # (`all_canonicals`), así que un alias nuevo lo deja desactualizado. Import
+    # local: `analysis.canonicalize` importa este módulo, y al revés sería un ciclo.
+    from analysis.canonicalize import invalidate_person_map
+
+    invalidate_person_map()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

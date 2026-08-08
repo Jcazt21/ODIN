@@ -32,6 +32,24 @@ from analysis.base import AnalysisResult
 log = logging.getLogger("odin.fallback_analyzer")
 
 
+def _fallback_reason(exc: Exception) -> str:
+    """Clasifica por qué se recurrió al motor de pago, para la métrica
+    `odin_analyzer_fallback_total`. Cada causa tiene un arreglo distinto: un
+    `rate_limit` recurrente pide revisar el reparto del TPM en
+    `analysis/groq_analyzer.py`; un `truncated` que sobrevive al reintento
+    pide más cupo de salida; un `timeout` no se arregla con tokens."""
+    from analysis.groq_analyzer import _TruncatedOutput
+
+    if isinstance(exc, _TruncatedOutput):
+        return "truncated"
+    message = str(exc).lower()
+    if "saturado" in message or "límite diario" in message or "rate" in message:
+        return "rate_limit"
+    if "timeout" in message or "timed out" in message:
+        return "timeout"
+    return "other"
+
+
 class GroqWithGeminiFallback:
     # `name`/`version`/`model` son propiedades, no atributos de clase como en
     # los otros analizadores: aquí no se sabe el valor hasta que se corre, y
@@ -68,6 +86,8 @@ class GroqWithGeminiFallback:
 
     # ---- API pública ----------------------------------------------------------
     def analyze(self, title: str, body: str) -> AnalysisResult:
+        from observability import ANALYZER_FALLBACK_TOTAL
+
         try:
             result = self._groq.analyze(title, body)
         except Exception as exc:
@@ -76,9 +96,14 @@ class GroqWithGeminiFallback:
             # igual que un 413, y ya tenemos un motor capaz de responder. El
             # coste de equivocarse hacia el fallback es una llamada facturada;
             # el de no hacerlo es un análisis perdido.
+            reason = _fallback_reason(exc)
             log.warning(
-                "groq_fallo_usando_gemini error=%s: %s", type(exc).__name__, exc
+                "groq_fallo_usando_gemini reason=%s error=%s: %s",
+                reason,
+                type(exc).__name__,
+                exc,
             )
+            ANALYZER_FALLBACK_TOTAL.labels(reason=reason).inc()
             engine = self._gemini_analyzer()
             result = engine.analyze(title, body)  # si Gemini también falla, propaga
         else:

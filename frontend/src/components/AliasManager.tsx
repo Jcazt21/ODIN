@@ -334,8 +334,7 @@ export function AliasManager() {
 
   return (
     <div
-      className="w-full overflow-hidden rounded-xl border"
-      style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+      className="odin-glass w-full overflow-hidden rounded-xl border"
     >
       <div className="border-b px-5 py-[18px]" style={{ borderColor: "var(--border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">

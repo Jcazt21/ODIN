@@ -20,6 +20,31 @@ def strip_accents(text: str) -> str:
     )
 
 
+def fold_preserving_offsets(text: str) -> str:
+    """Como `strip_accents(text).lower()`, pero garantizando que el resultado
+    tiene EXACTAMENTE la misma longitud que la entrada, carácter por carácter.
+
+    Necesario cuando lo que se busca en el texto normalizado no es solo si hay
+    match, sino DÓNDE: `analysis/sentiment_lexicon.entity_relation_hits` usa la
+    posición del patrón para decidir a qué entidad se le aplica el ajuste, y un
+    índice corrido le asignaría el sentimiento a la mención equivocada.
+
+    `strip_accents` sola no lo garantiza: sobre un texto que ya venga en forma
+    NFD ("a" + tilde combinante) descarta la marca y acorta la cadena; `.lower()`
+    tampoco, porque algunos caracteres (p.ej. "İ") crecen al pasar a minúscula.
+    Aquí cada carácter se pliega por separado y se conserva solo su primer
+    carácter base — o el original, si al plegarlo no queda nada.
+    """
+    folded = []
+    for ch in text:
+        base = "".join(
+            c for c in unicodedata.normalize("NFD", ch) if unicodedata.category(c) != "Mn"
+        )
+        lowered = (base[:1] or ch).lower()
+        folded.append(lowered[:1] or ch)
+    return "".join(folded)
+
+
 # Cada vocal (con o sin tilde/diéresis, en ambos casos) mapea a la misma clase
 # de caracteres: así el patrón generado encuentra la mención sin importar con
 # qué variante fue escrita originalmente.

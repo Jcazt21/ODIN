@@ -77,8 +77,8 @@ export function AnalysisCard({
 
   return (
     <div
-      className="overflow-hidden rounded-xl border"
-      style={{ background: "var(--panel)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}
+      className="odin-glass overflow-hidden rounded-xl border"
+      style={{ boxShadow: "var(--shadow-sm)" }}
     >
       {/* 1. Cabecera */}
       <div className="space-y-3 px-6 py-[22px]">

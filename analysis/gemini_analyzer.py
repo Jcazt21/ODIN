@@ -24,10 +24,12 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from analysis.base import AnalysisResult, EntityResult
+from analysis.entity_verify import recount_mentions, verify_entities
 from analysis.sentiment_lexicon import PROMPT_GLOSSARY
 
 _SENTIMENTS = ("POS", "NEG", "NEU")
 _MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo
+_REQUEST_TIMEOUT_MS = 45_000  # ver el comentario en `GeminiAnalyzer.client`
 
 Sentiment = Literal["POS", "NEG", "NEU"]
 
@@ -41,26 +43,29 @@ class _Entity(BaseModel):
     # el modelo escriba la cita/razón primero y la clasificación se apoye en
     # ella — al revés (como estaba antes) el modelo se compromete con la
     # etiqueta antes de haber "mirado" la evidencia que se supone la justifica.
-    name: str = Field(description="Nombre de la figura pública o empresa mencionada")
-    type: Literal["PERSON", "ORG"] = Field(
-        description="PERSON para personas, ORG para empresas/organizaciones"
-    )
-    mentions_count: int = Field(description="Número aproximado de menciones en el artículo")
-    context: str = Field(
-        description="Cita textual breve (máx. 12 palabras) que justifica el sentimiento"
-    )
+    name: str = Field(description="Nombre de la figura pública o empresa")
+    type: Literal["PERSON", "ORG"] = Field(description="PERSON o ORG (empresa/organización)")
+    mentions_count: int = Field(description="Menciones aproximadas en el artículo")
+    context: str = Field(description="Cita textual (máx. 12 palabras) que justifica el sentimiento")
     sentiment_toward: Sentiment = Field(
-        description="Opinión del artículo hacia esta entidad, basada en la cita de 'context'"
+        description="Opinión del artículo hacia esta entidad, según la cita de 'context'"
+    )
+    sentiment_confidence: float = Field(
+        description=(
+            "0..1: qué tan marcada e inequívoca es esa opinión en el texto. "
+            "1.0 = valoración explícita y rotunda; 0.5 = leve o indirecta; "
+            "<0.4 = casi neutra, la etiqueta es dudosa"
+        )
     )
     confidence_reason: str = Field(
-        description="Frase breve con el motivo de la confianza que darás en 'confidence', sobre todo si es baja (p.ej. 'apellido único, sin ambigüedad')"
+        description="Motivo breve de 'confidence' (p.ej. 'apellido único, sin ambigüedad')"
     )
     confidence: float = Field(
         description=(
-            "Certeza de que 'name' es el nombre canónico y de que las variantes "
-            "fusionadas (apellido, apodo, cargo) son la MISMA entidad, según "
-            "SOLO este artículo. 1.0 = nombre completo inequívoco; <0.7 si "
-            "tuviste que asumir a quién se refería una mención parcial"
+            "0..1: certeza de que 'name' es el nombre canónico y de que las "
+            "variantes fusionadas (apellido, apodo, cargo) son la MISMA entidad, "
+            "según SOLO este artículo. <0.7 si asumiste a quién se refería una "
+            "mención parcial"
         )
     )
 
@@ -88,83 +93,84 @@ class _Analysis(BaseModel):
         "citas_directas", "testimonios_anonimos", "datos_duros", "mixtas", "sin_fuentes"
     ] = Field(
         description=(
-            "Tipo de fuente predominante: citas_directas (declaraciones "
-            "atribuidas con nombre), testimonios_anonimos ('usuarios aseguran'), "
-            "datos_duros (cifras oficiales/estadísticas), mixtas, sin_fuentes"
+            "Fuente predominante. citas_directas=atribuidas con nombre; "
+            "testimonios_anonimos='usuarios aseguran'; datos_duros=cifras oficiales"
         )
     )
     has_hard_data: bool = Field(
-        description="true si la nota incluye cifras verificables (montos, porcentajes, MW, tarifas)"
+        description="true si hay cifras verificables (montos, porcentajes, MW, tarifas)"
     )
     lead_orientation: Literal["social", "oficialista", "tecnico"] = Field(
         description=(
-            "Con qué abre el primer párrafo: social (queja/vivencia ciudadana), "
-            "oficialista (declaración de autoridad/institución), tecnico (dato o cifra)"
+            "Con qué abre el primer párrafo. social=queja/vivencia ciudadana; "
+            "oficialista=declaración de autoridad; tecnico=dato o cifra"
         )
     )
     content_flags: list[
         Literal["alarmismo", "sensacionalismo", "dato_no_verificable", "posible_ironia"]
     ] = Field(
         description=(
-            "Señales presentes, 0 o varias ([] si ninguna). alarmismo: exagera "
-            "amenaza sin sustento. sensacionalismo: busca reacción emocional "
-            "sobre información. dato_no_verificable: cifras sin fuente. "
-            "posible_ironia: el sentido literal no es el pretendido."
+            "0 o varias ([] si ninguna). alarmismo=exagera amenaza sin sustento; "
+            "sensacionalismo=busca reacción emocional sobre información; "
+            "dato_no_verificable=cifras sin fuente; posible_ironia=el sentido "
+            "literal no es el pretendido"
         )
     )
 
     # --- 2. Entidades (cada una: cita -> etiqueta, ver `_Entity`) -----------
     entities: list[_Entity] = Field(
-        description="Figuras públicas y empresas mencionadas, con la opinión hacia cada una"
+        description=(
+            "Figuras públicas y empresas mencionadas, con la opinión hacia cada "
+            "una. Máximo 15, las de más peso en la nota"
+        )
     )
 
     # --- 3. Atribución: ¿de quién es la polaridad? --------------------------
     sentiment_basis: Literal["hechos_reportados", "discurso_citado", "mixto"] = Field(
         description=(
-            "Dónde reside la carga: hechos_reportados (hechos buenos/malos por "
-            "sí mismos), discurso_citado (está en lo que dicen las fuentes, no "
-            "en hechos verificados), mixto (ambas pesan igual)"
+            "Dónde reside la carga. hechos_reportados=buenos/malos por sí mismos; "
+            "discurso_citado=está en lo que dicen las fuentes; mixto=ambas pesan igual"
         )
     )
     facts_sentiment: Sentiment = Field(
         description=(
-            "Polaridad de los HECHOS reportados como ocurridos, al margen de "
-            "quién opine. NEU si la nota solo recoge declaraciones"
+            "Polaridad de los HECHOS reportados como ocurridos, al margen de quién "
+            "opine. NEU si la nota solo recoge declaraciones"
         )
     )
     quoted_sentiment: Sentiment = Field(
         description=(
-            "Polaridad del DISCURSO CITADO por las fuentes. NEU si no hay citas "
-            "o no tienen carga. Puede diferir de facts_sentiment"
+            "Polaridad del DISCURSO CITADO. NEU si no hay citas o no tienen carga. "
+            "Puede diferir de facts_sentiment"
         )
     )
     media_stance_evidence: str = Field(
         description=(
-            "Señal textual breve que justifica la postura del medio: verbo de "
-            "reporte ('denunció' vs 'informó'), si todo va atribuido, si hay "
-            "réplica, si el medio adjetiva por cuenta propia"
+            "Señal textual breve que justifica media_stance: verbo de reporte "
+            "('denunció' vs 'informó'), si todo va atribuido, si hay réplica, si "
+            "el medio adjetiva por cuenta propia"
         )
     )
     media_stance: Literal[
         "neutra_transmisiva", "critica", "favorable", "editorializante"
     ] = Field(
         description=(
-            "Postura de la VOZ DEL MEDIO, no de las fuentes que cita: "
-            "neutra_transmisiva (atribuye sin adjetivar), critica/favorable (el "
-            "medio cuestiona/respalda por cuenta propia), editorializante. "
-            "Recoger una denuncia feroz NO hace crítico al medio"
+            "Postura de la VOZ DEL MEDIO, no de las fuentes que cita. "
+            "neutra_transmisiva=atribuye sin adjetivar; critica/favorable=el medio "
+            "cuestiona/respalda por cuenta propia. Recoger una denuncia feroz NO "
+            "hace crítico al medio"
         )
     )
 
     # --- 4. Actores del encuadre (requieren `entities` ya escrito) ----------
     dominant_actor: str = Field(
-        description="Nombre de la entidad listada con más peso en la nota (quien abre o tiene la última palabra); '' si ninguna"
+        description="Entidad ya listada con más peso en la nota; '' si ninguna"
     )
     blamed_actor: str = Field(
-        description="Entidad señalada como causante del problema; '' si la nota no culpa a nadie"
+        description="Entidad señalada como causante del problema; '' si no hay"
     )
     credited_actor: str = Field(
-        description="Entidad presentada como quien resuelve o mejora la situación; '' si no hay"
+        description="Entidad presentada como quien resuelve o mejora; '' si no hay"
     )
 
     # --- 5. Clasificación global (última: justificación -> etiqueta) --------
@@ -177,21 +183,20 @@ class _Analysis(BaseModel):
         "neutro_informativo",
     ] = Field(
         description=(
-            "Encuadre principal de la nota: crisis_conflicto (falla del servicio, "
-            "sufrimiento ciudadano, disputa entre actores), logro_institucional "
-            "(métricas de eficiencia, obra entregada, récord), negligencia (se "
-            "culpa a la inacción de una autoridad), crecimiento (el problema es "
-            "efecto del crecimiento económico), denuncia (reclamo/acusación de "
-            "un sector), neutro_informativo (sin ángulo marcado)"
+            "Encuadre de la nota. crisis_conflicto=falla del servicio, sufrimiento "
+            "ciudadano o disputa; logro_institucional=obra entregada, récord, "
+            "eficiencia; negligencia=se culpa la inacción de una autoridad; "
+            "crecimiento=el problema es efecto del auge económico; denuncia=reclamo "
+            "de un sector; neutro_informativo=sin ángulo marcado"
         )
     )
     headline_intent: Literal["informativo", "alarmista", "sensacionalista"] = Field(
-        description="Intención del TITULAR: informar objetivamente, apelar a la alarma, o exagerar para atraer clics"
+        description="Intención del TITULAR: informar, alarmar, o exagerar para atraer clics"
     )
     overall_sentiment_reason: str = Field(
         description=(
-            "Una o dos oraciones que justifican la etiqueta global, apoyadas en "
-            "lo ya analizado (hechos vs discurso, postura del medio, entidades)"
+            "Una o dos oraciones que justifican la etiqueta global, apoyadas en lo "
+            "ya analizado (hechos vs discurso, postura del medio, entidades)"
         )
     )
     overall_sentiment: Sentiment = Field(
@@ -199,10 +204,31 @@ class _Analysis(BaseModel):
     )
 
 
+def _strip_titles(node):
+    """Quita recursivamente las claves `title` que Pydantic agrega al JSON
+    schema ("Main Topic", "Topic Keywords"...).
+
+    No aportan nada al modelo —el nombre del campo ya está ahí, y la
+    instrucción real vive en `description`— pero el schema viaja completo en
+    CADA request. Con el TPM de 8.000 del free tier de Groq son ~120 tokens
+    fijos por llamada que salen del presupuesto del artículo.
+    """
+    if isinstance(node, dict):
+        return {k: _strip_titles(v) for k, v in node.items() if k != "title"}
+    if isinstance(node, list):
+        return [_strip_titles(v) for v in node]
+    return node
+
+
+# Se calcula UNA vez al importar, no en cada llamada: es el mismo schema
+# siempre y `model_json_schema()` no es gratis.
+ANALYSIS_JSON_SCHEMA = _strip_titles(_Analysis.model_json_schema())
+
+
 # Versión del prompt/esquema de salida (§2.1 de task.md): subirla cuando
 # cambie _SYSTEM o los campos/descripciones de _Analysis/_Entity, para poder
 # distinguir en la BD qué filas se generaron con qué versión del prompt.
-_PROMPT_VERSION = "6"
+_PROMPT_VERSION = "7"
 
 _SYSTEM = (
     "Eres un analista senior de prensa dominicana, especializado en evaluación "
@@ -281,6 +307,10 @@ def _norm_sentiment(value: str) -> str:
     return v if v in _SENTIMENTS else "NEU"
 
 
+def _clamp01(value: float) -> float:
+    return round(min(max(value, 0.0), 1.0), 2)
+
+
 def _entity_from_llm(e: _Entity) -> EntityResult:
     """Mapea la entidad devuelta por el LLM (Gemini o Groq, mismo schema
     `_Entity`) a `EntityResult`. `confidence`/`confidence_reason` van al
@@ -288,7 +318,17 @@ def _entity_from_llm(e: _Entity) -> EntityResult:
     el badge "revisar" (`extraction_confidence < 0.9`, ver
     frontend/src/lib/format.ts) — no hace falta un campo nuevo en el schema
     de BD, el LLM solo empieza a llenar uno que antes quedaba en el default
-    1.0 (certeza asumida) para cualquier Analyzer que no lo calculara."""
+    1.0 (certeza asumida) para cualquier Analyzer que no lo calculara.
+
+    Lo mismo con `sentiment_confidence` -> `sentiment_score`: la columna
+    existía y con los analizadores LLM quedaba SIEMPRE en NULL, así que la
+    opinión hacia una entidad era un POS/NEG/NEU plano, sin forma de ordenar
+    por intensidad ni de distinguir un "NEG rotundo" de un "NEG apenas
+    insinuado". No es la misma magnitud que la de `LocalAnalyzer` (allí es la
+    probabilidad agregada de pysentimiento; aquí, cuán marcada ve el modelo la
+    valoración), pero sí responde a la misma pregunta y el linaje guardado
+    (`analyzer_name`) dice cuál de las dos es.
+    """
     reason = (e.confidence_reason or "").strip()
     context = (e.context or "").strip()
     combined_context = f"{context} [{reason}]" if reason else context or None
@@ -297,21 +337,31 @@ def _entity_from_llm(e: _Entity) -> EntityResult:
         type="ORG" if e.type == "ORG" else "PERSON",
         mentions_count=max(1, e.mentions_count),
         sentiment_toward=_norm_sentiment(e.sentiment_toward),
-        sentiment_score=None,  # el LLM no devuelve una probabilidad calibrada
+        sentiment_score=_clamp01(e.sentiment_confidence),
         context=combined_context,
-        extraction_confidence=round(min(max(e.confidence, 0.0), 1.0), 2),
+        extraction_confidence=_clamp01(e.confidence),
     )
 
 
-def _result_from_llm(data: _Analysis, entities: list[EntityResult]) -> AnalysisResult:
-    """Mapea la respuesta del LLM a `AnalysisResult`.
+def _result_from_llm(data: _Analysis, source_text: str) -> AnalysisResult:
+    """Mapea la respuesta del LLM a `AnalysisResult`, contrastando antes las
+    entidades con el texto del artículo.
 
     Compartido por `GeminiAnalyzer` y por Groq (`_analyze_full` en
     `analysis/groq_analyzer.py`): ambos usan el MISMO `_Analysis`, así que el
     mapeo vive en un solo sitio — cuando se agrega un campo al schema no puede
     quedarse a medias en un proveedor y no en el otro, que es exactamente cómo
-    se pierde un campo nuevo en silencio.
+    se pierde un campo nuevo en silencio. Por la misma razón la verificación
+    (`analysis/entity_verify.py`) se hace aquí dentro y no en cada analizador:
+    ningún proveedor puede saltársela por olvido.
+
+    `source_text` es el artículo COMPLETO, no el recorte que se le mandó al
+    modelo: sirve para contar menciones que quedaron fuera del tope.
     """
+    entities = [_entity_from_llm(e) for e in data.entities]
+    entities = verify_entities(entities, source_text)
+    recount_mentions(entities, source_text)
+    entities.sort(key=lambda e: e.mentions_count, reverse=True)
     return AnalysisResult(
         main_topic=data.main_topic.strip() or None,
         topic_keywords=[k.strip() for k in data.topic_keywords if k.strip()],
@@ -363,13 +413,21 @@ class GeminiAnalyzer:
             from google import genai  # import perezoso: solo si se usa este analizador
 
             # Toma la API key de GEMINI_API_KEY o GOOGLE_API_KEY del entorno.
-            self._client = genai.Client()
+            # El timeout (en MILISEGUNDOS, así lo define HttpOptions) es
+            # explícito porque este analizador suele ser el último eslabón:
+            # cuando entra como fallback de Groq, el tiempo que tarde se suma
+            # al que ya se gastó, y el frontend deja de esperar el job en algún
+            # momento (JOB_POLL_TIMEOUT_MS en frontend/src/lib/odin-api.ts).
+            # Sin tope, una llamada colgada convierte un análisis ya pagado en
+            # un resultado que nadie llega a ver.
+            self._client = genai.Client(http_options={"timeout": _REQUEST_TIMEOUT_MS})
         return self._client
 
     def analyze(self, title: str, body: str) -> AnalysisResult:
         from observability import GEMINI_REQUESTS_TOTAL, GEMINI_TOKENS_TOTAL
 
-        body = (body or "")[:_MAX_BODY_CHARS]
+        full_body = body or ""
+        body = full_body[:_MAX_BODY_CHARS]
         prompt = f"Analiza este artículo de periódico.\n\nTITULAR: {title}\n\nCUERPO:\n{body}"
 
         # Salida estructurada: Gemini valida la respuesta contra el esquema Pydantic.
@@ -423,6 +481,4 @@ class GeminiAnalyzer:
             )
         GEMINI_REQUESTS_TOTAL.labels(model=self.model, status="success").inc()
 
-        entities = [_entity_from_llm(e) for e in data.entities]
-
-        return _result_from_llm(data, entities)
+        return _result_from_llm(data, f"{title}\n{full_body}")

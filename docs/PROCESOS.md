@@ -81,20 +81,25 @@ sequenceDiagram
     participant DB as Base de datos
 
     U->>API: URL
-    API->>DB: ¿URL ya guardada?
+    API->>API: canonical_url() (sin utm_*, fragmento ni barra final)
+    API->>DB: ¿artículo guardado, análisis reciente o job en curso?
     alt ya existe
         API-->>U: 200 + artículo guardado
+    else analizada hace poco y sin guardar
+        API-->>U: 200 + resultado reusado (sin llamar al LLM)
+    else ya hay un job corriendo para esa URL
+        API-->>U: 202 + job_id del job existente
     else nueva
         API->>DB: crea AnalyzeJob(status=pending)
         API-->>U: 202 + job_id
-        API->>BG: encola run_analyze_job(job_id, url)
+        API->>BG: encola run_analyze_job(job_id)
         BG->>DB: status=running, stage=fetching
         BG->>G: validate_url() + fetch_html()
         G-->>BG: HTML (o 400 si falla el guard)
         BG->>BG: trafilatura.extract()
         BG->>DB: stage=analyzing
         BG->>AN: analyze(title, body)
-        AN-->>BG: AnalysisResult
+        AN-->>BG: AnalysisResult (con LLM: entidades ya contrastadas con el texto)
         BG->>DB: stage=canonicalizing
         BG->>BG: canonicalize_result()
         BG->>DB: AnalyzeJob.status=done, result_json (AnalyzeResult)

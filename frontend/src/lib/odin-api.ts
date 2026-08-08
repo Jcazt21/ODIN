@@ -211,7 +211,13 @@ export type JobStatus = components["schemas"]["JobResponse"]["status"]
 export type AnalyzeStage = NonNullable<components["schemas"]["JobResponse"]["stage"]>
 
 const JOB_POLL_INTERVAL_MS = 1500
-const JOB_POLL_TIMEOUT_MS = 120_000
+// 240s y no 120s: el backend acota cada llamada al motor de análisis (ver
+// _REQUEST_TIMEOUT_SECONDS en analysis/groq_analyzer.py y _REQUEST_TIMEOUT_MS en
+// analysis/gemini_analyzer.py), pero el peor caso encadena Groq + su reintento
+// + el fallback a Gemini y puede acercarse a los 150s. Rendirse antes no
+// cancela nada: el job sigue corriendo en el servidor y el resultado —que en
+// ese camino ya se pagó— quedaba guardado sin que nadie lo llegara a ver.
+const JOB_POLL_TIMEOUT_MS = 240_000
 
 // Con la pestaña oculta, los polls de jobs en curso (análisis, scraper) se
 // espacian para no gastar CPU/red/batería en segundo plano — el job del

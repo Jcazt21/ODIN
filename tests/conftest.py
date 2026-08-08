@@ -27,6 +27,26 @@ def _sqlite_regexp_ci(pattern: str, value: str | None) -> bool:
     return re.search(pattern, value, re.IGNORECASE) is not None
 
 
+@pytest.fixture(autouse=True)
+def _clear_process_caches():
+    """Vacía las cachés en memoria antes de cada test.
+
+    `db.aliases` y `analysis.canonicalize` guardan a nivel de módulo el
+    catálogo de siglas y el mapa apellido -> nombre completo. Son cachés del
+    PROCESO, así que sobreviven al `sqlite_sessionmaker` de cada test: sin
+    esto, un test que las llena decide lo que ve el siguiente y el resultado
+    depende del orden de ejecución.
+    """
+    import db.aliases as alias_store
+    from analysis.canonicalize import invalidate_person_map
+
+    alias_store.invalidate_cache()
+    invalidate_person_map()
+    yield
+    alias_store.invalidate_cache()
+    invalidate_person_map()
+
+
 @pytest.fixture
 def sqlite_sessionmaker():
     """Sessionmaker ligado a una BD SQLite en memoria fresca, con el esquema

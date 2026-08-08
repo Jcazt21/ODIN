@@ -35,12 +35,8 @@ export function Nav({ items, activeTab, onTabChange, username, onLogout, theme, 
 
   return (
     <nav
-      className="sticky top-4 z-40 mx-auto flex w-fit max-w-full items-center gap-3.5 rounded-full border py-[7px] pr-[7px] pl-[18px] backdrop-blur-[12px]"
-      style={{
-        background: "var(--panel-strong)",
-        borderColor: "var(--border)",
-        boxShadow: "var(--shadow)",
-      }}
+      className="odin-glass-strong sticky top-4 z-40 mx-auto flex w-fit max-w-full items-center gap-3.5 rounded-full border py-[7px] pr-[7px] pl-[18px]"
+      style={{ boxShadow: "var(--shadow)" }}
     >
       <span className="flex items-center gap-1.5 pr-1.5">
         <span className="text-[14px] font-semibold" style={{ letterSpacing: "0.16em" }}>

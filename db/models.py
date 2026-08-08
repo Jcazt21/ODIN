@@ -27,6 +27,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -210,6 +211,16 @@ class AnalyzeJob(Base):
     """
 
     __tablename__ = "analyze_jobs"
+    __table_args__ = (
+        # (url, created_at): sirve a las dos consultas que se hacen por URL —
+        # reusar el análisis reciente de una nota ya analizada y detectar que
+        # otro job para la misma URL ya está corriendo (ver
+        # `start_analyze_job`), las dos con un filtro por fecha encima.
+        Index("ix_analyze_jobs_url_created_at", "url", "created_at"),
+        # (status, created_at): para el barrido de arranque, que busca jobs
+        # colgados y jobs terminados que ya pasaron su TTL.
+        Index("ix_analyze_jobs_status_created_at", "status", "created_at"),
+    )
 
     # UUID como clave pública (no el id autoincremental): un job_id no debe
     # dejar adivinar cuántos análisis se han pedido en total.

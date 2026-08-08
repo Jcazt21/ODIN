@@ -13,7 +13,11 @@ from sqlalchemy.orm import selectinload
 
 import db.canonical_entities as canonical_entity_store
 from analysis.base import ANALYSIS_SCHEMA_VERSION
-from analysis.canonicalize import canonicalize_entities, match_actor_name
+from analysis.canonicalize import (
+    canonicalize_entities,
+    invalidate_person_map,
+    match_actor_name,
+)
 from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
 from analysis.text_norm import norm_key as _norm_key
 from api import deps
@@ -419,6 +423,9 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
         )
         session.add(article)
         session.commit()
+        # Los PERSON nuevos deben poder resolver un apellido suelto en el
+        # siguiente análisis (ver known_person_fullname_map).
+        invalidate_person_map()
         return serialize_article(article)
     except HTTPException:
         raise

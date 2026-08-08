@@ -1,17 +1,13 @@
 // Pantalla de acceso. Solo login, sin registro ni recuperación de clave — el
 // backend valida contra un usuario único definido en el entorno.
 import { useState, type FormEvent } from "react"
-import { Aurora } from "@/components/Aurora"
+import { SoftAurora } from "@/components/SoftAurora"
 import { login, OdinApiError } from "@/lib/odin-api"
+import { softAuroraFor, SOFT_AURORA_OPACITY, type Theme } from "@/lib/aurora-config"
 
 interface LoginScreenProps {
   onSuccess: (username: string) => void
-  theme: "light" | "dark"
-}
-
-const AURORA_STOPS: Record<"light" | "dark", [string, string, string]> = {
-  light: ["#B497CF", "#6200EE", "#B497CF"],
-  dark: ["#03DAC6", "#5227FF", "#03DAC6"],
+  theme: Theme
 }
 
 export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
@@ -43,14 +39,14 @@ export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
   return (
     <div className="relative grid min-h-screen place-items-center" style={{ background: "var(--bg)" }}>
       <div className="pointer-events-none absolute inset-0">
-        <div style={{ opacity: theme === "dark" ? 0.6 : 0.45, width: "100%", height: "100%" }}>
-          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.3} blend={0.6} amplitude={1.0} />
+        <div style={{ opacity: SOFT_AURORA_OPACITY.login[theme], width: "100%", height: "100%" }}>
+          <SoftAurora {...softAuroraFor(theme)} />
         </div>
         <div
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 70% 60% at 50% 45%, transparent 0%, var(--bg) 78%)",
+              "radial-gradient(ellipse 80% 60% at 50% 50%, transparent 0%, var(--bg) 85%)",
           }}
         />
       </div>
@@ -75,14 +71,8 @@ export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
         </div>
 
         <div
-          className="rounded-xl border p-[26px_24px]"
-          style={{
-            background: "var(--panel-strong)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            borderColor: "var(--border)",
-            boxShadow: "var(--shadow)",
-          }}
+          className="odin-glass-strong rounded-xl border p-[26px_24px]"
+          style={{ boxShadow: "var(--shadow)" }}
         >
           <h2 className="text-[15px] font-semibold">Iniciar sesión</h2>
           <p className="mb-5 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>

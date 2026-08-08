@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 
 import db.canonical_entities as canonical_entity_store
+from analysis.canonicalize import invalidate_person_map
 from api import deps
 from api.deps import log
 from api.schemas import (
@@ -168,6 +169,7 @@ def update_canonical_entity(
         if payload.description is not None:
             row.description = payload.description.strip() or None
         session.commit()
+        invalidate_person_map()  # un renombrado manual pesa en el próximo análisis
         article_count, total_mentions = _canonical_entity_counts(session, entity_id)
         return _serialize_canonical_entity(row, article_count, total_mentions)
     except HTTPException:
@@ -200,6 +202,7 @@ def merge_canonical_entities(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         session.commit()
+        invalidate_person_map()
         article_count, total_mentions = _canonical_entity_counts(session, entity_id)
         return _serialize_canonical_entity(target, article_count, total_mentions)
     except HTTPException:

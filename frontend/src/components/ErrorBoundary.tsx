@@ -41,8 +41,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div
           role="alert"
-          className="flex w-full flex-col items-center gap-3 rounded-xl border p-10 text-center"
-          style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+          className="odin-glass flex w-full flex-col items-center gap-3 rounded-xl border p-10 text-center"
         >
           <TriangleAlert className="size-8" style={{ color: "var(--neg)" }} />
           <p className="text-[15px] font-semibold">Algo salió mal en esta vista</p>

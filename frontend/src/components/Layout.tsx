@@ -1,10 +1,9 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { Nav } from "@/components/Nav"
-import { Aurora } from "@/components/Aurora"
+import { SoftAurora } from "@/components/SoftAurora"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { getUsername } from "@/lib/auth"
-
-type Theme = "light" | "dark"
+import { softAuroraFor, SOFT_AURORA_OPACITY, type Theme } from "@/lib/aurora-config"
 
 const NAV_ITEMS = [
   { label: "Analizar", tab: "/analyze" },
@@ -16,11 +15,6 @@ const NAV_ITEMS = [
 // Apaga la banda de Aurora del workspace sin exponer un control en la UI: es
 // lo primero que se sacrifica en equipos lentos (README §Fondo Plasma).
 const WORKSPACE_AURORA_ENABLED = true
-
-const AURORA_STOPS: Record<Theme, [string, string, string]> = {
-  light: ["#B497CF", "#6200EE", "#B497CF"],
-  dark: ["#03DAC6", "#5227FF", "#03DAC6"],
-}
 
 interface LayoutProps {
   onLogout: () => void
@@ -36,14 +30,21 @@ export function Layout({ onLogout, theme, onToggleTheme }: LayoutProps) {
   return (
     <div className="relative min-h-screen" style={{ background: "var(--bg)" }}>
       {WORKSPACE_AURORA_ENABLED && (
+        // `fixed` en vez de una banda superior: la aurora queda centrada en el
+        // viewport y las tarjetas translúcidas la dejan ver al hacer scroll.
+        // Además es un solo canvas del tamaño de la ventana que no crece con el
+        // largo de la página ni se repinta al scrollear.
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[420px] overflow-hidden"
-          style={{ opacity: theme === "dark" ? 0.5 : 0.35 }}
+          className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+          style={{ opacity: SOFT_AURORA_OPACITY.workspace[theme] }}
         >
-          <Aurora colorStops={AURORA_STOPS[theme]} speed={0.3} blend={0.55} amplitude={0.9} />
+          <SoftAurora {...softAuroraFor(theme)} />
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(to bottom, transparent 0%, var(--bg) 88%)" }}
+            style={{
+              background:
+                "radial-gradient(ellipse 85% 60% at 50% 50%, transparent 0%, var(--bg) 90%)",
+            }}
           />
         </div>
       )}

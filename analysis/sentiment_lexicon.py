@@ -28,7 +28,11 @@ Dos problemas distintos, dos mecanismos:
      acusada y otra que investiga o corrige. Este segundo léxico solo debe
      aplicarse a las frases donde YA se sabe que se menciona a esa entidad
      puntual (ver `_entities()` en `analysis/local_analyzer.py`), nunca de
-     forma global al documento.
+     forma global al documento. Y DENTRO de esa frase, solo a la mención que
+     recibe la acción: en "Pérez fue acusado por la Procuraduría" el patrón
+     cae en la misma frase para ambos, pero solo uno queda mal parado — por
+     eso `entity_relation_hits` devuelve la posición de cada patrón y no una
+     etiqueta suelta para toda la frase.
 
 Tres consumidores del mismo vocabulario:
   - `apply_boost`: para `LocalAnalyzer`, empuja la probabilidad de la frase
@@ -46,7 +50,7 @@ from __future__ import annotations
 
 import re
 
-from analysis.text_norm import strip_accents
+from analysis.text_norm import fold_preserving_offsets, strip_accents
 
 # ---- léxico general: carga inequívoca por sí sola, sin necesitar sujeto ----
 _NEG_TERMS = [
@@ -133,6 +137,28 @@ def _label_from(text: str, neg_re: re.Pattern[str], pos_re: re.Pattern[str]) -> 
     return None  # sin match, o señal contradictoria: mejor no forzar nada
 
 
+def entity_relation_hits(text: str) -> list[tuple[int, str]]:
+    """Posición y etiqueta de CADA patrón relacional del texto, ordenadas por
+    posición: `[(12, "NEG"), ...]`.
+
+    Devuelve las posiciones —y no solo una etiqueta para toda la frase, como
+    `entity_relation_label`— porque la dirección de estos patrones importa:
+    en "Ramón Pérez fue acusado de corrupción por la Procuraduría", el que
+    queda mal parado es quien va ANTES del patrón, no el agente que va
+    después. Quien llama usa estas posiciones para decidir a qué mención se
+    le aplica el ajuste (ver `LocalAnalyzer._relational_boosts`).
+
+    Se pliega con `fold_preserving_offsets` (no con `strip_accents`) porque
+    aquí los índices tienen que seguir apuntando al mismo carácter del texto
+    original.
+    """
+    normalized = fold_preserving_offsets(text)
+    hits = [(m.start(), "NEG") for m in _ENTITY_NEG_RE.finditer(normalized)]
+    hits += [(m.start(), "POS") for m in _ENTITY_POS_RE.finditer(normalized)]
+    hits.sort()
+    return hits
+
+
 def _boosted(probas: dict[str, float], label: str | None) -> dict[str, float]:
     if label is None or label not in probas:
         return probas
@@ -169,8 +195,23 @@ def apply_entity_relation_boost(text: str, probas: dict[str, float]) -> dict[str
     Debe llamarse solo sobre frases ya asociadas a esa entidad puntual (ver
     `LocalAnalyzer._entities`), nunca sobre el documento completo: la
     dirección de "acusado de" depende de a quién menciona la frase, no es
-    una carga global de la nota."""
+    una carga global de la nota.
+
+    Ojo: aplica el ajuste a la frase entera, sin distinguir cuál de las
+    entidades mencionadas en ella es la que recibe la acción. Cuando quien
+    llama sabe DÓNDE está cada mención, `entity_relation_hits` +
+    `apply_label_boost` dan el resultado dirigido (es lo que usa
+    `LocalAnalyzer`); esta función queda para el caso simple de una sola
+    entidad por frase.
+    """
     return _boosted(probas, entity_relation_label(text))
+
+
+def apply_label_boost(probas: dict[str, float], label: str | None) -> dict[str, float]:
+    """Ajuste con una etiqueta ya decidida por quien llama (p.ej. tras
+    resolver a qué mención le corresponde el patrón relacional). No-op si
+    `label` es None."""
+    return _boosted(probas, label)
 
 
 def lexicon_matches(text: str) -> dict[str, list[str]]:

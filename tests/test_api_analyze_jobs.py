@@ -11,6 +11,9 @@ ya corrió y quedó en su estado final. Sin red, sin spaCy/pysentimiento/Gemini:
 """
 from __future__ import annotations
 
+import dataclasses
+from datetime import UTC, datetime, timedelta
+
 from analysis.base import AnalysisResult
 from auth import create_token
 from db.models import AnalyzeJob, Article
@@ -108,13 +111,17 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"]["already_saved"] is False
         assert job_body["result"]["main_topic"] == "elecciones"
 
-    def test_job_failure_is_reported_not_raised(self, monkeypatch, api_client, sqlite_sessionmaker):
+    def test_expected_failure_shows_its_message(self, monkeypatch, api_client, sqlite_sessionmaker):
+        """Los fallos previstos (`HTTPException`) llevan un texto pensado para
+        el usuario: se muestra tal cual."""
+        from fastapi import HTTPException
+
         import url_guard
 
         monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
 
         def _boom(url):
-            raise RuntimeError("la extracción falló")
+            raise HTTPException(status_code=422, detail="No se pudo extraer el artículo de esa URL.")
 
         monkeypatch.setattr(analyze_service, "fetch_and_extract", _boom)
 
@@ -123,10 +130,35 @@ class TestAnalyzeNewUrlEnqueuesJob:
         )
         job_id = resp.json()["job_id"]
 
-        job_resp = api_client.get(f"/api/jobs/{job_id}", headers=_auth_headers())
-        job_body = job_resp.json()
+        job_body = api_client.get(f"/api/jobs/{job_id}", headers=_auth_headers()).json()
         assert job_body["status"] == "failed"
-        assert "la extracción falló" in job_body["error"]
+        assert job_body["error"] == "No se pudo extraer el artículo de esa URL."
+        assert job_body["result"] is None
+
+    def test_unexpected_failure_is_reported_without_leaking_internals(
+        self, monkeypatch, api_client, sqlite_sessionmaker
+    ):
+        """Una excepción imprevista no debe salir cruda en el UI: el detalle va
+        al log y el usuario recibe algo accionable. Lo que NO puede pasar es que
+        se propague (nadie la atraparía: el job corre fuera del request)."""
+        import url_guard
+
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
+
+        def _boom(url):
+            raise RuntimeError("psycopg2.OperationalError: connection refused")
+
+        monkeypatch.setattr(analyze_service, "fetch_and_extract", _boom)
+
+        resp = api_client.post(
+            "/api/analyze", json={"url": "https://diariolibre.com/falla-rara"}, headers=_auth_headers()
+        )
+        job_id = resp.json()["job_id"]
+
+        job_body = api_client.get(f"/api/jobs/{job_id}", headers=_auth_headers()).json()
+        assert job_body["status"] == "failed"
+        assert "psycopg2" not in job_body["error"]
+        assert "Intenta de nuevo" in job_body["error"]
         assert job_body["result"] is None
 
     def test_invalid_url_never_creates_a_job(self, monkeypatch, api_client, sqlite_sessionmaker):
@@ -147,6 +179,188 @@ class TestAnalyzeNewUrlEnqueuesJob:
         session.close()
 
 
+class TestAnalyzeDoesNotRepeatWork:
+    """Cada análisis evitado es una llamada al LLM que no se hace (y en modo
+    `groq+gemini`, potencialmente una llamada facturada)."""
+
+    def _count_analyses(self, monkeypatch) -> list[int]:
+        """Parchea el pipeline contando cuántas veces se analiza de verdad."""
+        import url_guard
+
+        calls = [0]
+
+        def _analyze(title, body):
+            calls[0] += 1
+            return _fake_analysis_result()
+
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
+        monkeypatch.setattr(
+            analyze_service,
+            "fetch_and_extract",
+            lambda url: {
+                "title": "Título extraído",
+                "body": "cuerpo extraído",
+                "authors": None,
+                "section": None,
+                "published_at": None,
+                "sitename": "diario_libre",
+            },
+        )
+        monkeypatch.setattr(analyze_service, "analyze_safely", _analyze)
+        monkeypatch.setattr(analyze_service, "arbitrate_ambiguous_persons", lambda result: None)
+        monkeypatch.setattr(analyze_service, "canonicalize_result", lambda result: None)
+        return calls
+
+    def test_same_url_twice_is_analyzed_once(self, monkeypatch, api_client, sqlite_sessionmaker):
+        calls = self._count_analyses(monkeypatch)
+        url = "https://diariolibre.com/nota-repetida"
+
+        first = api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+        assert first.status_code == 202
+
+        second = api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+        # El segundo request ya trae el resultado, sin job ni análisis nuevo.
+        assert second.status_code == 200
+        assert second.json()["title"] == "Título extraído"
+        assert calls[0] == 1
+
+    def test_tracking_params_do_not_trigger_a_second_analysis(
+        self, monkeypatch, api_client, sqlite_sessionmaker
+    ):
+        calls = self._count_analyses(monkeypatch)
+        base = "https://diariolibre.com/nota-compartida"
+
+        api_client.post("/api/analyze", json={"url": base}, headers=_auth_headers())
+        resp = api_client.post(
+            "/api/analyze",
+            json={"url": f"{base}/?utm_source=whatsapp#top"},
+            headers=_auth_headers(),
+        )
+
+        assert resp.status_code == 200
+        assert calls[0] == 1
+
+    def test_reuse_window_can_be_disabled(self, monkeypatch, api_client, sqlite_sessionmaker):
+        calls = self._count_analyses(monkeypatch)
+        monkeypatch.setattr(
+            analyze_service,
+            "settings",
+            dataclasses.replace(analyze_service.settings, analyze_reuse_minutes=0),
+        )
+        url = "https://diariolibre.com/sin-reuso"
+
+        api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+        second = api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+
+        assert second.status_code == 202
+        assert calls[0] == 2
+
+    def test_second_client_joins_the_job_already_running(
+        self, monkeypatch, api_client, sqlite_sessionmaker
+    ):
+        # Un job `pending`/`running` de la misma URL: el segundo request debe
+        # engancharse a ÉL en vez de lanzar un análisis en paralelo.
+        import url_guard
+
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
+        url = "https://diariolibre.com/en-curso"
+        session = sqlite_sessionmaker()
+        session.add(AnalyzeJob(id="job-en-curso", url=url, status="running"))
+        session.commit()
+        session.close()
+
+        resp = api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+
+        assert resp.status_code == 202
+        assert resp.json()["job_id"] == "job-en-curso"
+        session = sqlite_sessionmaker()
+        assert session.query(AnalyzeJob).count() == 1  # no se creó un segundo job
+        session.close()
+
+    def test_a_stale_running_job_is_not_joined(self, monkeypatch, api_client, sqlite_sessionmaker):
+        # Un job colgado (proceso reiniciado a mitad) nunca va a terminar:
+        # engancharse a él dejaría al cliente esperando para siempre.
+        self._count_analyses(monkeypatch)
+        url = "https://diariolibre.com/colgado"
+        session = sqlite_sessionmaker()
+        session.add(
+            AnalyzeJob(
+                id="job-colgado",
+                url=url,
+                status="running",
+                created_at=datetime.now(UTC) - timedelta(hours=3),
+            )
+        )
+        session.commit()
+        session.close()
+
+        resp = api_client.post("/api/analyze", json={"url": url}, headers=_auth_headers())
+
+        assert resp.status_code == 202
+        assert resp.json()["job_id"] != "job-colgado"
+
+
+class TestReapStaleJobs:
+    def test_interrupted_jobs_are_failed_with_a_readable_message(
+        self, monkeypatch, api_client, sqlite_sessionmaker
+    ):
+        session = sqlite_sessionmaker()
+        session.add_all([
+            AnalyzeJob(
+                id="viejo",
+                url="https://diariolibre.com/a",
+                status="running",
+                created_at=datetime.now(UTC) - timedelta(hours=2),
+            ),
+            AnalyzeJob(
+                id="reciente",
+                url="https://diariolibre.com/b",
+                status="running",
+                created_at=datetime.now(UTC),
+            ),
+        ])
+        session.commit()
+        session.close()
+
+        analyze_service.reap_stale_jobs()
+
+        session = sqlite_sessionmaker()
+        assert session.get(AnalyzeJob, "viejo").status == "failed"
+        assert "interrumpió" in session.get(AnalyzeJob, "viejo").error
+        assert session.get(AnalyzeJob, "reciente").status == "running"
+        session.close()
+
+    def test_finished_jobs_past_their_ttl_are_deleted(
+        self, monkeypatch, api_client, sqlite_sessionmaker
+    ):
+        # `result_json` guarda el cuerpo completo del artículo: sin poda la
+        # tabla crece sin techo.
+        session = sqlite_sessionmaker()
+        session.add_all([
+            AnalyzeJob(
+                id="antiguo",
+                url="https://diariolibre.com/a",
+                status="done",
+                created_at=datetime.now(UTC) - timedelta(days=30),
+            ),
+            AnalyzeJob(
+                id="de-ayer",
+                url="https://diariolibre.com/b",
+                status="done",
+                created_at=datetime.now(UTC) - timedelta(hours=1),
+            ),
+        ])
+        session.commit()
+        session.close()
+
+        analyze_service.reap_stale_jobs()
+
+        session = sqlite_sessionmaker()
+        assert session.get(AnalyzeJob, "antiguo") is None
+        assert session.get(AnalyzeJob, "de-ayer") is not None
+        session.close()
+
+
 class TestGetJob:
     def test_unknown_job_returns_404(self, api_client):
         resp = api_client.get("/api/jobs/does-not-exist", headers=_auth_headers())
@@ -155,3 +369,26 @@ class TestGetJob:
     def test_requires_auth(self, api_client):
         resp = api_client.get("/api/jobs/anything")
         assert resp.status_code == 401
+
+    def test_response_matches_the_declared_schema(self, api_client, sqlite_sessionmaker):
+        """El handler arma el JSON a mano para no re-serializar el resultado en
+        cada poll; esto vigila que lo que emite siga siendo un `JobResponse`."""
+        from api.schemas import JobResponse
+
+        session = sqlite_sessionmaker()
+        session.add(
+            AnalyzeJob(id="con-stage", url="https://diariolibre.com/x", status="running", stage="analyzing")
+        )
+        session.commit()
+        session.close()
+
+        body = api_client.get("/api/jobs/con-stage", headers=_auth_headers()).json()
+
+        assert JobResponse.model_validate(body).stage == "analyzing"
+        assert body == {
+            "job_id": "con-stage",
+            "status": "running",
+            "stage": "analyzing",
+            "error": None,
+            "result": None,
+        }
