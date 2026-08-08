@@ -8,11 +8,18 @@ grande. Un artículo largo o con muchas entidades puede pasarse por arriba
 es el límite del plan. Cuando pasa, esto reintenta con `GeminiAnalyzer`, que
 no tiene ese techo.
 
-Coste: el fallback es una llamada FACTURADA a Gemini (ver CLAUDE.md). Por eso
-Groq va SIEMPRE primero y Gemini solo entra cuando Groq ya falló — el gasto es
-la excepción, no el camino normal. Ambos comparten el mismo prompt y esquema
+Coste: el fallback a Gemini PUEDE facturar (ver CLAUDE.md). Por eso Groq va
+SIEMPRE primero y Gemini solo entra cuando Groq ya falló — el gasto es la
+excepción, no el camino normal. Ambos comparten el mismo prompt y esquema
 (`_SYSTEM`/`_Analysis` en `analysis/gemini_analyzer.py`), así que el resultado
 es comparable venga de donde venga; lo único que cambia es quién lo produjo.
+
+Cadena de Gemini (dos cuentas): para que el gasto sea aún más raro, el fallback
+puede probar DOS cuentas de Google en orden — primero el free tier
+(GEMINI_API_KEY_FREE, no factura) y solo si ese también se agota, la de pago
+(GEMINI_API_KEY_PAID). El flujo completo queda: Groq (gratis) → Gemini free
+(gratis) → Gemini pago. Si no se configura ninguna de esas dos, se usa la key
+única del entorno como siempre (un solo Gemini). Ver `_gemini_chain`.
 
 Linaje (§2.1 de task.md): `name`/`model`/`version` reflejan el motor que
 realmente produjo el ÚLTIMO análisis de este hilo, no el analizador compuesto.
@@ -59,7 +66,7 @@ class GroqWithGeminiFallback:
         from analysis.groq_analyzer import GroqAnalyzer
 
         self._groq = GroqAnalyzer()
-        self._gemini = None  # perezoso: no exigir google-genai si nunca se usa
+        self._gemini_tiers = None  # cadena perezosa de Gemini, ver _gemini_chain
         self._state = threading.local()
 
     # ---- motor efectivo del último analyze() de ESTE hilo ---------------------
@@ -104,16 +111,58 @@ class GroqWithGeminiFallback:
                 exc,
             )
             ANALYZER_FALLBACK_TOTAL.labels(reason=reason).inc()
-            engine = self._gemini_analyzer()
-            result = engine.analyze(title, body)  # si Gemini también falla, propaga
+            result, engine = self._run_gemini_chain(title, body)
         else:
             engine = self._groq
         self._state.engine = engine
         return result
 
-    def _gemini_analyzer(self):
-        if self._gemini is None:
-            from analysis.gemini_analyzer import GeminiAnalyzer
+    def _gemini_chain(self):
+        """Cadena de Gemini a probar EN ORDEN cuando Groq falla.
 
-            self._gemini = GeminiAnalyzer()
-        return self._gemini
+        Si hay dos cuentas configuradas, primero la gratuita
+        (GEMINI_API_KEY_FREE, no factura pero con límite diario) y solo si esa
+        también falla, la de pago (GEMINI_API_KEY_PAID) — así el gasto es el
+        último recurso, no el primero. Si no hay ninguna de las dos, un único
+        Gemini con la key del entorno (GEMINI_API_KEY/GOOGLE_API_KEY): el
+        comportamiento histórico de este modo.
+
+        Perezoso: no importa google-genai ni construye clientes si Groq nunca
+        falla. `name` distinto por cuenta ("gemini-free"/"gemini-paid") para que
+        el linaje guardado diga cuál respondió — y, con eso, cuál facturó.
+        """
+        if self._gemini_tiers is None:
+            from analysis.gemini_analyzer import GeminiAnalyzer
+            from config import settings
+
+            tiers = []
+            if settings.gemini_api_key_free:
+                tiers.append(
+                    GeminiAnalyzer(api_key=settings.gemini_api_key_free, name="gemini-free")
+                )
+            if settings.gemini_api_key_paid:
+                tiers.append(
+                    GeminiAnalyzer(api_key=settings.gemini_api_key_paid, name="gemini-paid")
+                )
+            if not tiers:
+                tiers.append(GeminiAnalyzer())
+            self._gemini_tiers = tiers
+        return self._gemini_tiers
+
+    def _run_gemini_chain(self, title: str, body: str):
+        """Recorre la cadena hasta que una cuenta responde. La última que falla
+        propaga: si ni la de pago pudo, el análisis se pierde igual que antes."""
+        chain = self._gemini_chain()
+        for i, engine in enumerate(chain):
+            try:
+                return engine.analyze(title, body), engine
+            except Exception as exc:
+                if i == len(chain) - 1:
+                    raise  # era el último recurso configurado: propaga
+                log.warning(
+                    "gemini_cuenta_fallo_probando_siguiente engine=%s error=%s: %s",
+                    getattr(engine, "name", "gemini"),
+                    type(exc).__name__,
+                    exc,
+                )
+        raise AssertionError("inalcanzable: la cadena de Gemini nunca está vacía")

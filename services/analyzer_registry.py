@@ -42,11 +42,25 @@ if IS_GEMINI_ANALYZER:
 elif settings.analyzer == "groq+gemini":
     from analysis.fallback_analyzer import GroqWithGeminiFallback
 
-    log.warning(
-        "ODIN_ANALYZER=groq+gemini — GroqAnalyzer (gratis) primero; si falla "
-        "(rate limit, respuesta truncada, error de red) reintenta con Gemini, "
-        "que es una llamada FACTURADA. El linaje guardado dice cuál respondió."
-    )
+    if settings.gemini_api_key_free or settings.gemini_api_key_paid:
+        chain = ["Groq (gratis)"]
+        if settings.gemini_api_key_free:
+            chain.append("Gemini free (gratis)")
+        if settings.gemini_api_key_paid:
+            chain.append("Gemini pago (FACTURADO)")
+        log.warning(
+            "ODIN_ANALYZER=groq+gemini — cadena: %s. Cada eslabón solo entra si "
+            "el anterior falla; el linaje guardado dice cuál respondió.",
+            " → ".join(chain),
+        )
+    else:
+        log.warning(
+            "ODIN_ANALYZER=groq+gemini — GroqAnalyzer (gratis) primero; si falla "
+            "(rate limit, respuesta truncada, error de red) reintenta con Gemini, "
+            "que es una llamada FACTURADA. El linaje guardado dice cuál respondió. "
+            "Configura GEMINI_API_KEY_FREE para intercalar una cuenta gratuita "
+            "antes de la de pago."
+        )
     analyzer = GroqWithGeminiFallback()
 elif settings.analyzer == "groq":
     # Import perezoso: sin esto, correr en modo local exigiría el paquete groq.

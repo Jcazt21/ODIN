@@ -85,6 +85,22 @@ class Settings:
         "ODIN_ANALYZER", "local", ("local", "gemini", "groq", "hybrid", "groq+gemini")
     )
 
+    # Cadena de Gemini para el fallback de "groq+gemini" (ver
+    # analysis/fallback_analyzer.py). Dos cuentas de Google DISTINTAS —una en el
+    # free tier y otra con facturación activada— para que el gasto sea el último
+    # recurso: cuando Groq falla, se prueba primero la cuenta gratuita
+    # (GEMINI_API_KEY_FREE, no factura pero tiene un límite diario bajo) y solo
+    # si esa también se agota, la de pago (GEMINI_API_KEY_PAID). La MISMA key no
+    # sirve para ambas: el free tier y la facturación se activan por proyecto de
+    # Google, así que son dos credenciales de dos proyectos distintos.
+    #
+    # Si no se define ninguna de las dos, "groq+gemini" cae a la key única de
+    # GEMINI_API_KEY/GOOGLE_API_KEY (comportamiento histórico: un solo Gemini).
+    # Se leen aquí y no como flag de gasto porque el gasto ya lo decide
+    # ODIN_ANALYZER; estas solo dicen QUÉ credenciales usa esa cadena.
+    gemini_api_key_free: str = os.getenv("GEMINI_API_KEY_FREE", "")
+    gemini_api_key_paid: str = os.getenv("GEMINI_API_KEY_PAID", "")
+
     # Árbitro de entidades ambiguas: una llamada EXTRA y facturada a Gemini por
     # cada análisis con personas dudosas, aparte del motor principal. Opt-in
     # explícito, por la misma razón. Solo tiene efecto con ODIN_ANALYZER=local:

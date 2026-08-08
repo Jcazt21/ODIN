@@ -392,7 +392,14 @@ class GeminiAnalyzer:
     name = "gemini"
     version = _PROMPT_VERSION
 
-    def __init__(self, model: str = "gemini-3.5-flash", thinking_budget: int = 0) -> None:
+    def __init__(
+        self,
+        model: str = "gemini-3.5-flash",
+        thinking_budget: int = 0,
+        *,
+        api_key: str | None = None,
+        name: str | None = None,
+    ) -> None:
         # gemini-3.5-flash: buen equilibrio calidad/coste. Usa "gemini-3.5-pro"
         # para máxima precisión (más caro).
         #
@@ -403,8 +410,17 @@ class GeminiAnalyzer:
         # multi-paso— el thinking no mejora la calidad de forma perceptible y
         # puede duplicar o triplicar el coste por artículo. gemini-3.5-pro no
         # permite budget=0 (mínimo 128); si se usa ese modelo, súbelo a 128.
+        #
+        # api_key explícita: permite encadenar dos cuentas de Google distintas
+        # (free tier y de pago) en el mismo proceso — ver GroqWithGeminiFallback.
+        # Si es None, el SDK la toma de GEMINI_API_KEY/GOOGLE_API_KEY del entorno
+        # como siempre. `name` sobrescribe el linaje ("gemini-free"/"gemini-paid")
+        # para que la BD registre CUÁL cuenta produjo cada análisis.
         self.model = model
         self.thinking_budget = thinking_budget
+        self._api_key = api_key
+        if name is not None:
+            self.name = name
         self._client = None
 
     @property
@@ -412,7 +428,9 @@ class GeminiAnalyzer:
         if self._client is None:
             from google import genai  # import perezoso: solo si se usa este analizador
 
-            # Toma la API key de GEMINI_API_KEY o GOOGLE_API_KEY del entorno.
+            # La API key: si se pasó explícita (cadena free/pago del fallback),
+            # esa; si no, el SDK la toma de GEMINI_API_KEY o GOOGLE_API_KEY del
+            # entorno como siempre.
             # El timeout (en MILISEGUNDOS, así lo define HttpOptions) es
             # explícito porque este analizador suele ser el último eslabón:
             # cuando entra como fallback de Groq, el tiempo que tarde se suma
@@ -420,7 +438,10 @@ class GeminiAnalyzer:
             # momento (JOB_POLL_TIMEOUT_MS en frontend/src/lib/odin-api.ts).
             # Sin tope, una llamada colgada convierte un análisis ya pagado en
             # un resultado que nadie llega a ver.
-            self._client = genai.Client(http_options={"timeout": _REQUEST_TIMEOUT_MS})
+            client_kwargs = {"http_options": {"timeout": _REQUEST_TIMEOUT_MS}}
+            if self._api_key:
+                client_kwargs["api_key"] = self._api_key
+            self._client = genai.Client(**client_kwargs)
         return self._client
 
     def analyze(self, title: str, body: str) -> AnalysisResult:

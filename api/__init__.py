@@ -133,6 +133,15 @@ def _route_template(request: Request) -> str:
     return route.path if route is not None else request.url.path
 
 
+# El HEALTHCHECK del contenedor (docker-compose.yml, servicio "backend") le
+# pega a /api/health cada 10s. Sin esto, cada sonda emite un
+# `http_request_finished` que inunda los logs y hace imposible seguir los
+# eventos de verdad. Se siguen registrando las métricas Prometheus (el conteo
+# de sondas es barato y útil); solo se omite la línea de log — salvo error,
+# que sí interesa ver.
+_HEALTH_PATH = "/api/health"
+
+
 @app.middleware("http")
 async def _observability_middleware(request: Request, call_next):
     """Correlation ID + logs estructurados + métricas de latencia/error por
@@ -163,13 +172,16 @@ async def _observability_middleware(request: Request, call_next):
         HTTP_REQUESTS_TOTAL.labels(
             method=request.method, path=path, status_code=str(response.status_code)
         ).inc()
-        log.info(
-            "http_request_finished",
-            method=request.method,
-            path=path,
-            status_code=response.status_code,
-            duration_seconds=round(duration, 4),
-        )
+        # La sonda de salud es puro ruido en los logs (cada 10s): se omite su
+        # línea mientras responda bien; un código >= 400 sí se registra.
+        if path != _HEALTH_PATH or response.status_code >= 400:
+            log.info(
+                "http_request_finished",
+                method=request.method,
+                path=path,
+                status_code=response.status_code,
+                duration_seconds=round(duration, 4),
+            )
         response.headers["X-Correlation-ID"] = correlation_id
         return response
 
