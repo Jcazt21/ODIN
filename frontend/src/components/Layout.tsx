@@ -10,7 +10,14 @@ const NAV_ITEMS = [
   { label: "Reportes", tab: "/reports" },
   { label: "Entidades", tab: "/entities" },
   { label: "Siglas", tab: "/aliases" },
+  { label: "Ajustes", tab: "/settings" },
 ]
+
+/** Contexto que Layout pasa a las páginas hijas vía <Outlet context>. */
+export interface WorkspaceOutletContext {
+  theme: Theme
+  onToggleTheme: () => void
+}
 
 // Apaga la banda de Aurora del workspace sin exponer un control en la UI: es
 // lo primero que se sacrifica en equipos lentos (README §Fondo Plasma).
@@ -56,13 +63,11 @@ export function Layout({ onLogout, theme, onToggleTheme }: LayoutProps) {
           onTabChange={(tab) => navigate(tab)}
           username={getUsername()}
           onLogout={onLogout}
-          theme={theme}
-          onToggleTheme={onToggleTheme}
         />
 
         <main className="mt-[22px] flex flex-col gap-[22px]">
           <ErrorBoundary resetKey={location.pathname}>
-            <Outlet />
+            <Outlet context={{ theme, onToggleTheme } satisfies WorkspaceOutletContext} />
           </ErrorBoundary>
         </main>
       </div>

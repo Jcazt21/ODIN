@@ -1,0 +1,40 @@
+import { useOutletContext } from "react-router-dom"
+import { SkyToggle } from "@/components/ui/sky-toggle"
+import type { WorkspaceOutletContext } from "@/components/Layout"
+
+/**
+ * Ajustes del workspace. Por ahora solo expone el tema; el layout de fila
+ * (etiqueta + control a la derecha) está pensado para crecer con más filas de
+ * preferencias sin rediseñar la tarjeta.
+ */
+export function SettingsPage() {
+  const { theme, onToggleTheme } = useOutletContext<WorkspaceOutletContext>()
+
+  return (
+    <div>
+      <header>
+        <h1 className="text-[19px] font-semibold">Ajustes</h1>
+        <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--faint)" }}>
+          Preferencias de la interfaz.
+        </p>
+      </header>
+
+      <div className="odin-glass mt-4 rounded-xl border" style={{ boxShadow: "var(--shadow)" }}>
+        <div className="flex items-center justify-between gap-4 p-4">
+          <div>
+            <div className="text-[14px] font-medium">Tema</div>
+            <div className="mt-0.5 text-[12px]" style={{ color: "var(--faint)" }}>
+              Apariencia clara u oscura de la aplicación.
+            </div>
+          </div>
+
+          <SkyToggle
+            checked={theme === "dark"}
+            onChange={onToggleTheme}
+            aria-label={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

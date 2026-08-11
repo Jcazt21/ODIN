@@ -9,6 +9,7 @@ import { ReportsPage } from "@/pages/ReportsPage"
 import { ReportDetailPage } from "@/pages/ReportDetailPage"
 import { EntitiesPage } from "@/pages/EntitiesPage"
 import { AliasesPage } from "@/pages/AliasesPage"
+import { SettingsPage } from "@/pages/SettingsPage"
 import { useMe } from "@/lib/queries/auth"
 import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername } from "@/lib/auth"
 
@@ -97,6 +98,7 @@ function App() {
             <Route path="/reports/:id" element={<ReportDetailPage />} />
             <Route path="/entities" element={<EntitiesPage />} />
             <Route path="/aliases" element={<AliasesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/" element={<Navigate to="/analyze" replace />} />
           </Route>
           <Route path="*" element={<Navigate to={username ? "/analyze" : "/login"} replace />} />

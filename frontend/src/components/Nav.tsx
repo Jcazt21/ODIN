@@ -1,4 +1,3 @@
-import { Moon, Sun } from "lucide-react"
 import { LogoutLinear } from "mx-icons"
 import { cn } from "@/lib/utils"
 import { useConfirm } from "@/lib/dialog"
@@ -15,12 +14,10 @@ interface NavProps {
   onTabChange: (tab: string) => void
   username: string | null
   onLogout: () => void
-  theme: "light" | "dark"
-  onToggleTheme: () => void
 }
 
 /** Nav pill sticky (README §2 "Workspace — shell y navegación"). Reemplaza PillNav. */
-export function Nav({ items, activeTab, onTabChange, username, onLogout, theme, onToggleTheme }: NavProps) {
+export function Nav({ items, activeTab, onTabChange, username, onLogout }: NavProps) {
   const confirm = useConfirm()
 
   async function handleLogout() {
@@ -80,16 +77,6 @@ export function Nav({ items, activeTab, onTabChange, username, onLogout, theme, 
           )
         })}
       </div>
-
-      <button
-        type="button"
-        onClick={onToggleTheme}
-        aria-label={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
-        className="inline-flex size-[30px] items-center justify-center rounded-full border transition-colors hover:text-foreground"
-        style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--faint)" }}
-      >
-        {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      </button>
 
       {username && (
         <span className="font-mono text-[11px]" style={{ color: "var(--faint)" }}>

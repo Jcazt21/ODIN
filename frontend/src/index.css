@@ -68,17 +68,17 @@
    en ambos (color de borde 1px), así que se define una sola vez. */
 :root {
     /* modo claro (default) */
-    --bg: oklch(0.975 0.003 262);
-    --surface: #ffffff;
-    --surface-2: oklch(0.965 0.005 262);
-    --surface-3: oklch(0.945 0.007 262);
+    --bg: oklch(0.963 0.004 262);
+    --surface: oklch(0.988 0.003 262);
+    --surface-2: oklch(0.955 0.006 262);
+    --surface-3: oklch(0.935 0.008 262);
     /* Superficies "glass": esmeriladas sobre la aurora del fondo. El alpha va
        alto a propósito (el vidrio difumina, no transparenta) y el desenfoque
        se aplica con la utilidad .odin-glass más abajo. */
     /* Alpha bastante más bajo que en oscuro: sobre un fondo claro el texto
        mantiene contraste igual, y con blanco al 76% la aurora no se veía. */
-    --panel: oklch(1 0 0 / 0.55);
-    --panel-strong: oklch(1 0 0 / 0.72);
+    --panel: oklch(0.988 0.003 262 / 0.55);
+    --panel-strong: oklch(0.988 0.003 262 / 0.72);
     /* Borde de las superficies glass: hairline que recoge la luz del fondo.
        Distinto de --border, que sigue siendo el separador interno opaco. */
     --panel-border: oklch(0.86 0.008 262 / 0.7);
