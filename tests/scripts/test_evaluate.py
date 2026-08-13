@@ -18,7 +18,7 @@ from scripts.evaluate import (
     load_golden_set,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 GOLDEN_SET_PATH = REPO_ROOT / "tests" / "eval" / "golden_set.jsonl"
 
 
