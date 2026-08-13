@@ -208,6 +208,14 @@ class TestLoadGoldenSet:
     def test_real_golden_set_file_parses_and_matches_schema(self):
         articles = load_golden_set(GOLDEN_SET_PATH)
         assert len(articles) >= 1
+        for article in articles:
+            assert article.id
+            assert article.title
+            assert article.body
+            assert article.overall_sentiment in ("POS", "NEG", "NEU")
+            for ent in article.entities:
+                assert ent.type in ("PERSON", "ORG")
+                assert ent.sentiment_toward in ("POS", "NEG", "NEU", None)
 
     def test_new_optional_fields_default_to_none_when_absent(self):
         articles = load_golden_set(GOLDEN_SET_PATH)
@@ -232,14 +240,6 @@ class TestLoadGoldenSet:
         assert a.quoted_sentiment == "NEG"
         assert a.media_stance == "critica"
         assert a.content_flags == ["alarmismo"]
-        for article in articles:
-            assert article.id
-            assert article.title
-            assert article.body
-            assert article.overall_sentiment in ("POS", "NEG", "NEU")
-            for ent in article.entities:
-                assert ent.type in ("PERSON", "ORG")
-                assert ent.sentiment_toward in ("POS", "NEG", "NEU", None)
 
 
 # ── evaluate() end-to-end con analizador de mentira ──────────────────────────
