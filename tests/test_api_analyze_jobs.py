@@ -12,7 +12,7 @@ ya corrió y quedó en su estado final. Sin red, sin spaCy/pysentimiento/Gemini:
 from __future__ import annotations
 
 from analysis.base import AnalysisResult
-from auth import create_token
+from odin.core.auth import create_token
 from db.models import AnalyzeJob, Article
 from services import analyze_service
 
@@ -61,7 +61,7 @@ class TestAnalyzeAlreadySaved:
 
 class TestAnalyzeNewUrlEnqueuesJob:
     def _patch_pipeline(self, monkeypatch):
-        import url_guard
+        from odin.core import url_guard
 
         monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
         monkeypatch.setattr(
@@ -109,7 +109,7 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"]["main_topic"] == "elecciones"
 
     def test_job_failure_is_reported_not_raised(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import url_guard
+        from odin.core import url_guard
 
         monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
 
@@ -130,8 +130,8 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"] is None
 
     def test_invalid_url_never_creates_a_job(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import url_guard
-        from url_guard import UrlNotAllowed
+        from odin.core import url_guard
+        from odin.core.url_guard import UrlNotAllowed
 
         def _reject(url):
             raise UrlNotAllowed("dominio no permitido")

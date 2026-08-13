@@ -30,7 +30,7 @@ from api.schemas import (
     ScrapeSourceProgress,
 )
 from db.models import CrawlRun, ScrapeJob
-from observability import get_logger
+from odin.core.observability import get_logger
 from scrape_jobs import has_active_scrape_job
 
 log = get_logger("odin.api")

@@ -3,7 +3,7 @@ de entidad (task.md #21, §8.2): hoy no existen, así que no hay forma de
 atender un pedido de corrección o de borrado sobre una persona nombrada."""
 from __future__ import annotations
 
-from auth import create_token
+from odin.core.auth import create_token
 from db.models import Article, CanonicalEntity, Entity
 
 

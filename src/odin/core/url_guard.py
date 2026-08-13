@@ -31,7 +31,7 @@ from urllib.parse import urljoin, urlsplit
 import charset_normalizer  # dependencia de requests, ver _decode_html
 import requests
 
-from config import settings
+from odin.core.config import settings
 
 log = logging.getLogger("odin.url_guard")
 

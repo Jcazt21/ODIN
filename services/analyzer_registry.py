@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from analysis import LocalAnalyzer
 from analysis.base import Analyzer
-from config import settings
-from observability import get_logger
+from odin.core.config import settings
+from odin.core.observability import get_logger
 
 log = get_logger("odin.api")
 

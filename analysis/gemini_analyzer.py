@@ -367,7 +367,7 @@ class GeminiAnalyzer:
         return self._client
 
     def analyze(self, title: str, body: str) -> AnalysisResult:
-        from observability import GEMINI_REQUESTS_TOTAL, GEMINI_TOKENS_TOTAL
+        from odin.core.observability import GEMINI_REQUESTS_TOTAL, GEMINI_TOKENS_TOTAL
 
         body = (body or "")[:_MAX_BODY_CHARS]
         prompt = f"Analiza este artículo de periódico.\n\nTITULAR: {title}\n\nCUERPO:\n{body}"

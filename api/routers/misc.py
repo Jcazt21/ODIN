@@ -9,7 +9,7 @@ from sqlalchemy import text
 from api import deps
 from api.deps import log
 from api.schemas import HealthResponse
-from observability import registry as metrics_registry
+from odin.core.observability import registry as metrics_registry
 
 router = APIRouter(tags=["misc"])
 

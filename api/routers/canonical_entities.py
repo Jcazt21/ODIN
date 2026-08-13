@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-import auth
+from odin.core import auth
 from api.schemas import (
     CanonicalEntityDetailResponse,
     CanonicalEntityListResponse,

@@ -20,7 +20,7 @@ from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_result, known_person_fullname_map
 from db.models import Article, CanonicalEntity, CrawlRun, Entity
 from db.session import get_session, init_db
-from observability import (
+from odin.core.observability import (
     CRAWL_RUN_IN_PROGRESS,
     PIPELINE_ARTICLES_TOTAL,
     PIPELINE_RUN_DURATION_SECONDS,

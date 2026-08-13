@@ -13,7 +13,7 @@ que interesan.
 """
 from __future__ import annotations
 
-import url_guard
+from odin.core import url_guard
 
 # Titular real de acento.com.do que destapó el bug, con tilde y comillas
 # tipográficas (los dos casos que se rompían de forma distinta).

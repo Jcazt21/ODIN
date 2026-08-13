@@ -98,7 +98,7 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    from observability import configure_logging, init_sentry
+    from odin.core.observability import configure_logging, init_sentry
 
     configure_logging()
     init_sentry()

@@ -9,6 +9,6 @@ de una API key).
 from __future__ import annotations
 
 from db.session import get_session as get_session  # noqa: F401 (reexport)
-from observability import get_logger
+from odin.core.observability import get_logger
 
 log = get_logger("odin.api")

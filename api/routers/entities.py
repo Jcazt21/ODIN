@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-import auth
+from odin.core import auth
 from api.schemas import EntityMention, EntityUpdatePayload
 from services import entity_service
 

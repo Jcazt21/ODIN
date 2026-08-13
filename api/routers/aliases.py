@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-import auth
+from odin.core import auth
 from api.schemas import AliasPayload, AliasUpdatePayload, EntityAliasResponse
 from services import alias_service
 

@@ -12,8 +12,8 @@ from __future__ import annotations
 import argparse
 from typing import TYPE_CHECKING
 
-from config import settings
-from observability import configure_logging, get_logger, init_sentry
+from odin.core.config import settings
+from odin.core.observability import configure_logging, get_logger, init_sentry
 from scrapers import SCRAPERS
 
 log = get_logger("odin.main")

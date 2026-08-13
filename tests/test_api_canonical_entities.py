@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from analysis.base import ANALYSIS_SCHEMA_VERSION
-from auth import create_token
+from odin.core.auth import create_token
 from db.models import Article, CanonicalEntity, Entity
 
 

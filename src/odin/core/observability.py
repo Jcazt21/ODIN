@@ -23,7 +23,7 @@ from typing import Any
 import structlog
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
-from config import settings
+from odin.core.config import settings
 
 # --- Correlation ID ---------------------------------------------------------
 # Un ID por request HTTP o por corrida de pipeline, propagado a cada línea de

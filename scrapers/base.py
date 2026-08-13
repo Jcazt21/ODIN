@@ -26,7 +26,7 @@ import feedparser
 import requests
 import trafilatura
 
-from config import settings
+from odin.core.config import settings
 
 log = logging.getLogger("odin.scraper")
 

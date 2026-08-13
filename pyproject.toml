@@ -36,7 +36,7 @@ dependencies = { file = ["requirements.txt"] }
 # nombre de la lista "legacy" de acá. Al terminar, esto colapsa a
 # where=["src"], include=["odin*"] únicamente.
 [tool.setuptools]
-py-modules = ["auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard", "observability"]
+py-modules = ["main", "pipeline", "report", "scrape_jobs"]
 
 [tool.setuptools.packages.find]
 where = ["src", "."]

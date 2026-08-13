@@ -12,7 +12,7 @@ from sqlalchemy import event
 
 import analysis.canonicalize as canonicalize
 import db.session as db_session_module
-from auth import create_token
+from odin.core.auth import create_token
 from db.models import Article, Entity, EntityAlias
 
 
