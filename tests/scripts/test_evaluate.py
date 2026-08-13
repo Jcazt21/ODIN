@@ -52,6 +52,13 @@ class TestNamesMatch:
         assert not _names_match("", "algo")
         assert not _names_match("algo", "")
 
+    def test_hyphen_and_period_normalized_like_canonicalize(self):
+        # Antes del fix: la copia local de _norm_key no quitaba "-"/"."
+        # (a diferencia de analysis/text_norm.norm_key), así que este caso
+        # fallaba pese a que canonicalize.py sí los trata como iguales.
+        assert _names_match("P.R.M.", "PRM")
+        assert _names_match("Jean-Claude", "Jean Claude")
+
 
 # ── _match_entities / _update_metrics ────────────────────────────────────────
 

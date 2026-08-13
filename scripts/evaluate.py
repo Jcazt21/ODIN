@@ -18,13 +18,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from odin.analysis.base import Analyzer, EntityResult
+
+from odin.analysis.text_norm import norm_key
 
 SENTIMENT_VALUES = ("POS", "NEG", "NEU")
 FRAMING_VALUES = (
@@ -123,18 +124,8 @@ def load_golden_set(path: Path) -> list[GoldArticle]:
 #    General de Impuestos Internos") ─────────────────────────────────────────
 
 
-def _strip_accents(text: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
-    )
-
-
-def _norm_key(name: str) -> str:
-    return " ".join(_strip_accents(name).lower().split())
-
-
 def _names_match(a: str, b: str) -> bool:
-    na, nb = _norm_key(a), _norm_key(b)
+    na, nb = norm_key(a), norm_key(b)
     if not na or not nb:
         return False
     return na == nb or f" {na} " in f" {nb} " or f" {nb} " in f" {na} "
