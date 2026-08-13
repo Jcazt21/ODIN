@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "odin"
 version = "0.1.0"
 description = "Análisis de artículos de prensa dominicana: extracción, NER y sentimiento"
-requires-python = ">=3.12,<4"
+requires-python = ">=3.12,<3.14"
 # Las dependencias de ejecución siguen viviendo en requirements.txt: es lo que
 # copia Dockerfile.backend para aprovechar el cache de capas, y lo que citan el
 # README y docs/. Aquí se leen de ahí para no tener dos listas que se
