@@ -47,6 +47,15 @@ class GoldArticle:
     overall_sentiment: str
     entities: list[GoldEntity]
     entities_exhaustive: bool
+    # Campos v2 (framing/atribución/capas de sentimiento), opcionales:
+    # None cuando el artículo no los etiquetó — scripts/evaluate.py no
+    # penaliza ni cuenta ese campo para ese artículo (ver Task 3).
+    framing: str | None = None
+    sentiment_basis: str | None = None
+    facts_sentiment: str | None = None
+    quoted_sentiment: str | None = None
+    media_stance: str | None = None
+    content_flags: list[str] | None = None
 
 
 def load_golden_set(path: Path) -> list[GoldArticle]:
@@ -75,6 +84,12 @@ def load_golden_set(path: Path) -> list[GoldArticle]:
                         )
                         for e in row["entities"]
                     ],
+                    framing=row.get("framing"),
+                    sentiment_basis=row.get("sentiment_basis"),
+                    facts_sentiment=row.get("facts_sentiment"),
+                    quoted_sentiment=row.get("quoted_sentiment"),
+                    media_stance=row.get("media_stance"),
+                    content_flags=row.get("content_flags"),
                 )
             )
     return articles

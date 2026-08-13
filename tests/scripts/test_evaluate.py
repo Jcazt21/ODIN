@@ -208,6 +208,30 @@ class TestLoadGoldenSet:
     def test_real_golden_set_file_parses_and_matches_schema(self):
         articles = load_golden_set(GOLDEN_SET_PATH)
         assert len(articles) >= 1
+
+    def test_new_optional_fields_default_to_none_when_absent(self):
+        articles = load_golden_set(GOLDEN_SET_PATH)
+        # las 7 filas originales no etiquetan los campos nuevos
+        assert articles[0].framing is None
+        assert articles[0].content_flags is None
+
+    def test_loads_new_optional_fields_when_present(self, tmp_path):
+        path = tmp_path / "mini.jsonl"
+        path.write_text(
+            '{"id": "x1", "title": "T", "body": "B", "overall_sentiment": "NEU", '
+            '"entities": [], "framing": "denuncia", "sentiment_basis": "mixto", '
+            '"facts_sentiment": "NEU", "quoted_sentiment": "NEG", '
+            '"media_stance": "critica", "content_flags": ["alarmismo"]}\n',
+            encoding="utf-8",
+        )
+        articles = load_golden_set(path)
+        a = articles[0]
+        assert a.framing == "denuncia"
+        assert a.sentiment_basis == "mixto"
+        assert a.facts_sentiment == "NEU"
+        assert a.quoted_sentiment == "NEG"
+        assert a.media_stance == "critica"
+        assert a.content_flags == ["alarmismo"]
         for article in articles:
             assert article.id
             assert article.title
