@@ -7,8 +7,8 @@ from alembic import context
 # Un solo punto de configuración de conexión, igual que db/session.py: la URL
 # sale de DATABASE_URL (vía config.settings), nunca de alembic.ini, para no
 # tener dos lugares donde apuntar la BD y arriesgar que se desincronicen.
-from config import settings
-from db.models import Base
+from odin.core.config import settings
+from odin.db.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

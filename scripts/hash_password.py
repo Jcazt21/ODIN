@@ -10,11 +10,8 @@ from __future__ import annotations
 
 import getpass
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from auth import hash_password  # noqa: E402
+from odin.core.auth import hash_password
 
 
 def main() -> int:

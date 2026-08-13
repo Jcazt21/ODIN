@@ -142,7 +142,7 @@ Después puedes **consultar** lo guardado con `report.py` o en la pestaña
 Odin también trae un rastreador de lotes, **que no se usa en el alcance actual**
 y **nunca corre solo**: no hay cron, no hay scheduler, y el servicio `scraper` de
 `docker-compose.yml` está detrás del perfil `tools`, así que `docker compose up`
-no lo arranca. Solo se ejecuta si tú escribes `python main.py` a mano.
+no lo arranca. Solo se ejecuta si tú escribes `odin` a mano.
 
 Cuando se ejecuta, antepone un paso de **descubrimiento**: le pregunta a cada
 periódico qué publicó hoy —Diario Libre por **RSS**, Listín por su **sitemap de
@@ -214,10 +214,10 @@ usando, con aviso explícito si puede facturar.
 En la consola es el mismo criterio, con `--analyzer`:
 
 ```bash
-python main.py                      # local, gratis (por defecto)
-python main.py --analyzer gemini    # de pago, explícito
-python main.py --analyzer groq      # gratis, con límites
-python main.py --analyzer hybrid    # gratis, con límites
+odin                                 # local, gratis (por defecto)
+odin --analyzer gemini               # de pago, explícito
+odin --analyzer groq                 # gratis, con límites
+odin --analyzer hybrid               # gratis, con límites
 ```
 
 > El rastreo masivo (`main.py`, `POST /api/scrape-jobs`) restringe el motor a
@@ -230,45 +230,47 @@ python main.py --analyzer hybrid    # gratis, con límites
 ## Estructura del código
 
 ```
-api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
-  __init__.py        app, middleware (CORS, correlation-id, métricas), monta los routers
-  schemas.py         requests/respuestas Pydantic (fuente de los tipos TS del frontend)
-  deps.py            dependencias compartidas (sesión de BD)
-  routers/           un módulo por grupo de rutas: analyze, articles, entities, aliases,
-                     canonical_entities, scrape_jobs, misc (health/metrics)
-services/            lógica de negocio (SQLAlchemy) detrás de cada router — los routers
-                     no hablan a la BD directo
-  analyzer_registry.py  instancia única del Analyzer activo del proceso
-auth.py              login de usuario único + JWT
+src/odin/             único paquete instalable — todo el backend vive acá
+  core/               módulos base, sin depender de nada más del proyecto
+    config.py           configuración por variables de entorno (.env)
+    auth.py             login de usuario único + JWT
+    url_guard.py         anti-SSRF: allowlist + bloqueo de IP privada (único punto de red hacia URLs de usuario)
+    observability.py     logging estructurado, correlation-id, métricas Prometheus, Sentry opt-in
+    main.py              punto de entrada (CLI, expuesto como el comando `odin`)
+    pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
+    scrape_jobs.py        puente API↔pipeline.run() para corridas encoladas desde el frontend
+    report.py            consultas rápidas de resultados
+  api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
+    __init__.py        app, middleware (CORS, correlation-id, métricas), monta los routers
+    schemas.py         requests/respuestas Pydantic (fuente de los tipos TS del frontend)
+    deps.py            dependencias compartidas (sesión de BD)
+    routers/           un módulo por grupo de rutas: analyze, articles, entities, aliases,
+                       canonical_entities, scrape_jobs, misc (health/metrics)
+  services/            lógica de negocio (SQLAlchemy) detrás de cada router — los routers
+                       no hablan a la BD directo
+    analyzer_registry.py  instancia única del Analyzer activo del proceso
+  scrapers/
+    base.py            descarga (reintentos, throttle por dominio, robots.txt) + extracción
+    do_scrapers.py     7 de las 9 fuentes dominicanas (descubrimiento por RSS/sitemap)
+    diario_libre.py, listin.py   las otras 2
+  analysis/
+    base.py            interfaz Analyzer + AnalysisResult  <-- pieza intercambiable
+    local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
+    gemini_analyzer.py Google Gemini (opcional, de pago)
+    groq_analyzer.py   Groq: GroqAnalyzer + HybridAnalyzer (opcional, gratis con límites)
+    fallback_analyzer.py  GroqWithGeminiFallback: Groq primero, Gemini como red de seguridad
+    canonicalize.py    unificación de nombres de entidades
+    entity_arbiter.py  desambiguación puntual (solo flujo manual)
+  db/
+    models.py          7 tablas — ver docs/DATA_DICTIONARY.md
+    session.py         conexión (SQLite / PostgreSQL / SQL Server)
+    canonical_entities.py, aliases.py   dimensión de entidad y resolución de siglas
+
 frontend/            React + Vite + React Query — páginas Analizar / Reportes / Entidades
                      / Siglas / Scraper, rutas reales con react-router-dom
-config.py            configuración por variables de entorno (.env)
-scrapers/
-  base.py            descarga (reintentos, throttle por dominio, robots.txt) + extracción
-  do_scrapers.py     7 de las 9 fuentes dominicanas (descubrimiento por RSS/sitemap)
-  diario_libre.py, listin.py   las otras 2
-analysis/
-  base.py            interfaz Analyzer + AnalysisResult  <-- pieza intercambiable
-  local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
-  gemini_analyzer.py Google Gemini (opcional, de pago)
-  groq_analyzer.py   Groq: GroqAnalyzer + HybridAnalyzer (opcional, gratis con límites)
-  fallback_analyzer.py  GroqWithGeminiFallback: Groq primero, Gemini como red de seguridad
-  canonicalize.py    unificación de nombres de entidades
-  entity_arbiter.py  desambiguación puntual (solo flujo manual)
-db/
-  models.py          7 tablas — ver docs/DATA_DICTIONARY.md
-  session.py         conexión (SQLite / PostgreSQL / SQL Server)
-  canonical_entities.py, aliases.py   dimensión de entidad y resolución de siglas
 alembic/             migraciones versionadas del esquema
-report.py            consultas rápidas de resultados
-scripts/             utilidades sueltas (hash de contraseña, fusión de entidades, eval)
-url_guard.py         anti-SSRF: allowlist + bloqueo de IP privada (único punto de red hacia URLs de usuario)
-observability.py     logging estructurado, correlation-id, métricas Prometheus, Sentry opt-in
-
---- rastreo masivo, opcional y manual ---
-main.py              punto de entrada (CLI)
-pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
-scrape_jobs.py        puente API↔pipeline.run() para corridas encoladas desde el frontend
+scripts/             utilidades sueltas (hash de contraseña, fusión de entidades, eval) —
+                     no forman parte del paquete `odin` instalable
 
 docs/
   ARQUITECTURA.md    vista C4 (contexto, contenedores, componentes)
@@ -317,10 +319,10 @@ cambias `DATABASE_URL` en `.env`.
 **Prueba rápida sin instalar nada (SQLite):**
 ```bash
 # macOS/Linux
-DATABASE_URL="sqlite:///odin.db" python main.py --limit 5
+DATABASE_URL="sqlite:///odin.db" odin --limit 5
 
 # Windows (PowerShell)
-$env:DATABASE_URL="sqlite:///odin.db"; python main.py --limit 5
+$env:DATABASE_URL="sqlite:///odin.db"; odin --limit 5
 ```
 
 **PostgreSQL (desarrollo):**
@@ -348,24 +350,24 @@ El modelo de datos es portable: **no hay que reescribir código**, solo esta lí
 pestaña **Analizar** pegas la URL del artículo. Todo el flujo vive ahí.
 
 ```bash
-python main.py --init-db               # crear las tablas (una vez)
-uvicorn api:app --reload               # backend
+odin --init-db                         # crear las tablas (una vez)
+uvicorn odin.api:app --reload          # backend
 cd frontend && npm run dev             # frontend
 ```
 
 Revisar resultados:
 ```bash
-python report.py                       # resumen general
-python report.py --entity "Abinader"   # opiniones hacia una figura/empresa
+python -m odin.core.report             # resumen general
+python -m odin.core.report --entity "Abinader"   # opiniones hacia una figura/empresa
 ```
 
 **Rastreo masivo** (opcional, manual, fuera del alcance actual — ver
 [Rastreo masivo](#rastreo-masivo-opcional-y-manual)):
 ```bash
-python main.py --list-sources          # ver fuentes disponibles
-python main.py                         # rastrear todas las fuentes
-python main.py --source diario_libre   # solo una
-python main.py --limit 10              # máx. 10 artículos por fuente
+odin --list-sources                    # ver fuentes disponibles
+odin                                   # rastrear todas las fuentes
+odin --source diario_libre             # solo una
+odin --limit 10                        # máx. 10 artículos por fuente
 ```
 
 ---

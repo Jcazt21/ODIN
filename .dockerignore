@@ -22,7 +22,10 @@ tests
 odin.egg-info
 .agents
 .pre-commit-config.yaml
-pyproject.toml
+# pyproject.toml / requirements.txt: NO excluidos (a diferencia de
+# README.md abajo) — Dockerfile.backend hace `COPY pyproject.toml
+# requirements.txt .` para poder `pip install --no-deps .` el paquete
+# local; excluirlos del build context rompe ese COPY.
 README.md
-task.md
-deploy-test.md
+# task.md y deploy-test.md vivían acá; ahora están bajo docs/planning/,
+# ya cubierto por la exclusión de "docs" arriba.

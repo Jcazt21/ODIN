@@ -21,9 +21,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from config import settings  # noqa: E402
+from odin.core.config import settings
 
 if settings.analyzer != "local":
     print(
@@ -34,7 +32,7 @@ if settings.analyzer != "local":
     )
     sys.exit(1)
 
-from api import app  # noqa: E402
+from odin.api import app  # noqa: E402
 
 
 def main() -> None:

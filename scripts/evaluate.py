@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from analysis.base import Analyzer, EntityResult
+    from odin.analysis.base import Analyzer, EntityResult
 
 SENTIMENT_VALUES = ("POS", "NEG", "NEU")
 
@@ -226,18 +226,18 @@ class ConfusionMatrix:
 
 def _build_analyzer(name: str) -> Analyzer:
     if name == "gemini":
-        from analysis.gemini_analyzer import GeminiAnalyzer
+        from odin.analysis.gemini_analyzer import GeminiAnalyzer
 
         return GeminiAnalyzer()
     if name == "groq":
-        from analysis.groq_analyzer import GroqAnalyzer
+        from odin.analysis.groq_analyzer import GroqAnalyzer
 
         return GroqAnalyzer()
     if name == "hybrid":
-        from analysis.groq_analyzer import HybridAnalyzer
+        from odin.analysis.groq_analyzer import HybridAnalyzer
 
         return HybridAnalyzer()
-    from analysis import LocalAnalyzer
+    from odin.analysis import LocalAnalyzer
 
     return LocalAnalyzer()
 

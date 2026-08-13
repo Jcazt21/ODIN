@@ -1,16 +1,17 @@
 # Agregar más scrapers dominicanos a Odin
 
 Guía de referencia para añadir nuevas fuentes siguiendo el patrón de
-`scrapers/base.py`. Cada medio nuevo = un archivo `scrapers/<clave>.py`
-con una clase que hereda de `BaseScraper` + una línea en `scrapers/__init__.py`.
+`src/odin/scrapers/base.py`. Cada medio nuevo = un archivo
+`src/odin/scrapers/<clave>.py` con una clase que hereda de `BaseScraper` +
+una línea en `src/odin/scrapers/__init__.py`.
 
 ---
 
 ## Patrón mínimo
 
 ```python
-# scrapers/mi_medio.py
-from scrapers.base import BaseScraper
+# src/odin/scrapers/mi_medio.py
+from odin.scrapers.base import BaseScraper
 
 class MiMedioScraper(BaseScraper):
     source = "mi_medio"        # clave en BD
@@ -19,8 +20,8 @@ class MiMedioScraper(BaseScraper):
 ```
 
 ```python
-# scrapers/__init__.py — añadir:
-from scrapers.mi_medio import MiMedioScraper
+# src/odin/scrapers/__init__.py — añadir:
+from odin.scrapers.mi_medio import MiMedioScraper
 SCRAPERS["mi_medio"] = MiMedioScraper
 ```
 
@@ -108,9 +109,9 @@ class AcentoScraper(BaseScraper):
 Recomendado: usar el `news-sitemap.xml` para mayor cobertura.
 
 ```python
-# scrapers/el_nuevo_diario.py
+# src/odin/scrapers/el_nuevo_diario.py
 from xml.etree import ElementTree as ET
-from scrapers.base import BaseScraper
+from odin.scrapers.base import BaseScraper
 
 _SM_NS = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 
@@ -142,8 +143,8 @@ Solo RSS disponible. El servidor responde con `content-type: text/xml`
 (no `application/rss+xml`) pero el contenido es RSS válido.
 
 ```python
-# scrapers/sin.py
-from scrapers.base import BaseScraper
+# src/odin/scrapers/sin.py
+from odin.scrapers.base import BaseScraper
 
 class NoticiasSinScraper(BaseScraper):
     source = "noticias_sin"
@@ -162,11 +163,11 @@ news-sitemap.xml funciona, ~127 artículos. Ver `ElCaribeScraper`.
 ## Checklist para integrar cualquier medio nuevo
 
 ```
-[ ] Crear scrapers/<clave>.py con la clase
+[ ] Crear src/odin/scrapers/<clave>.py con la clase
 [ ] Probar discover_urls(limit=5) de forma aislada
 [ ] Probar extract() sobre una URL real (verifica que trafilatura la lea)
-[ ] Añadir import y entrada a SCRAPERS en scrapers/__init__.py
-[ ] Añadir <clave> al registro de scrapers en main.py / pipeline.py si aplica
+[ ] Añadir import y entrada a SCRAPERS en src/odin/scrapers/__init__.py
+[ ] Añadir <clave> al registro de scrapers en core/main.py / core/pipeline.py si aplica
 ```
 
 ---
