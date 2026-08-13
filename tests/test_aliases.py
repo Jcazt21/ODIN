@@ -2,8 +2,8 @@
 mayúsculas (bug: "Policia" no matcheaba un alias guardado como "Policía")."""
 from __future__ import annotations
 
-import db.aliases as alias_store
-from db.models import EntityAlias
+import odin.db.aliases as alias_store
+from odin.db.models import EntityAlias
 
 
 def _seed(session, **overrides):

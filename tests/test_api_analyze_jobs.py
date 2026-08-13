@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from analysis.base import AnalysisResult
 from odin.core.auth import create_token
-from db.models import AnalyzeJob, Article
+from odin.db.models import AnalyzeJob, Article
 from services import analyze_service
 
 

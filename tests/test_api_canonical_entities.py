@@ -7,7 +7,7 @@ from datetime import datetime
 
 from analysis.base import ANALYSIS_SCHEMA_VERSION
 from odin.core.auth import create_token
-from db.models import Article, CanonicalEntity, Entity
+from odin.db.models import Article, CanonicalEntity, Entity
 
 
 def _make_article(**overrides) -> Article:
@@ -242,7 +242,7 @@ class TestMergeCanonicalEntities:
 class TestSaveArticleLinksCanonicalEntity:
     def test_new_entity_gets_a_canonical_row(self, monkeypatch, api_client, sqlite_sessionmaker):
         import analysis.canonicalize as canonicalize
-        import db.session as db_session_module
+        import odin.db.session as db_session_module
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
@@ -272,7 +272,7 @@ class TestSaveArticleLinksCanonicalEntity:
         self, monkeypatch, api_client, sqlite_sessionmaker
     ):
         import analysis.canonicalize as canonicalize
-        import db.session as db_session_module
+        import odin.db.session as db_session_module
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
@@ -301,7 +301,7 @@ class TestSaveArticleLinksCanonicalEntity:
 
     def test_stamps_analyzer_lineage(self, monkeypatch, api_client, sqlite_sessionmaker):
         import analysis.canonicalize as canonicalize
-        import db.session as db_session_module
+        import odin.db.session as db_session_module
         import services.article_service as article_service
 
         class _FakeAnalyzer:

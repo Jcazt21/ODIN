@@ -34,7 +34,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from odin.core import auth
-import db.aliases as alias_store
+import odin.db.aliases as alias_store
 from api.routers import (
     aliases,
     analyze,
@@ -45,7 +45,7 @@ from api.routers import (
     scrape_jobs,
 )
 from odin.core.config import settings
-from db.session import init_db
+from odin.db.session import init_db
 from odin.core.observability import (
     HTTP_REQUEST_DURATION_SECONDS,
     HTTP_REQUESTS_TOTAL,

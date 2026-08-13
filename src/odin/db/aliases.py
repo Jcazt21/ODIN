@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from db.models import EntityAlias
-from db.session import get_session, init_db
+from odin.db.models import EntityAlias
+from odin.db.session import get_session, init_db
 
 if TYPE_CHECKING:
     pass
@@ -112,7 +112,7 @@ def all_canonicals() -> list[tuple[str, str]]:
 def load_seed() -> int:
     """Inserta el catálogo semilla en la BD.  Solo añade siglas que no existan;
     no modifica las existentes.  Devuelve el número de filas insertadas."""
-    from db.seed_aliases import SEED_ALIASES  # importación local para evitar ciclos
+    from odin.db.seed_aliases import SEED_ALIASES  # importación local para evitar ciclos
 
     init_db()
     session = get_session()

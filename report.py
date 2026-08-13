@@ -10,8 +10,8 @@ import argparse
 
 from sqlalchemy import func, select
 
-from db.models import Article, CanonicalEntity, Entity
-from db.session import get_session
+from odin.db.models import Article, CanonicalEntity, Entity
+from odin.db.session import get_session
 
 
 def summary(session) -> None:

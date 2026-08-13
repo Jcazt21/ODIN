@@ -28,7 +28,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-import db.aliases as alias_store
+import odin.db.aliases as alias_store
 from analysis.text_norm import norm_key as _norm_key
 from analysis.text_norm import strip_accents as _strip_accents
 
@@ -79,8 +79,8 @@ def known_person_fullname_map() -> dict[str, str]:
     siguiente análisis — no hace falta esperar a que la prensa repita el
     nombre completo en un artículo nuevo para que vuelva a resolverse bien.
     """
-    from db.models import CanonicalEntity, Entity
-    from db.session import get_session
+    from odin.db.models import CanonicalEntity, Entity
+    from odin.db.session import get_session
 
     candidates: dict[str, set[str]] = {}
 

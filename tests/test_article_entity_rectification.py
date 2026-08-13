@@ -4,7 +4,7 @@ atender un pedido de corrección o de borrado sobre una persona nombrada."""
 from __future__ import annotations
 
 from odin.core.auth import create_token
-from db.models import Article, CanonicalEntity, Entity
+from odin.db.models import Article, CanonicalEntity, Entity
 
 
 def _auth_headers() -> dict[str, str]:

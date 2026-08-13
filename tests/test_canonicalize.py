@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 import analysis.canonicalize as canonicalize
-import db.session as db_session_module
+import odin.db.session as db_session_module
 from analysis.base import EntityResult
 from analysis.canonicalize import (
     _apply_alias_catalog,
@@ -23,7 +23,7 @@ from analysis.canonicalize import (
     known_person_fullname_map,
     match_actor_name,
 )
-from db.models import Entity
+from odin.db.models import Entity
 
 
 @pytest.fixture(autouse=True)

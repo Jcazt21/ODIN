@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from db.canonical_entities import get_or_create, merge
-from db.models import Article, CanonicalEntity, Entity
+from odin.db.canonical_entities import get_or_create, merge
+from odin.db.models import Article, CanonicalEntity, Entity
 
 
 class TestGetOrCreate:

@@ -6,7 +6,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
-import db.canonical_entities as canonical_entity_store
+import odin.db.canonical_entities as canonical_entity_store
 from api import deps
 from api.deps import log
 from api.schemas import (
@@ -17,7 +17,7 @@ from api.schemas import (
     CanonicalEntityResponse,
     CanonicalEntityUpdatePayload,
 )
-from db.models import Article, CanonicalEntity, Entity
+from odin.db.models import Article, CanonicalEntity, Entity
 from services.article_service import accent_insensitive_contains
 
 

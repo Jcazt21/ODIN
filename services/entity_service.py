@@ -9,7 +9,7 @@ from sqlalchemy import select
 from api import deps
 from api.deps import log
 from api.schemas import EntityMention, EntityUpdatePayload
-from db.models import Entity
+from odin.db.models import Entity
 
 
 def update_entity(entity_id: int, payload: EntityUpdatePayload) -> EntityMention:

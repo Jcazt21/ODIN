@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.orm import selectinload
 
-import db.canonical_entities as canonical_entity_store
+import odin.db.canonical_entities as canonical_entity_store
 from analysis.base import ANALYSIS_SCHEMA_VERSION
 from analysis.canonicalize import canonicalize_entities, match_actor_name
 from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
@@ -31,7 +31,7 @@ from api.schemas import (
     EntityMention,
     SaveArticleRequest,
 )
-from db.models import Article, CanonicalEntity, Entity
+from odin.db.models import Article, CanonicalEntity, Entity
 from scrapers.base import _parse_date
 from services.analyzer_registry import analyzer
 

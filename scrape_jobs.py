@@ -15,8 +15,8 @@ from sqlalchemy import select
 
 from analysis.base import Analyzer
 from analysis.politics_filter import make_filter
-from db.models import CrawlRun, ScrapeJob
-from db.session import get_session
+from odin.db.models import CrawlRun, ScrapeJob
+from odin.db.session import get_session
 from odin.core.observability import get_logger, new_correlation_id
 from scrapers import SCRAPERS
 

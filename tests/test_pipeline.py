@@ -4,7 +4,7 @@ falso (sin spaCy/pysentimiento/Gemini) y SQLite en memoria."""
 from __future__ import annotations
 
 from analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult
-from db.models import CanonicalEntity, Entity
+from odin.db.models import CanonicalEntity, Entity
 from pipeline import _persist
 from scrapers.base import ScrapedArticle
 

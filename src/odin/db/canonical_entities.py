@@ -18,7 +18,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import CanonicalEntity, Entity
+from odin.db.models import CanonicalEntity, Entity
 
 
 def get_or_create(session: Session, name: str, type_: str) -> CanonicalEntity:

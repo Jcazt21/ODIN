@@ -61,7 +61,7 @@ def main() -> None:
         return
 
     if args.init_db:
-        from db.session import init_db
+        from odin.db.session import init_db
 
         init_db()
         print("Tablas creadas.")

@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from db.models import Base
+from odin.db.models import Base
 
 
 def _sqlite_regexp_ci(pattern: str, value: str | None) -> bool:

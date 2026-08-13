@@ -18,7 +18,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from odin.core.config import settings
-from db.models import Base
+from odin.db.models import Base
 
 log = logging.getLogger("odin.db")
 

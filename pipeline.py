@@ -15,11 +15,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-import db.canonical_entities as canonical_entity_store
+import odin.db.canonical_entities as canonical_entity_store
 from analysis.base import ANALYSIS_SCHEMA_VERSION, Analyzer
 from analysis.canonicalize import canonicalize_result, known_person_fullname_map
-from db.models import Article, CanonicalEntity, CrawlRun, Entity
-from db.session import get_session, init_db
+from odin.db.models import Article, CanonicalEntity, CrawlRun, Entity
+from odin.db.session import get_session, init_db
 from odin.core.observability import (
     CRAWL_RUN_IN_PROGRESS,
     PIPELINE_ARTICLES_TOTAL,

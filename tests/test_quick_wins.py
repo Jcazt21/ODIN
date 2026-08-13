@@ -11,9 +11,9 @@ from __future__ import annotations
 from sqlalchemy import event
 
 import analysis.canonicalize as canonicalize
-import db.session as db_session_module
+import odin.db.session as db_session_module
 from odin.core.auth import create_token
-from db.models import Article, Entity, EntityAlias
+from odin.db.models import Article, Entity, EntityAlias
 
 
 def _make_article(**overrides) -> Article:

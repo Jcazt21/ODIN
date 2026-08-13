@@ -24,7 +24,7 @@ from api import deps
 from api.deps import log
 from api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
 from odin.core.config import settings
-from db.models import AnalyzeJob, Article
+from odin.db.models import AnalyzeJob, Article
 from scrapers.base import BaseScraper, _parse_date
 from services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
 from odin.core.url_guard import UrlNotAllowed

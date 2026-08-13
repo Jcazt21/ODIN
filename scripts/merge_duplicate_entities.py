@@ -22,10 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select
 
-import db.aliases as alias_store
+import odin.db.aliases as alias_store
 from analysis.canonicalize import _NAME_PARTICLES, _norm_key, known_person_fullname_map
-from db.models import Article, Entity
-from db.session import get_session, init_db
+from odin.db.models import Article, Entity
+from odin.db.session import get_session, init_db
 
 
 def _canonical_name(name: str, etype: str, person_map: dict[str, str]) -> tuple[str, str]:

@@ -8,7 +8,7 @@ de una API key).
 ...)` y que todos los routers heredan."""
 from __future__ import annotations
 
-from db.session import get_session as get_session  # noqa: F401 (reexport)
+from odin.db.session import get_session as get_session  # noqa: F401 (reexport)
 from odin.core.observability import get_logger
 
 log = get_logger("odin.api")

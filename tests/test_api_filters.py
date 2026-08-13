@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from db.models import Article, Entity
+from odin.db.models import Article, Entity
 
 
 def _make_article(**overrides) -> Article:

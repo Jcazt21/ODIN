@@ -4,11 +4,11 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import or_, select
 
-import db.aliases as alias_store
+import odin.db.aliases as alias_store
 from api import deps
 from api.deps import log
 from api.schemas import AliasPayload, AliasUpdatePayload, EntityAliasResponse
-from db.models import EntityAlias
+from odin.db.models import EntityAlias
 from services.article_service import accent_insensitive_contains
 
 
