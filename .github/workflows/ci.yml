@@ -64,6 +64,11 @@ jobs:
           cache-dependency-path: requirements.lock
       - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
       - run: pip install "pytest>=8.3"
+      # El código vive en src/odin/ (layout src/): sin instalar el paquete
+      # local, "import odin.*" falla en cualquier entorno que no tenga el
+      # .pth del editable install (el runner de CI no lo tiene). --no-deps
+      # porque requirements.lock ya resolvió todas las dependencias arriba.
+      - run: pip install --no-deps -e .
       # Las pruebas usan SQLite en memoria (ver tests/conftest.py), nunca
       # DATABASE_URL real, y no llaman a la API de Gemini (ver CLAUDE.md). Las
       # que dependen del modelo es_core_news_lg de spaCy se saltan solas si no
@@ -85,6 +90,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install -r requirements-ci.txt
       - run: pip install "pytest>=8.3"
+      # Ver comentario equivalente en el job "test": src/odin/ necesita el
+      # paquete instalado para ser importable.
+      - run: pip install --no-deps -e .
       - run: pytest
 
   pip-audit:
