@@ -179,17 +179,23 @@ proyecto propio, no un incremento. **No abordarlo antes del Conflicto 4.**
 
 ### Conflicto 4 — Se cambió el prompt sin poder medir el efecto (el más grave)
 
-- El golden set (`tests/eval/golden_set.jsonl`) tiene **7 artículos**.
+- El golden set (`tests/eval/golden_set.jsonl`) tiene **42 artículos** (6
+  fuentes: `diario_libre` 5, `manual` 33, `acento` 1, `al_momento` 1,
+  `el_dia` 1, `n_digital` 1).
 - `scripts/evaluate.py` mide entidades (P/R/F1), matriz de confusión de
-  `overall_sentiment` y accuracy de `sentiment_toward`. **No mide el encuadre
-  ni ninguno de los 7 campos nuevos.**
-- El prompt pasó de v5 a v6 con cambios sustanciales y **cero medición**.
+  `overall_sentiment`, accuracy de `sentiment_toward` **y ya puntúa los
+  campos nuevos** (`framing`, `sentiment_basis`, `facts_sentiment`,
+  `quoted_sentiment`, `media_stance`, `content_flags`) cuando el golden set
+  los etiqueta.
+- El prompt pasó de v5 a v6 con cambios sustanciales y, en su momento,
+  **cero medición**.
 
-Lo único que se puede afirmar hoy es que el análisis es más rico
-conceptualmente y que no rompe nada. **No que sea más preciso.** Con 7
-artículos, ninguna diferencia de métrica sería estadísticamente distinguible
-del ruido, así que las decisiones de los conflictos 1-3 se estarían tomando a
-ciegas.
+En el momento en que se hizo el cambio v5→v6, lo único que se podía afirmar
+era que el análisis era más rico conceptualmente y que no rompía nada. **No
+que fuera más preciso.** Con apenas 7 artículos, ninguna diferencia de
+métrica habría sido estadísticamente distinguible del ruido, así que las
+decisiones de los conflictos 1-3 se estaban tomando a ciegas (ver **Estado**
+más abajo: esto ya se corrigió con el golden set ampliado).
 
 **Solución propuesta — y es la que debería ir primero:**
 
