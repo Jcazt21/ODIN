@@ -192,16 +192,22 @@ def _update_metrics(
 
 @dataclass
 class ConfusionMatrix:
-    counts: dict[tuple[str, str], int]  # (gold, predicho) -> n
+    categories: tuple[str, ...]
+    fallback: str
+    counts: dict[tuple[str, str], int]
 
     @classmethod
-    def empty(cls) -> ConfusionMatrix:
-        return cls(counts=dict.fromkeys(
-            ((g, p) for g in SENTIMENT_VALUES for p in SENTIMENT_VALUES), 0
-        ))
+    def empty(cls, categories: tuple[str, ...], *, fallback: str) -> ConfusionMatrix:
+        return cls(
+            categories=categories,
+            fallback=fallback,
+            counts=dict.fromkeys(
+                ((g, p) for g in categories for p in categories), 0
+            ),
+        )
 
-    def record(self, gold: str, predicted: str) -> None:
-        key = (gold, predicted if predicted in SENTIMENT_VALUES else "NEU")
+    def record(self, gold: str, predicted: str | None) -> None:
+        key = (gold, predicted if predicted in self.categories else self.fallback)
         self.counts[key] = self.counts.get(key, 0) + 1
 
     @property
@@ -213,10 +219,12 @@ class ConfusionMatrix:
         return round(correct / total, 4)
 
     def render(self) -> str:
-        header = "gold\\pred".ljust(10) + "".join(v.ljust(8) for v in SENTIMENT_VALUES)
+        header = "gold\\pred".ljust(14) + "".join(v[:11].ljust(13) for v in self.categories)
         lines: list[str] = [header]
-        for g in SENTIMENT_VALUES:
-            row = g.ljust(10) + "".join(str(self.counts[(g, p)]).ljust(8) for p in SENTIMENT_VALUES)
+        for g in self.categories:
+            row = g[:12].ljust(14) + "".join(
+                str(self.counts[(g, p)]).ljust(13) for p in self.categories
+            )
             lines.append(row)
         return "\n".join(lines)
 
@@ -245,7 +253,7 @@ def _build_analyzer(name: str) -> Analyzer:
 def evaluate(articles: list[GoldArticle], analyzer: Analyzer) -> dict[str, Any]:
     by_type: dict[str, EntityMetrics] = {}
     overall = EntityMetrics()
-    sentiment_cm = ConfusionMatrix.empty()
+    sentiment_cm = ConfusionMatrix.empty(SENTIMENT_VALUES, fallback="NEU")
 
     per_article: list[dict[str, Any]] = []
     for article in articles:

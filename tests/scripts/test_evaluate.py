@@ -7,6 +7,7 @@ from pathlib import Path
 
 from odin.analysis.base import AnalysisResult, EntityResult
 from scripts.evaluate import (
+    SENTIMENT_VALUES,
     ConfusionMatrix,
     EntityMetrics,
     GoldArticle,
@@ -157,19 +158,31 @@ class TestEntityMetricsProperties:
 
 class TestConfusionMatrix:
     def test_accuracy_and_recording(self):
-        cm = ConfusionMatrix.empty()
+        cm = ConfusionMatrix.empty(SENTIMENT_VALUES, fallback="NEU")
         cm.record("POS", "POS")
         cm.record("NEG", "NEU")
         cm.record("NEU", "NEU")
         assert cm.accuracy == round(2 / 3, 4)
 
     def test_unrecognized_prediction_falls_back_to_neu_bucket(self):
-        cm = ConfusionMatrix.empty()
+        cm = ConfusionMatrix.empty(SENTIMENT_VALUES, fallback="NEU")
         cm.record("POS", "algo-raro")
         assert cm.counts[("POS", "NEU")] == 1
 
     def test_empty_matrix_accuracy_is_none(self):
-        assert ConfusionMatrix.empty().accuracy is None
+        assert ConfusionMatrix.empty(SENTIMENT_VALUES, fallback="NEU").accuracy is None
+
+    def test_arbitrary_categories_and_custom_fallback(self):
+        cm = ConfusionMatrix.empty(("critica", "favorable", "neutra"), fallback="neutra")
+        cm.record("critica", "critica")
+        cm.record("favorable", "algo-desconocido")
+        assert cm.accuracy == 0.5
+        assert cm.counts[("favorable", "neutra")] == 1
+
+    def test_none_prediction_falls_back(self):
+        cm = ConfusionMatrix.empty(("a", "b"), fallback="a")
+        cm.record("b", None)
+        assert cm.counts[("b", "a")] == 1
 
 
 # ── load_golden_set ───────────────────────────────────────────────────────────
