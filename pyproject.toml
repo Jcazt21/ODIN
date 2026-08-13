@@ -67,11 +67,8 @@ ignore = [
 # ── mypy ──────────────────────────────────────────────────────────────────────
 [tool.mypy]
 python_version = "3.13"
-files = [
-    "api", "auth.py", "config.py", "main.py", "pipeline.py",
-    "report.py", "scrape_jobs.py", "url_guard.py", "analysis", "db", "scrapers", "scripts", "services",
-    "alembic/env.py",
-]
+mypy_path = "src"
+files = ["src/odin", "scripts", "alembic/env.py"]
 exclude = ["^\\.venv/", "^frontend/", "^alembic/versions/"]
 # Ni spacy, ni pysentimiento, ni trafilatura publican stubs.
 ignore_missing_imports = true

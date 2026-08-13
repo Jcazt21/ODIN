@@ -142,7 +142,7 @@ Después puedes **consultar** lo guardado con `report.py` o en la pestaña
 Odin también trae un rastreador de lotes, **que no se usa en el alcance actual**
 y **nunca corre solo**: no hay cron, no hay scheduler, y el servicio `scraper` de
 `docker-compose.yml` está detrás del perfil `tools`, así que `docker compose up`
-no lo arranca. Solo se ejecuta si tú escribes `python main.py` a mano.
+no lo arranca. Solo se ejecuta si tú escribes `odin` a mano.
 
 Cuando se ejecuta, antepone un paso de **descubrimiento**: le pregunta a cada
 periódico qué publicó hoy —Diario Libre por **RSS**, Listín por su **sitemap de
@@ -214,10 +214,10 @@ usando, con aviso explícito si puede facturar.
 En la consola es el mismo criterio, con `--analyzer`:
 
 ```bash
-python main.py                      # local, gratis (por defecto)
-python main.py --analyzer gemini    # de pago, explícito
-python main.py --analyzer groq      # gratis, con límites
-python main.py --analyzer hybrid    # gratis, con límites
+odin                                 # local, gratis (por defecto)
+odin --analyzer gemini               # de pago, explícito
+odin --analyzer groq                 # gratis, con límites
+odin --analyzer hybrid               # gratis, con límites
 ```
 
 > El rastreo masivo (`main.py`, `POST /api/scrape-jobs`) restringe el motor a
@@ -317,10 +317,10 @@ cambias `DATABASE_URL` en `.env`.
 **Prueba rápida sin instalar nada (SQLite):**
 ```bash
 # macOS/Linux
-DATABASE_URL="sqlite:///odin.db" python main.py --limit 5
+DATABASE_URL="sqlite:///odin.db" odin --limit 5
 
 # Windows (PowerShell)
-$env:DATABASE_URL="sqlite:///odin.db"; python main.py --limit 5
+$env:DATABASE_URL="sqlite:///odin.db"; odin --limit 5
 ```
 
 **PostgreSQL (desarrollo):**
@@ -348,24 +348,24 @@ El modelo de datos es portable: **no hay que reescribir código**, solo esta lí
 pestaña **Analizar** pegas la URL del artículo. Todo el flujo vive ahí.
 
 ```bash
-python main.py --init-db               # crear las tablas (una vez)
-uvicorn api:app --reload               # backend
+odin --init-db                         # crear las tablas (una vez)
+uvicorn odin.api:app --reload          # backend
 cd frontend && npm run dev             # frontend
 ```
 
 Revisar resultados:
 ```bash
-python report.py                       # resumen general
-python report.py --entity "Abinader"   # opiniones hacia una figura/empresa
+python -m odin.core.report             # resumen general
+python -m odin.core.report --entity "Abinader"   # opiniones hacia una figura/empresa
 ```
 
 **Rastreo masivo** (opcional, manual, fuera del alcance actual — ver
 [Rastreo masivo](#rastreo-masivo-opcional-y-manual)):
 ```bash
-python main.py --list-sources          # ver fuentes disponibles
-python main.py                         # rastrear todas las fuentes
-python main.py --source diario_libre   # solo una
-python main.py --limit 10              # máx. 10 artículos por fuente
+odin --list-sources                    # ver fuentes disponibles
+odin                                   # rastrear todas las fuentes
+odin --source diario_libre             # solo una
+odin --limit 10                        # máx. 10 artículos por fuente
 ```
 
 ---
