@@ -15,7 +15,7 @@ from collections.abc import Callable
 from urllib.parse import urlparse
 
 from analysis.text_norm import strip_accents
-from scrapers.base import ScrapedArticle
+from odin.scrapers.base import ScrapedArticle
 
 # Vocabulario de política dominicana: instituciones, partidos, cargos, figuras
 # y términos generales de cobertura electoral/legislativa. Coincidencia por

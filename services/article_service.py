@@ -32,7 +32,7 @@ from api.schemas import (
     SaveArticleRequest,
 )
 from odin.db.models import Article, CanonicalEntity, Entity
-from scrapers.base import _parse_date
+from odin.scrapers.base import _parse_date
 from services.analyzer_registry import analyzer
 
 _ACTOR_FIELDS = {

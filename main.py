@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from odin.core.config import settings
 from odin.core.observability import configure_logging, get_logger, init_sentry
-from scrapers import SCRAPERS
+from odin.scrapers import SCRAPERS
 
 log = get_logger("odin.main")
 

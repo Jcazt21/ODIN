@@ -18,7 +18,7 @@ from analysis.politics_filter import make_filter
 from odin.db.models import CrawlRun, ScrapeJob
 from odin.db.session import get_session
 from odin.core.observability import get_logger, new_correlation_id
-from scrapers import SCRAPERS
+from odin.scrapers import SCRAPERS
 
 log = get_logger("odin.scrape_jobs")
 

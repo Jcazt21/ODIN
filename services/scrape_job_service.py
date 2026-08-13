@@ -85,7 +85,7 @@ def start_scrape_job(req: ScrapeJobStartRequest) -> tuple[ScrapeJobAccepted, tup
 
     Devuelve `(respuesta, args_para_background_task)`: quien llama debe
     encolar `run_scrape_job(*args_para_background_task)`."""
-    from scrapers import SCRAPERS
+    from odin.scrapers import SCRAPERS
 
     per_source_cap = req.per_source_cap or math.ceil(req.target / len(SCRAPERS))
     session = deps.get_session()

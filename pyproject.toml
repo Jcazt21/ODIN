@@ -40,7 +40,7 @@ py-modules = ["main", "pipeline", "report", "scrape_jobs"]
 
 [tool.setuptools.packages.find]
 where = ["src", "."]
-include = ["odin*", "analysis*", "api*", "scrapers*", "services*"]
+include = ["odin*", "analysis*", "api*", "services*"]
 
 # ── ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

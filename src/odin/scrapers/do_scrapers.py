@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from scrapers.base import BaseScraper
+from odin.scrapers.base import BaseScraper
 
 
 class ElNacionalScraper(BaseScraper):

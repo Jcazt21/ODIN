@@ -8,7 +8,7 @@ import time
 from datetime import UTC
 from urllib import robotparser
 
-from scrapers.base import (
+from odin.scrapers.base import (
     BaseScraper,
     _DomainThrottle,
     _parse_date,
@@ -207,7 +207,7 @@ class TestFetchRespectsRobotsAndThrottle:
         monkeypatch.setattr(base_module, "settings", dataclasses.replace(base_module.settings, **overrides))
 
     def test_fetch_skips_disallowed_url(self, monkeypatch):
-        import scrapers.base as base_module
+        import odin.scrapers.base as base_module
 
         self._patch_settings(monkeypatch, base_module, respect_robots_txt=True)
         monkeypatch.setattr(base_module._robots_cache, "can_fetch", lambda url, ua: False)
@@ -226,7 +226,7 @@ class TestFetchRespectsRobotsAndThrottle:
         assert called is False
 
     def test_fetch_waits_for_domain_throttle(self, monkeypatch):
-        import scrapers.base as base_module
+        import odin.scrapers.base as base_module
 
         self._patch_settings(monkeypatch, base_module, respect_robots_txt=False, request_delay=0.2)
 
@@ -253,7 +253,7 @@ class TestFetchRespectsRobotsAndThrottle:
         assert time.monotonic() - started >= 0.15
 
     def test_fetch_uses_crawl_delay_when_larger_than_request_delay(self, monkeypatch):
-        import scrapers.base as base_module
+        import odin.scrapers.base as base_module
 
         self._patch_settings(monkeypatch, base_module, respect_robots_txt=True, request_delay=0.05)
         monkeypatch.setattr(base_module._robots_cache, "can_fetch", lambda url, ua: True)

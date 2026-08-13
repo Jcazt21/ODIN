@@ -6,7 +6,7 @@ extraemos el contenido con trafilatura (flujo estándar de BaseScraper).
 """
 from __future__ import annotations
 
-from scrapers.base import BaseScraper
+from odin.scrapers.base import BaseScraper
 
 
 class ListinDiarioScraper(BaseScraper):

@@ -28,8 +28,8 @@ from odin.core.observability import (
     correlation_scope,
     get_logger,
 )
-from scrapers import SCRAPERS
-from scrapers.base import BaseScraper, ScrapedArticle
+from odin.scrapers import SCRAPERS
+from odin.scrapers.base import BaseScraper, ScrapedArticle
 
 log = get_logger("odin.pipeline")
 

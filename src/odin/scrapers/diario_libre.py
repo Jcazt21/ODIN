@@ -5,7 +5,7 @@ estándar de BaseScraper (descubrir por RSS + extraer con trafilatura).
 """
 from __future__ import annotations
 
-from scrapers.base import BaseScraper
+from odin.scrapers.base import BaseScraper
 
 _BASE = "https://www.diariolibre.com/rss"
 
