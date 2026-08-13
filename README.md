@@ -230,45 +230,47 @@ odin --analyzer hybrid               # gratis, con límites
 ## Estructura del código
 
 ```
-api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
-  __init__.py        app, middleware (CORS, correlation-id, métricas), monta los routers
-  schemas.py         requests/respuestas Pydantic (fuente de los tipos TS del frontend)
-  deps.py            dependencias compartidas (sesión de BD)
-  routers/           un módulo por grupo de rutas: analyze, articles, entities, aliases,
-                     canonical_entities, scrape_jobs, misc (health/metrics)
-services/            lógica de negocio (SQLAlchemy) detrás de cada router — los routers
-                     no hablan a la BD directo
-  analyzer_registry.py  instancia única del Analyzer activo del proceso
-auth.py              login de usuario único + JWT
+src/odin/             único paquete instalable — todo el backend vive acá
+  core/               módulos base, sin depender de nada más del proyecto
+    config.py           configuración por variables de entorno (.env)
+    auth.py             login de usuario único + JWT
+    url_guard.py         anti-SSRF: allowlist + bloqueo de IP privada (único punto de red hacia URLs de usuario)
+    observability.py     logging estructurado, correlation-id, métricas Prometheus, Sentry opt-in
+    main.py              punto de entrada (CLI, expuesto como el comando `odin`)
+    pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
+    scrape_jobs.py        puente API↔pipeline.run() para corridas encoladas desde el frontend
+    report.py            consultas rápidas de resultados
+  api/                 API HTTP (FastAPI) — el camino principal: analizar / guardar / listar
+    __init__.py        app, middleware (CORS, correlation-id, métricas), monta los routers
+    schemas.py         requests/respuestas Pydantic (fuente de los tipos TS del frontend)
+    deps.py            dependencias compartidas (sesión de BD)
+    routers/           un módulo por grupo de rutas: analyze, articles, entities, aliases,
+                       canonical_entities, scrape_jobs, misc (health/metrics)
+  services/            lógica de negocio (SQLAlchemy) detrás de cada router — los routers
+                       no hablan a la BD directo
+    analyzer_registry.py  instancia única del Analyzer activo del proceso
+  scrapers/
+    base.py            descarga (reintentos, throttle por dominio, robots.txt) + extracción
+    do_scrapers.py     7 de las 9 fuentes dominicanas (descubrimiento por RSS/sitemap)
+    diario_libre.py, listin.py   las otras 2
+  analysis/
+    base.py            interfaz Analyzer + AnalysisResult  <-- pieza intercambiable
+    local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
+    gemini_analyzer.py Google Gemini (opcional, de pago)
+    groq_analyzer.py   Groq: GroqAnalyzer + HybridAnalyzer (opcional, gratis con límites)
+    fallback_analyzer.py  GroqWithGeminiFallback: Groq primero, Gemini como red de seguridad
+    canonicalize.py    unificación de nombres de entidades
+    entity_arbiter.py  desambiguación puntual (solo flujo manual)
+  db/
+    models.py          7 tablas — ver docs/DATA_DICTIONARY.md
+    session.py         conexión (SQLite / PostgreSQL / SQL Server)
+    canonical_entities.py, aliases.py   dimensión de entidad y resolución de siglas
+
 frontend/            React + Vite + React Query — páginas Analizar / Reportes / Entidades
                      / Siglas / Scraper, rutas reales con react-router-dom
-config.py            configuración por variables de entorno (.env)
-scrapers/
-  base.py            descarga (reintentos, throttle por dominio, robots.txt) + extracción
-  do_scrapers.py     7 de las 9 fuentes dominicanas (descubrimiento por RSS/sitemap)
-  diario_libre.py, listin.py   las otras 2
-analysis/
-  base.py            interfaz Analyzer + AnalysisResult  <-- pieza intercambiable
-  local_analyzer.py  spaCy (NER) + pysentimiento (sentimiento) — por defecto, gratis
-  gemini_analyzer.py Google Gemini (opcional, de pago)
-  groq_analyzer.py   Groq: GroqAnalyzer + HybridAnalyzer (opcional, gratis con límites)
-  fallback_analyzer.py  GroqWithGeminiFallback: Groq primero, Gemini como red de seguridad
-  canonicalize.py    unificación de nombres de entidades
-  entity_arbiter.py  desambiguación puntual (solo flujo manual)
-db/
-  models.py          7 tablas — ver docs/DATA_DICTIONARY.md
-  session.py         conexión (SQLite / PostgreSQL / SQL Server)
-  canonical_entities.py, aliases.py   dimensión de entidad y resolución de siglas
 alembic/             migraciones versionadas del esquema
-report.py            consultas rápidas de resultados
-scripts/             utilidades sueltas (hash de contraseña, fusión de entidades, eval)
-url_guard.py         anti-SSRF: allowlist + bloqueo de IP privada (único punto de red hacia URLs de usuario)
-observability.py     logging estructurado, correlation-id, métricas Prometheus, Sentry opt-in
-
---- rastreo masivo, opcional y manual ---
-main.py              punto de entrada (CLI)
-pipeline.py          orquesta: descubrir -> descargar -> analizar -> guardar
-scrape_jobs.py        puente API↔pipeline.run() para corridas encoladas desde el frontend
+scripts/             utilidades sueltas (hash de contraseña, fusión de entidades, eval) —
+                     no forman parte del paquete `odin` instalable
 
 docs/
   ARQUITECTURA.md    vista C4 (contexto, contenedores, componentes)

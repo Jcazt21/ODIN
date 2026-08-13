@@ -32,9 +32,9 @@ flowchart LR
 | Servicio   | Imagen base         | Rol                                                             | Puerto host |
 |------------|----------------------|------------------------------------------------------------------|-------------|
 | `db`       | `postgres:17-alpine`| Base de datos                                                    | `5433` → `5432` |
-| `backend`  | `python:3.13-slim`  | API FastAPI (paquete `api/` + `services/`), sirve `/api/*`       | `8000`      |
+| `backend`  | `python:3.13-slim`  | API FastAPI (paquete `odin.api` + `odin.services`), sirve `/api/*` | `8000`      |
 | `frontend` | `node:20-alpine` → `nginx` no-root | SPA de React compilada, servida por nginx en `8080` (sin privilegios de root para bindear <1024) | `3000` → `8080` |
-| `scraper`  | `python:3.13-slim` (misma imagen que `backend`) | Corre `main.py` (el pipeline de scraping) bajo demanda | — |
+| `scraper`  | `python:3.13-slim` (misma imagen que `backend`) | Corre `odin` (comando de consola, pipeline de scraping) bajo demanda | — |
 
 `scraper` usa el **perfil** `tools` (`profiles: ["tools"]`), así que **no se
 levanta** con un `docker compose up` normal — solo cuando se lo pide
@@ -48,7 +48,7 @@ explícitamente (ver [§4](#4-comandos-de-uso-diario)).
 
 Ambos servicios comparten la misma imagen (`build: { context: ., dockerfile:
 Dockerfile.backend }`); lo único que cambia es el `command` (`scraper`
-sobreescribe el `CMD` con `python main.py`).
+sobreescribe el `CMD` con `odin`).
 
 ```dockerfile
 # syntax=docker/dockerfile:1
@@ -199,11 +199,11 @@ docker compose build --no-cache
 # Correr el scraper una vez (perfil "tools", no queda levantado)
 docker compose --profile tools run --rm scraper
 
-# Con opciones del CLI (ver main.py --help)
-docker compose --profile tools run --rm scraper python main.py --source diario_libre --limit 10
+# Con opciones del CLI (ver odin --help)
+docker compose --profile tools run --rm scraper odin --source diario_libre --limit 10
 
 # Crear las tablas (una vez, o tras cambiar el modelo de datos)
-docker compose --profile tools run --rm scraper python main.py --init-db
+docker compose --profile tools run --rm scraper odin --init-db
 
 # Bajar todo (conserva volúmenes: pgdata, hf_cache)
 docker compose down
