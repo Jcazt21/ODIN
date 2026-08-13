@@ -9,8 +9,8 @@ análisis. Mismo criterio que el CLI (`main.py --analyzer`). Ver CLAUDE.md.
 """
 from __future__ import annotations
 
-from analysis import LocalAnalyzer
-from analysis.base import Analyzer
+from odin.analysis import LocalAnalyzer
+from odin.analysis.base import Analyzer
 from odin.core.config import settings
 from odin.core.observability import get_logger
 
@@ -23,7 +23,7 @@ IS_GEMINI_ANALYZER = settings.analyzer == "gemini"
 analyzer: Analyzer
 if IS_GEMINI_ANALYZER:
     # Import perezoso: sin esto, correr en modo local exigiría google-genai.
-    from analysis.gemini_analyzer import GeminiAnalyzer
+    from odin.analysis.gemini_analyzer import GeminiAnalyzer
 
     log.warning(
         "ODIN_ANALYZER=gemini — cada análisis es una llamada FACTURADA a la API "
@@ -31,7 +31,7 @@ if IS_GEMINI_ANALYZER:
     )
     analyzer = GeminiAnalyzer()
 elif settings.analyzer == "groq+gemini":
-    from analysis.fallback_analyzer import GroqWithGeminiFallback
+    from odin.analysis.fallback_analyzer import GroqWithGeminiFallback
 
     log.warning(
         "ODIN_ANALYZER=groq+gemini — GroqAnalyzer (gratis) primero; si falla "
@@ -41,12 +41,12 @@ elif settings.analyzer == "groq+gemini":
     analyzer = GroqWithGeminiFallback()
 elif settings.analyzer == "groq":
     # Import perezoso: sin esto, correr en modo local exigiría el paquete groq.
-    from analysis.groq_analyzer import GroqAnalyzer
+    from odin.analysis.groq_analyzer import GroqAnalyzer
 
     log.info("ODIN_ANALYZER=groq — GroqAnalyzer (free tier, rate-limited)")
     analyzer = GroqAnalyzer()
 elif settings.analyzer == "hybrid":
-    from analysis.groq_analyzer import HybridAnalyzer
+    from odin.analysis.groq_analyzer import HybridAnalyzer
 
     log.info(
         "ODIN_ANALYZER=hybrid — LocalAnalyzer (spaCy + pysentimiento) + Groq "

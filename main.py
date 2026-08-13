@@ -21,7 +21,7 @@ log = get_logger("odin.main")
 if TYPE_CHECKING:
     # Solo para tipos: importarlo de verdad arrastraría `analysis/__init__.py`
     # y con él spaCy, justo lo que la carga perezosa de abajo evita.
-    from analysis.base import Analyzer
+    from odin.analysis.base import Analyzer
 
 
 def main() -> None:
@@ -71,19 +71,19 @@ def main() -> None:
     # cuando solo se listan fuentes o se inicializa la BD.
     analyzer: Analyzer
     if args.analyzer == "gemini":
-        from analysis.gemini_analyzer import GeminiAnalyzer
+        from odin.analysis.gemini_analyzer import GeminiAnalyzer
 
         analyzer = GeminiAnalyzer()
     elif args.analyzer == "groq":
-        from analysis.groq_analyzer import GroqAnalyzer
+        from odin.analysis.groq_analyzer import GroqAnalyzer
 
         analyzer = GroqAnalyzer()
     elif args.analyzer == "hybrid":
-        from analysis.groq_analyzer import HybridAnalyzer
+        from odin.analysis.groq_analyzer import HybridAnalyzer
 
         analyzer = HybridAnalyzer()
     else:
-        from analysis import LocalAnalyzer
+        from odin.analysis import LocalAnalyzer
 
         analyzer = LocalAnalyzer()
     limit = args.limit if args.limit and args.limit > 0 else None

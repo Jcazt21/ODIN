@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analysis.base import AnalysisResult, EntityResult
+from odin.analysis.base import AnalysisResult, EntityResult
 from scripts.evaluate import (
     ConfusionMatrix,
     EntityMetrics,

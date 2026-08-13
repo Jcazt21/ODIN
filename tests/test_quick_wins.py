@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from sqlalchemy import event
 
-import analysis.canonicalize as canonicalize
+import odin.analysis.canonicalize as canonicalize
 import odin.db.session as db_session_module
 from odin.core.auth import create_token
 from odin.db.models import Article, Entity, EntityAlias

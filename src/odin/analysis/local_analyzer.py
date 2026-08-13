@@ -30,13 +30,13 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
-from analysis.base import AnalysisResult, EntityResult
-from analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
-from analysis.sentiment_lexicon import (
+from odin.analysis.base import AnalysisResult, EntityResult
+from odin.analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
+from odin.analysis.sentiment_lexicon import (
     apply_entity_relation_boost as _apply_entity_relation_boost,
 )
-from analysis.text_norm import norm_key as _norm_key
-from analysis.text_norm import strip_accents as _strip_accents
+from odin.analysis.text_norm import norm_key as _norm_key
+from odin.analysis.text_norm import strip_accents as _strip_accents
 
 # Versión de la heurística de LocalAnalyzer (§2.1 de task.md): subirla cuando
 # cambie una regla que afecta el resultado (_VENUE_WORDS, _is_named_after_place,

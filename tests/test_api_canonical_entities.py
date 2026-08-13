@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from analysis.base import ANALYSIS_SCHEMA_VERSION
+from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
 from odin.core.auth import create_token
 from odin.db.models import Article, CanonicalEntity, Entity
 
@@ -241,7 +241,7 @@ class TestMergeCanonicalEntities:
 
 class TestSaveArticleLinksCanonicalEntity:
     def test_new_entity_gets_a_canonical_row(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
         import odin.db.session as db_session_module
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
@@ -271,7 +271,7 @@ class TestSaveArticleLinksCanonicalEntity:
     def test_second_article_with_same_entity_reuses_canonical_row(
         self, monkeypatch, api_client, sqlite_sessionmaker
     ):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
         import odin.db.session as db_session_module
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
@@ -300,7 +300,7 @@ class TestSaveArticleLinksCanonicalEntity:
         assert mentions[0].canonical_entity_id == mentions[1].canonical_entity_id
 
     def test_stamps_analyzer_lineage(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
         import odin.db.session as db_session_module
         import services.article_service as article_service
 

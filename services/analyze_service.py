@@ -17,9 +17,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 
 from odin.core import url_guard
-from analysis.base import ANALYSIS_SCHEMA_VERSION
-from analysis.canonicalize import canonicalize_result
-from analysis.local_analyzer import sentence_mentions_venue_word
+from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
+from odin.analysis.canonicalize import canonicalize_result
+from odin.analysis.local_analyzer import sentence_mentions_venue_word
 from api import deps
 from api.deps import log
 from api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
@@ -115,7 +115,7 @@ def arbitrate_ambiguous_persons(result) -> None:
     if not ambiguous:
         return
 
-    from analysis.entity_arbiter import are_person_mentions
+    from odin.analysis.entity_arbiter import are_person_mentions
 
     verdicts = are_person_mentions([(e.name, e.context) for e in ambiguous])
     dropped = {id(e) for e, keep in zip(ambiguous, verdicts, strict=True) if not keep}

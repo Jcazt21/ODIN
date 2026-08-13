@@ -12,10 +12,10 @@ from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.orm import selectinload
 
 import odin.db.canonical_entities as canonical_entity_store
-from analysis.base import ANALYSIS_SCHEMA_VERSION
-from analysis.canonicalize import canonicalize_entities, match_actor_name
-from analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
-from analysis.text_norm import norm_key as _norm_key
+from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
+from odin.analysis.canonicalize import canonicalize_entities, match_actor_name
+from odin.analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
+from odin.analysis.text_norm import norm_key as _norm_key
 from api import deps
 from api.deps import log
 from api.schemas import (

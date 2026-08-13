@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-import analysis.canonicalize as canonicalize
+import odin.analysis.canonicalize as canonicalize
 import odin.db.session as db_session_module
-from analysis.base import EntityResult
-from analysis.canonicalize import (
+from odin.analysis.base import EntityResult
+from odin.analysis.canonicalize import (
     _apply_alias_catalog,
     _merge_duplicates,
     _norm_key,

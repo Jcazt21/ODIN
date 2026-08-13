@@ -9,7 +9,7 @@ Dos clases, misma interfaz `Analyzer`:
     gratis) SOLO para tema/keywords/sentimiento global, + Groq para entidades
     (personas/organizaciones) Y encuadre en una sola llamada.
 
-    from analysis.groq_analyzer import GroqAnalyzer, HybridAnalyzer
+    from odin.analysis.groq_analyzer import GroqAnalyzer, HybridAnalyzer
     run(analyzer=HybridAnalyzer(), ...)
 
 Por qué las entidades también pasan por el LLM (y no solo el encuadre): la
@@ -42,8 +42,8 @@ import logging
 
 from pydantic import BaseModel
 
-from analysis.base import AnalysisResult
-from analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _result_from_llm
+from odin.analysis.base import AnalysisResult
+from odin.analysis.gemini_analyzer import _SYSTEM, _Analysis, _entity_from_llm, _result_from_llm
 
 # 5.000 y no 16.000 (el valor de Gemini): en Groq el límite que muerde no es el
 # coste sino el TPM del free tier — 8.000 tokens POR REQUEST incluido el cupo de
@@ -248,7 +248,7 @@ class HybridAnalyzer:
     def __init__(self, groq_model: str = _DEFAULT_MODEL) -> None:
         self._groq_model = groq_model
 
-        from analysis.local_analyzer import LocalAnalyzer
+        from odin.analysis.local_analyzer import LocalAnalyzer
 
         self._local = LocalAnalyzer()
         self.version = (

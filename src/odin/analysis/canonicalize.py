@@ -29,8 +29,8 @@ from typing import Any
 from sqlalchemy import select
 
 import odin.db.aliases as alias_store
-from analysis.text_norm import norm_key as _norm_key
-from analysis.text_norm import strip_accents as _strip_accents
+from odin.analysis.text_norm import norm_key as _norm_key
+from odin.analysis.text_norm import strip_accents as _strip_accents
 
 log = logging.getLogger("odin.canonicalize")
 

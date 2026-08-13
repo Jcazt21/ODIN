@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select
 
 import odin.db.aliases as alias_store
-from analysis.canonicalize import _NAME_PARTICLES, _norm_key, known_person_fullname_map
+from odin.analysis.canonicalize import _NAME_PARTICLES, _norm_key, known_person_fullname_map
 from odin.db.models import Article, Entity
 from odin.db.session import get_session, init_db
 

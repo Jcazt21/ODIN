@@ -3,7 +3,7 @@
 Implementa la MISMA interfaz `Analyzer` que `LocalAnalyzer`, así que se enchufa
 sin tocar scrapers, pipeline ni base de datos:
 
-    from analysis.gemini_analyzer import GeminiAnalyzer
+    from odin.analysis.gemini_analyzer import GeminiAnalyzer
     run(analyzer=GeminiAnalyzer(), ...)
 
 Ventaja frente al analizador local: mucho mejor en la parte difícil —
@@ -23,8 +23,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from analysis.base import AnalysisResult, EntityResult
-from analysis.sentiment_lexicon import PROMPT_GLOSSARY
+from odin.analysis.base import AnalysisResult, EntityResult
+from odin.analysis.sentiment_lexicon import PROMPT_GLOSSARY
 
 _SENTIMENTS = ("POS", "NEG", "NEU")
 _MAX_BODY_CHARS = 16_000  # acota tokens/coste por artículo

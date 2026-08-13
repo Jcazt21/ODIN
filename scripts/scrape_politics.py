@@ -29,11 +29,11 @@ from typing import TYPE_CHECKING
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from analysis.politics_filter import is_dominican_politics, make_filter  # noqa: E402
+from odin.analysis.politics_filter import is_dominican_politics, make_filter  # noqa: E402
 from odin.scrapers import SCRAPERS  # noqa: E402
 
 if TYPE_CHECKING:
-    from analysis.base import Analyzer
+    from odin.analysis.base import Analyzer
 
 
 def _dry_run(target: int, per_source_cap: int) -> None:
@@ -105,19 +105,19 @@ def main() -> None:
 
     analyzer: Analyzer
     if args.analyzer == "gemini":
-        from analysis.gemini_analyzer import GeminiAnalyzer
+        from odin.analysis.gemini_analyzer import GeminiAnalyzer
 
         analyzer = GeminiAnalyzer()
     elif args.analyzer == "groq":
-        from analysis.groq_analyzer import GroqAnalyzer
+        from odin.analysis.groq_analyzer import GroqAnalyzer
 
         analyzer = GroqAnalyzer()
     elif args.analyzer == "hybrid":
-        from analysis.groq_analyzer import HybridAnalyzer
+        from odin.analysis.groq_analyzer import HybridAnalyzer
 
         analyzer = HybridAnalyzer()
     else:
-        from analysis import LocalAnalyzer
+        from odin.analysis import LocalAnalyzer
 
         analyzer = LocalAnalyzer()
 

@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import re
 
-from analysis.text_norm import strip_accents
+from odin.analysis.text_norm import strip_accents
 
 # ---- léxico general: carga inequívoca por sí sola, sin necesitar sujeto ----
 _NEG_TERMS = [

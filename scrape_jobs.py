@@ -13,8 +13,8 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from analysis.base import Analyzer
-from analysis.politics_filter import make_filter
+from odin.analysis.base import Analyzer
+from odin.analysis.politics_filter import make_filter
 from odin.db.models import CrawlRun, ScrapeJob
 from odin.db.session import get_session
 from odin.core.observability import get_logger, new_correlation_id
@@ -29,14 +29,14 @@ def _build_analyzer(name: str) -> Analyzer:
     que este endpoint no puede disparar llamadas facturadas a Gemini — es
     política de costo (CLAUDE.md), no una preferencia de UI a mayores."""
     if name == "groq":
-        from analysis.groq_analyzer import GroqAnalyzer
+        from odin.analysis.groq_analyzer import GroqAnalyzer
 
         return GroqAnalyzer()
     if name == "hybrid":
-        from analysis.groq_analyzer import HybridAnalyzer
+        from odin.analysis.groq_analyzer import HybridAnalyzer
 
         return HybridAnalyzer()
-    from analysis import LocalAnalyzer
+    from odin.analysis import LocalAnalyzer
 
     return LocalAnalyzer()
 

@@ -3,7 +3,7 @@ fila de canonical_entities, igual que save_article en api.py. Usa un Analyzer
 falso (sin spaCy/pysentimiento/Gemini) y SQLite en memoria."""
 from __future__ import annotations
 
-from analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult
+from odin.analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult
 from odin.db.models import CanonicalEntity, Entity
 from pipeline import _persist
 from odin.scrapers.base import ScrapedArticle
@@ -27,7 +27,7 @@ def _scraped(url: str) -> ScrapedArticle:
 
 class TestPersistLinksCanonicalEntity:
     def test_new_entity_gets_a_canonical_row(self, sqlite_sessionmaker, monkeypatch):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
 
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
         monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
@@ -43,7 +43,7 @@ class TestPersistLinksCanonicalEntity:
         assert canonical.name == "Luis Abinader"
 
     def test_two_articles_in_same_run_share_canonical_row(self, sqlite_sessionmaker, monkeypatch):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
 
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
         monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])
@@ -61,7 +61,7 @@ class TestPersistLinksCanonicalEntity:
 
 class TestPersistRecordsLineage:
     def test_stamps_analyzer_lineage(self, sqlite_sessionmaker, monkeypatch):
-        import analysis.canonicalize as canonicalize
+        import odin.analysis.canonicalize as canonicalize
 
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
         monkeypatch.setattr(canonicalize.alias_store, "all_canonicals", lambda: [])

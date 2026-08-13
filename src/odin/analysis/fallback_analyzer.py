@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import threading
 
-from analysis.base import AnalysisResult
+from odin.analysis.base import AnalysisResult
 
 log = logging.getLogger("odin.fallback_analyzer")
 
@@ -38,7 +38,7 @@ class GroqWithGeminiFallback:
     # depende de cuál de los dos motores respondió.
 
     def __init__(self) -> None:
-        from analysis.groq_analyzer import GroqAnalyzer
+        from odin.analysis.groq_analyzer import GroqAnalyzer
 
         self._groq = GroqAnalyzer()
         self._gemini = None  # perezoso: no exigir google-genai si nunca se usa
@@ -88,7 +88,7 @@ class GroqWithGeminiFallback:
 
     def _gemini_analyzer(self):
         if self._gemini is None:
-            from analysis.gemini_analyzer import GeminiAnalyzer
+            from odin.analysis.gemini_analyzer import GeminiAnalyzer
 
             self._gemini = GeminiAnalyzer()
         return self._gemini

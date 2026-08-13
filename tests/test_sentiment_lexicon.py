@@ -6,7 +6,7 @@ dependencias pesadas.
 """
 from __future__ import annotations
 
-from analysis.sentiment_lexicon import (
+from odin.analysis.sentiment_lexicon import (
     PROMPT_GLOSSARY,
     apply_boost,
     apply_entity_relation_boost,

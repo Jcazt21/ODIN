@@ -12,7 +12,7 @@ import pytest
 
 pytest.importorskip("spacy")
 
-from analysis.local_analyzer import (
+from odin.analysis.local_analyzer import (
     LocalAnalyzer,
     _extraction_confidence,
     _is_named_after_place,
