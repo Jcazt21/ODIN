@@ -33,7 +33,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from odin.core import auth
 import odin.db.aliases as alias_store
 from odin.api.routers import (
     aliases,
@@ -44,8 +43,8 @@ from odin.api.routers import (
     misc,
     scrape_jobs,
 )
+from odin.core import auth
 from odin.core.config import settings
-from odin.db.session import init_db
 from odin.core.observability import (
     HTTP_REQUEST_DURATION_SECONDS,
     HTTP_REQUESTS_TOTAL,
@@ -54,6 +53,7 @@ from odin.core.observability import (
     get_logger,
     init_sentry,
 )
+from odin.db.session import init_db
 
 configure_logging()
 init_sentry()

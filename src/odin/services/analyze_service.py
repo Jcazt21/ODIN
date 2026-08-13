@@ -16,18 +16,18 @@ import trafilatura
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from odin.core import url_guard
 from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
 from odin.analysis.canonicalize import canonicalize_result
 from odin.analysis.local_analyzer import sentence_mentions_venue_word
 from odin.api import deps
 from odin.api.deps import log
 from odin.api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
+from odin.core import url_guard
 from odin.core.config import settings
+from odin.core.url_guard import UrlNotAllowed
 from odin.db.models import AnalyzeJob, Article
 from odin.scrapers.base import BaseScraper, _parse_date
 from odin.services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
-from odin.core.url_guard import UrlNotAllowed
 
 _extractor = BaseScraper()
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from odin.core import auth
 from odin.api.schemas import AliasPayload, AliasUpdatePayload, EntityAliasResponse
+from odin.core import auth
 from odin.services import alias_service
 
 router = APIRouter(tags=["aliases"])

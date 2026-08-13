@@ -5,11 +5,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response
 
-from odin.core import auth
-from odin.core import url_guard
 from odin.api.schemas import AnalyzeAccepted, AnalyzeRequest, AnalyzeResult, JobResponse
-from odin.services import analyze_service
+from odin.core import auth, url_guard
 from odin.core.url_guard import UrlNotAllowed
+from odin.services import analyze_service
 
 router = APIRouter(tags=["analyze"])
 
