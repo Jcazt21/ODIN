@@ -43,24 +43,27 @@ El CLI avisa con 5 segundos de margen antes de correr `--analyzer gemini`
 (u otro motor facturado) por el costo — no correr esa opción sin que el
 usuario lo pida explícitamente (ver `CLAUDE.md`).
 
-Tests unitarios del evaluador: `tests/test_evaluate.py`.
+Tests unitarios del evaluador: `tests/scripts/test_evaluate.py`.
 
 ## 2. Estado actual de la muestra
 
-**7 artículos** en `tests/eval/golden_set.jsonl` a la fecha de este
-documento — uno por cada artículo que hoy vive en `odin.db`. El objetivo
-fijado en `task.md` §2.4 es **150-300 artículos**, repartidos por fuente y
-por sección. Con 7 casos:
+**42 artículos** en `tests/eval/golden_set.jsonl` a la fecha de este
+documento, repartidos entre **6 fuentes** (`diario_libre` 5, `manual` 33,
+`acento` 1, `al_momento` 1, `el_dia` 1, `n_digital` 1 — verificado contando
+el campo `source` de cada fila). El objetivo fijado en `task.md` §2.4 es
+**150-300 artículos**. Con 42 casos:
 
-- Cualquier métrica calculada tiene un intervalo de confianza demasiado
-  ancho para ser accionable (un solo artículo mal clasificado mueve el F1 en
-  ~14 puntos).
-- No hay representación de las 9 fuentes ni de secciones variadas (política,
-  economía, sucesos, etc.) — el rendimiento real puede variar mucho por
-  sección (titulares de sucesos vs. columnas de opinión, por ejemplo).
+- Cualquier métrica calculada sigue teniendo un intervalo de confianza
+  amplio (un puñado de artículos mal clasificados mueve el F1 varios
+  puntos), aunque ya menos frágil que la muestra original de 7.
+- La distribución por fuente es muy desigual (`manual` concentra 33 de 42),
+  y no hay garantía de reparto uniforme por sección (política, economía,
+  sucesos, etc.) — el rendimiento real puede variar mucho por sección
+  (titulares de sucesos vs. columnas de opinión, por ejemplo).
 - **No se debe publicar ningún número derivado de esta muestra como cifra de
-  producto.** Sirve para verificar que el evaluador funciona end-to-end, no
-  para reportar precisión.
+  producto.** Sirve para verificar que el evaluador funciona end-to-end y
+  para fijar una línea base de referencia entre corridas, no para reportar
+  precisión de cara a cliente.
 
 ## 3. Cómo crecer el golden set
 
@@ -80,7 +83,28 @@ por sección. Con 7 casos:
 
 | Fecha | Tamaño de muestra | Analizador | F1 entidades | Accuracy sentimiento global | Accuracy `sentiment_toward` | Publicable como cifra de producto |
 |---|---|---|---|---|---|---|
-| _pendiente_ | 7 | — | — | — | — | **No** — muestra insuficiente |
+| 2026-08-13 | 42 | `local` | 74.0% | 59.5% | 59.9% | **No** — muestra insuficiente (objetivo 150-300) |
+
+Reporte completo: `tests/eval/baselines/2026-08-13-local.json`. Nota:
+`LocalAnalyzer` no es un LLM y no llena de forma significativa los campos de
+encuadre/atribución (`framing`, `sentiment_basis`, etc.) — sus accuracies
+para esos campos, presentes en el JSON, no reflejan juicio real y no se
+copian aquí.
+
+**Línea base de Groq bloqueada (2026-08-13).** Se intentó correr
+`scripts/evaluate.py --analyzer groq` contra el mismo golden set de 42
+artículos y falló de forma determinística, dos veces, con
+`groq.BadRequestError: 400 json_validate_failed` en la salida estructurada
+de un artículo (`failed_generation` vino vacío, sin pista de qué falló).
+La causa es un hueco en el manejo de errores de `groq_analyzer.py`: su
+`_call_groq` solo reintenta el caso de truncado (`finish_reason=length`), no
+otros `APIStatusError`, y `evaluate()` no captura fallos por artículo — un
+solo artículo con salida inválida tumba la corrida completa de 42 sin
+reporte parcial. Esto es deuda técnica en el evaluador/analizador, no un
+problema de los datos del golden set (ver `docs/planning/conflicts.md`,
+Conflicto 4, "Deuda menor asociada", para el detalle técnico y como
+seguimiento pendiente). No hay fila de `groq` en la tabla porque no se
+completó ninguna corrida.
 
 Esta tabla se llena corriendo `scripts/evaluate.py --out reporte.json` y
 copiando el resultado aquí con fecha, una vez que el golden set tenga tamaño

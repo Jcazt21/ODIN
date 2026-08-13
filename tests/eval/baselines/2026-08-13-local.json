@@ -1,0 +1,548 @@
+{
+  "n_articles": 42,
+  "entities": {
+    "overall": {
+      "tp": 185,
+      "fp": 61,
+      "fn": 69,
+      "precision": 0.752,
+      "recall": 0.7283,
+      "f1": 0.74,
+      "sentiment_accuracy": 0.5989
+    },
+    "by_type": {
+      "ORG": {
+        "tp": 65,
+        "fp": 51,
+        "fn": 66,
+        "precision": 0.5603,
+        "recall": 0.4962,
+        "f1": 0.5263,
+        "sentiment_accuracy": 0.4923
+      },
+      "PERSON": {
+        "tp": 120,
+        "fp": 10,
+        "fn": 3,
+        "precision": 0.9231,
+        "recall": 0.9756,
+        "f1": 0.9486,
+        "sentiment_accuracy": 0.6581
+      }
+    }
+  },
+  "overall_sentiment": {
+    "accuracy": 0.5952,
+    "confusion_matrix": {
+      "POS->POS": 3,
+      "POS->NEG": 0,
+      "POS->NEU": 9,
+      "NEG->POS": 0,
+      "NEG->NEG": 11,
+      "NEG->NEU": 5,
+      "NEU->POS": 0,
+      "NEU->NEG": 3,
+      "NEU->NEU": 11
+    }
+  },
+  "category_matrices": {
+    "framing": {
+      "accuracy": 0.4412,
+      "n_labeled": 34,
+      "confusion_matrix": {
+        "crisis_conflicto->crisis_conflicto": 0,
+        "crisis_conflicto->logro_institucional": 0,
+        "crisis_conflicto->negligencia": 0,
+        "crisis_conflicto->crecimiento": 0,
+        "crisis_conflicto->denuncia": 0,
+        "crisis_conflicto->neutro_informativo": 5,
+        "logro_institucional->crisis_conflicto": 0,
+        "logro_institucional->logro_institucional": 0,
+        "logro_institucional->negligencia": 0,
+        "logro_institucional->crecimiento": 0,
+        "logro_institucional->denuncia": 0,
+        "logro_institucional->neutro_informativo": 7,
+        "negligencia->crisis_conflicto": 0,
+        "negligencia->logro_institucional": 0,
+        "negligencia->negligencia": 0,
+        "negligencia->crecimiento": 0,
+        "negligencia->denuncia": 0,
+        "negligencia->neutro_informativo": 1,
+        "crecimiento->crisis_conflicto": 0,
+        "crecimiento->logro_institucional": 0,
+        "crecimiento->negligencia": 0,
+        "crecimiento->crecimiento": 0,
+        "crecimiento->denuncia": 0,
+        "crecimiento->neutro_informativo": 0,
+        "denuncia->crisis_conflicto": 0,
+        "denuncia->logro_institucional": 0,
+        "denuncia->negligencia": 0,
+        "denuncia->crecimiento": 0,
+        "denuncia->denuncia": 0,
+        "denuncia->neutro_informativo": 6,
+        "neutro_informativo->crisis_conflicto": 0,
+        "neutro_informativo->logro_institucional": 0,
+        "neutro_informativo->negligencia": 0,
+        "neutro_informativo->crecimiento": 0,
+        "neutro_informativo->denuncia": 0,
+        "neutro_informativo->neutro_informativo": 15
+      }
+    },
+    "sentiment_basis": {
+      "accuracy": 0.1714,
+      "n_labeled": 35,
+      "confusion_matrix": {
+        "hechos_reportados->hechos_reportados": 0,
+        "hechos_reportados->discurso_citado": 0,
+        "hechos_reportados->mixto": 8,
+        "discurso_citado->hechos_reportados": 0,
+        "discurso_citado->discurso_citado": 0,
+        "discurso_citado->mixto": 21,
+        "mixto->hechos_reportados": 0,
+        "mixto->discurso_citado": 0,
+        "mixto->mixto": 6
+      }
+    },
+    "facts_sentiment": {
+      "accuracy": 0.7647,
+      "n_labeled": 34,
+      "confusion_matrix": {
+        "POS->POS": 0,
+        "POS->NEG": 0,
+        "POS->NEU": 5,
+        "NEG->POS": 0,
+        "NEG->NEG": 0,
+        "NEG->NEU": 3,
+        "NEU->POS": 0,
+        "NEU->NEG": 0,
+        "NEU->NEU": 26
+      }
+    },
+    "quoted_sentiment": {
+      "accuracy": 0.1111,
+      "n_labeled": 27,
+      "confusion_matrix": {
+        "POS->POS": 0,
+        "POS->NEG": 0,
+        "POS->NEU": 10,
+        "NEG->POS": 0,
+        "NEG->NEG": 0,
+        "NEG->NEU": 14,
+        "NEU->POS": 0,
+        "NEU->NEG": 0,
+        "NEU->NEU": 3
+      }
+    },
+    "media_stance": {
+      "accuracy": 0.8857,
+      "n_labeled": 35,
+      "confusion_matrix": {
+        "neutra_transmisiva->neutra_transmisiva": 31,
+        "neutra_transmisiva->critica": 0,
+        "neutra_transmisiva->favorable": 0,
+        "neutra_transmisiva->editorializante": 0,
+        "critica->neutra_transmisiva": 2,
+        "critica->critica": 0,
+        "critica->favorable": 0,
+        "critica->editorializante": 0,
+        "favorable->neutra_transmisiva": 2,
+        "favorable->critica": 0,
+        "favorable->favorable": 0,
+        "favorable->editorializante": 0,
+        "editorializante->neutra_transmisiva": 0,
+        "editorializante->critica": 0,
+        "editorializante->favorable": 0,
+        "editorializante->editorializante": 0
+      }
+    }
+  },
+  "content_flags": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 7,
+    "precision": null,
+    "recall": 0.0,
+    "f1": null,
+    "sentiment_accuracy": null
+  },
+  "per_article": [
+    {
+      "id": "odin-db-001",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-002",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-003",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-004",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-005",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 51
+    },
+    {
+      "id": "odin-db-006",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3
+    },
+    {
+      "id": "odin-db-007",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-008",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 14
+    },
+    {
+      "id": "odin-db-009",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 35
+    },
+    {
+      "id": "odin-db-010",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 16
+    },
+    {
+      "id": "odin-db-011",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 14
+    },
+    {
+      "id": "odin-db-012",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-013",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-014",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2
+    },
+    {
+      "id": "odin-db-015",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-016",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9
+    },
+    {
+      "id": "odin-db-017",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9
+    },
+    {
+      "id": "odin-db-018",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5
+    },
+    {
+      "id": "odin-db-019",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5
+    },
+    {
+      "id": "odin-db-020",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 14
+    },
+    {
+      "id": "odin-db-021",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9
+    },
+    {
+      "id": "odin-db-022",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 3
+    },
+    {
+      "id": "odin-db-023",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2
+    },
+    {
+      "id": "odin-db-024",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3
+    },
+    {
+      "id": "odin-db-025",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-026",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-027",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 16
+    },
+    {
+      "id": "odin-db-028",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2
+    },
+    {
+      "id": "odin-db-029",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8
+    },
+    {
+      "id": "odin-db-030",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 4
+    },
+    {
+      "id": "odin-db-031",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 10
+    },
+    {
+      "id": "odin-db-032",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9
+    },
+    {
+      "id": "odin-db-033",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 20
+    },
+    {
+      "id": "odin-db-034",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 24
+    },
+    {
+      "id": "odin-db-035",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7
+    },
+    {
+      "id": "odin-db-036",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 11
+    },
+    {
+      "id": "odin-db-037",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 10
+    },
+    {
+      "id": "odin-db-038",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 9
+    },
+    {
+      "id": "odin-db-039",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 6
+    },
+    {
+      "id": "odin-db-040",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 10
+    },
+    {
+      "id": "odin-db-041",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8
+    },
+    {
+      "id": "odin-db-042",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3
+    }
+  ]
+}

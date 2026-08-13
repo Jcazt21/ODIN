@@ -5,17 +5,18 @@ para medir objetivamente qué tan bien funciona un `Analyzer` (local o
 Gemini) — en vez de confiar en los porcentajes de precisión de `README.md`,
 que hoy no tienen ningún artefacto que los respalde (`task.md` §2.4).
 
-## Estado actual: 7 artículos (punto de partida, no el objetivo)
+## Estado actual: 42 artículos (punto de partida, no el objetivo)
 
-`golden_set.jsonl` tiene **7 filas**, una por cada artículo que hoy vive en
-`odin.db` (el corpus real y completo del proyecto en este momento). El
-objetivo de `task.md` §12 P0#7 es **150-300 artículos**; llegar ahí es
-trabajo de etiquetado humano que no se puede improvisar en una sola sesión —
-requiere leer cada artículo con cuidado y decidir, para cada entidad, si el
-tono es POS/NEG/NEU. Este archivo es la base sobre la que crecer, con el
-formato y las herramientas (`scripts/evaluate.py`) ya funcionando.
+`golden_set.jsonl` tiene **42 filas**, repartidas entre **6 fuentes**
+(`diario_libre` 5, `manual` 33, `acento` 1, `al_momento` 1, `el_dia` 1,
+`n_digital` 1). El objetivo de `task.md` §12 P0#7 es **150-300 artículos**;
+llegar ahí es trabajo de etiquetado humano que no se puede improvisar en
+una sola sesión — requiere
+leer cada artículo con cuidado y decidir, para cada entidad, si el tono es
+POS/NEG/NEU. Este archivo es la base sobre la que crecer, con el formato y
+las herramientas (`scripts/evaluate.py`) ya funcionando.
 
-Las etiquetas de estas 7 filas se hicieron leyendo el texto completo de cada
+Las etiquetas de estas 42 filas se hicieron leyendo el texto completo de cada
 artículo. No sustituyen una revisión humana independiente — antes de
 confiar en ellas para decisiones de producto, alguien del equipo debería
 releerlas. El campo `notes` de cada fila documenta los casos ambiguos y por

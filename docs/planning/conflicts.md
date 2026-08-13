@@ -203,7 +203,19 @@ ciegas.
 3. Fijar la medición de la v6 como línea base **antes** de tocar el prompt otra
    vez.
 
-**Estado:** abierto. **Bloquea la validación de todo lo demás.**
+**Estado (2026-08-13):** el golden set creció de 7 a **42 artículos**
+(6 fuentes: `diario_libre` 5, `manual` 33, `acento` 1, `al_momento` 1,
+`el_dia` 1, `n_digital` 1) y `scripts/evaluate.py` ya puntúa los campos nuevos (`framing`,
+`sentiment_basis`, `facts_sentiment`, `quoted_sentiment`, `media_stance`,
+`content_flags`) cuando el golden set los etiqueta. Se fijó una línea base
+**local** medida contra esos 42 artículos (F1 entidades 74.0%, accuracy
+sentimiento global 59.5%, accuracy `sentiment_toward` 59.9% — ver
+`docs/PRECISION.md` §4, `tests/eval/baselines/2026-08-13-local.json`). La
+línea base de **Groq** se intentó el mismo día y quedó **bloqueada**: falla
+determinística (`json_validate_failed`, ver deuda menor abajo) que tumba la
+corrida completa sin reporte parcial. Sigue **bloqueando la validación de
+1, 2 y 3** hasta que exista al menos una línea base LLM (Groq o Gemini)
+medida.
 
 ### Deuda menor asociada
 
@@ -220,6 +232,14 @@ ciegas.
 - **Cuerpos ya guardados con mojibake**: el arreglo de codificación
   (`url_guard._decode_html`) corrige los análisis nuevos, no reescribe los
   artículos viejos.
+- **`groq_analyzer.py` solo reintenta el truncado, no otros fallos de la
+  API**: su `_call_groq` solo reintenta `_TruncatedOutput`
+  (`finish_reason=length`); cualquier otro `APIStatusError` (p. ej.
+  `json_validate_failed`) se propaga como `RuntimeError` sin captura por
+  artículo en `evaluate()`, así que un solo artículo con salida estructurada
+  inválida tumba una corrida completa de N artículos sin reporte parcial —
+  bloqueó la línea base de Groq del golden set ampliado (2026-08-13, ver
+  `docs/PRECISION.md` §4).
 
 ### Orden recomendado
 
