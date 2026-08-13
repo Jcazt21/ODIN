@@ -5,7 +5,7 @@ Un solo punto de configuración para que `main.py` (CLI) y `api.py` (servidor)
 compartan el mismo formato de log y el mismo registro de métricas.
 
 Uso:
-    from observability import configure_logging, get_logger, init_sentry
+    from odin.core.observability import configure_logging, get_logger, init_sentry
 
     configure_logging()
     log = get_logger("odin.pipeline")

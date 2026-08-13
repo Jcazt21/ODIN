@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Imagen para el backend FastAPI (paquete api/) y el scraper CLI (main.py).
+# Imagen para el backend FastAPI (paquete odin.api) y el scraper CLI (comando `odin`).
 # Mismo código Python, dos usos: ver docker-compose.yml (servicios "backend" y "scraper").
 #
 # 3.13 y no 3.12: requirements.lock (ver README.md#requirementslock) se generó
@@ -60,8 +60,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # resueltas por requirements.lock arriba. Esto registra `odin` en
 # site-packages, así "uvicorn odin.api:app" y el script de consola "odin"
 # funcionan sin importar el WORKDIR, en vez de depender de que uvicorn
-# agregue el cwd a sys.path por su cuenta.
-COPY pyproject.toml .
+# agregue el cwd a sys.path por su cuenta. requirements.txt viaja junto a
+# pyproject.toml porque `dynamic = ["dependencies"]` lo lee para armar los
+# metadatos del paquete (ver pyproject.toml) — sin él, setuptools construye
+# el paquete igual pero declarándolo sin dependencias, silenciosamente.
+COPY pyproject.toml requirements.txt .
 COPY src/ src/
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-deps .
@@ -83,8 +86,8 @@ USER appuser
 EXPOSE 8000
 
 # Sin HEALTHCHECK acá a propósito: esta misma imagen sirve dos comandos
-# distintos (servicio "backend" con uvicorn, servicio "scraper" con
-# main.py como CLI de una sola corrida) y un test fijo a /api/health
+# distintos (servicio "backend" con uvicorn, servicio "scraper" con el
+# comando `odin` como CLI de una sola corrida) y un test fijo a /api/health
 # marcaría al scraper como "unhealthy" para siempre, porque ahí nunca hay
 # nada escuchando en el puerto 8000. El healthcheck real vive en
 # docker-compose.yml, donde sí se puede scopear al servicio "backend".

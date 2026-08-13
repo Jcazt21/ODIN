@@ -16,11 +16,11 @@ Rectificación/borrado (§8.2 de task.md — datos personales y perfilado):
   PUT/DELETE /api/articles/{id}, PUT/DELETE /api/entities/{id}.
 
 Organización del código (tarea 24 de task.md, §9.2): este módulo (paquete
-`api/`, importable como `api:app` — `uvicorn api:app` sigue funcionando igual
-que cuando era un solo archivo) monta la app, el middleware de observabilidad
-y los routers. Cada grupo de rutas vive en `api/routers/`, los schemas
-Pydantic en `api/schemas.py`, y la lógica de negocio (queries SQLAlchemy) en
-`services/` — los handlers HTTP ya no hablan SQLAlchemy directamente.
+`odin.api`, importable como `odin.api:app`) monta la app, el middleware de
+observabilidad y los routers. Cada grupo de rutas vive en
+`odin/api/routers/`, los schemas Pydantic en `odin/api/schemas.py`, y la
+lógica de negocio (queries SQLAlchemy) en `odin/services/` — los handlers
+HTTP ya no hablan SQLAlchemy directamente.
 
 Uso:
   uvicorn odin.api:app --reload --port 8000

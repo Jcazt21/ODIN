@@ -1,6 +1,7 @@
-"""Pruebas de pipeline.py: que _persist() vincule cada entidad guardada a su
-fila de canonical_entities, igual que save_article en api.py. Usa un Analyzer
-falso (sin spaCy/pysentimiento/Gemini) y SQLite en memoria."""
+"""Pruebas de odin/core/pipeline.py: que _persist() vincule cada entidad
+guardada a su fila de canonical_entities, igual que save_article en
+odin.services.article_service. Usa un Analyzer falso (sin
+spaCy/pysentimiento/Gemini) y SQLite en memoria."""
 from __future__ import annotations
 
 from odin.analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult

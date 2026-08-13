@@ -1,4 +1,4 @@
-"""Pruebas de db/canonical_entities.py: get_or_create y merge sobre SQLite en
+"""Pruebas de odin/db/canonical_entities.py: get_or_create y merge sobre SQLite en
 memoria (fixture `sqlite_sessionmaker`, nunca la DATABASE_URL real)."""
 from __future__ import annotations
 

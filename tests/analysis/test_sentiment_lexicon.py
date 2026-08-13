@@ -1,4 +1,4 @@
-"""Pruebas de analysis/sentiment_lexicon.py: el glosario de refuerzo de
+"""Pruebas de odin/analysis/sentiment_lexicon.py: el glosario de refuerzo de
 sentimiento compartido por LocalAnalyzer y los analizadores basados en LLM.
 
 Solo importa analysis.text_norm (sin spaCy/pysentimiento/torch): rápido y sin

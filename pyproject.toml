@@ -33,8 +33,6 @@ dependencies = { file = ["requirements.txt"] }
 odin = "odin.core.main:main"
 
 # Layout estándar src/: el único paquete instalable es "odin", bajo src/odin/.
-[tool.setuptools]
-
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["odin*"]

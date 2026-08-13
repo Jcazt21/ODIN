@@ -19,7 +19,7 @@ from odin.db.models import Base
 def _sqlite_regexp_ci(pattern: str, value: str | None) -> bool:
     """Implementa el operador `~*` de Postgres sobre SQLite: el código de
     producción usa `column.op("~*")`, que en SQLite se traduce a la función
-    `REGEXP` de dos argumentos. Se registra aquí (no en db/session.py) porque
+    `REGEXP` de dos argumentos. Se registra aquí (no en odin/db/session.py) porque
     solo los tests corren contra SQLite; en Postgres esta función no existe y
     no hace falta."""
     if value is None:
@@ -68,10 +68,11 @@ def api_client(monkeypatch, sqlite_sessionmaker):
     `DATABASE_URL` real), algo que no queremos ni necesitamos para probar
     endpoints de solo lectura.
 
-    Se parchea `api.deps.get_session` (no `db.session.get_session` directo):
-    todos los routers y servicios importan `get_session` desde `api.deps` —
-    ver el docstring de ese módulo —, así que parchear el nombre ahí cubre a
-    todos sin tener que tocar cada `services/*.py` por separado.
+    Se parchea `odin.api.deps.get_session` (no `odin.db.session.get_session`
+    directo): todos los routers y servicios importan `get_session` desde
+    `odin.api.deps` — ver el docstring de ese módulo —, así que parchear el
+    nombre ahí cubre a todos sin tener que tocar cada `services/*.py` por
+    separado.
     """
     from fastapi.testclient import TestClient
 

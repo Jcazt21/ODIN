@@ -1,4 +1,4 @@
-"""Pruebas de db/aliases.py: resolve() debe matchear sin importar acentos ni
+"""Pruebas de odin/db/aliases.py: resolve() debe matchear sin importar acentos ni
 mayúsculas (bug: "Policia" no matcheaba un alias guardado como "Policía")."""
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Pruebas de los parsers puros de scrapers/base.py: `_parse_date` y
+"""Pruebas de los parsers puros de odin/scrapers/base.py: `_parse_date` y
 `_urls_from_sitemap`; y del throttle por dominio + robots.txt de §2.6 de
 task.md (`_DomainThrottle`, `_RobotsCache`, `BaseScraper.fetch`). Sin red real,
 sin BD."""
