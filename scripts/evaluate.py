@@ -27,6 +27,27 @@ if TYPE_CHECKING:
     from odin.analysis.base import Analyzer, EntityResult
 
 SENTIMENT_VALUES = ("POS", "NEG", "NEU")
+FRAMING_VALUES = (
+    "crisis_conflicto",
+    "logro_institucional",
+    "negligencia",
+    "crecimiento",
+    "denuncia",
+    "neutro_informativo",
+)
+SENTIMENT_BASIS_VALUES = ("hechos_reportados", "discurso_citado", "mixto")
+MEDIA_STANCE_VALUES = ("neutra_transmisiva", "critica", "favorable", "editorializante")
+
+# Campo de GoldArticle/AnalysisResult -> (categorías válidas, bucket de
+# reserva cuando el analizador predice algo fuera de esas categorías o None
+# — mismo patrón que el fallback "NEU" ya usado para overall_sentiment).
+CATEGORY_FIELDS: dict[str, tuple[tuple[str, ...], str]] = {
+    "framing": (FRAMING_VALUES, "neutro_informativo"),
+    "sentiment_basis": (SENTIMENT_BASIS_VALUES, "mixto"),
+    "facts_sentiment": (SENTIMENT_VALUES, "NEU"),
+    "quoted_sentiment": (SENTIMENT_VALUES, "NEU"),
+    "media_stance": (MEDIA_STANCE_VALUES, "neutra_transmisiva"),
+}
 
 
 # ── carga del golden set ─────────────────────────────────────────────────────
@@ -244,6 +265,20 @@ class ConfusionMatrix:
         return "\n".join(lines)
 
 
+def _update_flag_metrics(
+    metrics: EntityMetrics, gold: list[str] | None, predicted: list[str]
+) -> None:
+    """content_flags es multi-etiqueta (0..N banderas por artículo, no una
+    categoría única): se puntúa como precision/recall de conjuntos,
+    reutilizando EntityMetrics por sus contadores tp/fp/fn."""
+    if gold is None:
+        return
+    gold_set, pred_set = set(gold), set(predicted)
+    metrics.tp += len(gold_set & pred_set)
+    metrics.fp += len(pred_set - gold_set)
+    metrics.fn += len(gold_set - pred_set)
+
+
 # ── orquestación ─────────────────────────────────────────────────────────────
 
 
@@ -269,11 +304,23 @@ def evaluate(articles: list[GoldArticle], analyzer: Analyzer) -> dict[str, Any]:
     by_type: dict[str, EntityMetrics] = {}
     overall = EntityMetrics()
     sentiment_cm = ConfusionMatrix.empty(SENTIMENT_VALUES, fallback="NEU")
+    category_matrices = {
+        field: ConfusionMatrix.empty(values, fallback=fallback)
+        for field, (values, fallback) in CATEGORY_FIELDS.items()
+    }
+    content_flags_metrics = EntityMetrics()
 
     per_article: list[dict[str, Any]] = []
     for article in articles:
         result = analyzer.analyze(article.title, article.body)
         sentiment_cm.record(article.overall_sentiment, result.overall_sentiment or "NEU")
+
+        for field, matrix in category_matrices.items():
+            gold_value = getattr(article, field)
+            if gold_value is not None:
+                matrix.record(gold_value, getattr(result, field))
+
+        _update_flag_metrics(content_flags_metrics, article.content_flags, result.content_flags)
 
         pairs = _match_entities(result.entities, article.entities)
         _update_metrics(
@@ -295,6 +342,8 @@ def evaluate(articles: list[GoldArticle], analyzer: Analyzer) -> dict[str, Any]:
             "by_type": by_type,
         },
         "overall_sentiment": sentiment_cm,
+        "category_matrices": category_matrices,
+        "content_flags": content_flags_metrics,
         "per_article": per_article,
     }
 
@@ -329,6 +378,20 @@ def render_report(report: dict[str, Any], *, analyzer_name: str, golden_set: Pat
     lines.append("── Sentimiento global (matriz de confusión, filas=gold) ──────")
     lines.append(report["overall_sentiment"].render())
     lines.append(f"\n  accuracy: {_fmt(report['overall_sentiment'].accuracy)}")
+    lines.append("")
+    lines.append("── Campos de encuadre/atribución (solo analizadores LLM) ─────")
+    for field in CATEGORY_FIELDS:
+        matrix: ConfusionMatrix = report["category_matrices"][field]
+        n_labeled = sum(matrix.counts.values())
+        if n_labeled == 0:
+            lines.append(f"  {field}: sin artículos etiquetados en el golden set (n/d)")
+            continue
+        lines.append(f"  {field} accuracy: {_fmt(matrix.accuracy)} (n={n_labeled})")
+    flags: EntityMetrics = report["content_flags"]
+    lines.append(
+        f"\n  content_flags P={_fmt(flags.precision)}  R={_fmt(flags.recall)}  "
+        f"F1={_fmt(flags.f1)}  (tp={flags.tp} fp={flags.fp} fn={flags.fn})"
+    )
     n_non_exhaustive = sum(1 for a in report["per_article"] if not a["entities_exhaustive"])
     if n_non_exhaustive:
         lines.append(
@@ -356,6 +419,15 @@ def _report_to_json(report: dict[str, Any]) -> dict[str, Any]:
             "accuracy": report["overall_sentiment"].accuracy,
             "confusion_matrix": {f"{g}->{p}": n for (g, p), n in report["overall_sentiment"].counts.items()},
         },
+        "category_matrices": {
+            field: {
+                "accuracy": matrix.accuracy,
+                "n_labeled": sum(matrix.counts.values()),
+                "confusion_matrix": {f"{g}->{p}": n for (g, p), n in matrix.counts.items()},
+            }
+            for field, matrix in report["category_matrices"].items()
+        },
+        "content_flags": _metrics(report["content_flags"]),
         "per_article": report["per_article"],
     }
 

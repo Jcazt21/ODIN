@@ -288,3 +288,85 @@ class TestEvaluateEndToEnd:
         assert overall.fn == 1
         assert overall.tp == 0
         assert report["overall_sentiment"].accuracy == 0.0
+
+
+# ── métricas de campos categóricos v2 (framing, media_stance, ...) ──────────
+
+
+class TestCategoryMetrics:
+    def test_category_field_scored_only_when_gold_present(self):
+        articles = [
+            GoldArticle(
+                id="a1", title="T1", body="B1", overall_sentiment="NEU",
+                entities_exhaustive=True, entities=[],
+                framing="denuncia",
+            ),
+            GoldArticle(
+                id="a2", title="T2", body="B2", overall_sentiment="NEU",
+                entities_exhaustive=True, entities=[],
+                framing=None,  # sin etiquetar: no debe contar
+            ),
+        ]
+        stub = _StubAnalyzer({
+            "T1": AnalysisResult(overall_sentiment="NEU", framing="denuncia"),
+            "T2": AnalysisResult(overall_sentiment="NEU", framing="crecimiento"),
+        })
+        report = evaluate(articles, stub)
+        framing_matrix = report["category_matrices"]["framing"]
+        assert sum(framing_matrix.counts.values()) == 1
+        assert framing_matrix.accuracy == 1.0
+
+    def test_missing_or_unrecognized_prediction_falls_back(self):
+        articles = [
+            GoldArticle(
+                id="a1", title="T1", body="B1", overall_sentiment="NEU",
+                entities_exhaustive=True, entities=[],
+                media_stance="critica",
+            ),
+        ]
+        stub = _StubAnalyzer({
+            "T1": AnalysisResult(overall_sentiment="NEU", media_stance=None),
+        })
+        report = evaluate(articles, stub)
+        matrix = report["category_matrices"]["media_stance"]
+        assert matrix.counts[("critica", "neutra_transmisiva")] == 1
+
+
+# ── content_flags (multi-etiqueta) ───────────────────────────────────────────
+
+
+class TestFlagMetrics:
+    def test_flags_precision_recall(self):
+        articles = [
+            GoldArticle(
+                id="a1", title="T1", body="B1", overall_sentiment="NEU",
+                entities_exhaustive=True, entities=[],
+                content_flags=["alarmismo", "sensacionalismo"],
+            ),
+        ]
+        stub = _StubAnalyzer({
+            "T1": AnalysisResult(
+                overall_sentiment="NEU",
+                content_flags=["alarmismo", "posible_ironia"],
+            ),
+        })
+        report = evaluate(articles, stub)
+        flags = report["content_flags"]
+        assert flags.tp == 1  # alarmismo
+        assert flags.fp == 1  # posible_ironia
+        assert flags.fn == 1  # sensacionalismo
+
+    def test_flags_skipped_when_article_not_labeled(self):
+        articles = [
+            GoldArticle(
+                id="a1", title="T1", body="B1", overall_sentiment="NEU",
+                entities_exhaustive=True, entities=[],
+                content_flags=None,
+            ),
+        ]
+        stub = _StubAnalyzer({
+            "T1": AnalysisResult(overall_sentiment="NEU", content_flags=["alarmismo"]),
+        })
+        report = evaluate(articles, stub)
+        flags = report["content_flags"]
+        assert flags.tp == 0 and flags.fp == 0 and flags.fn == 0
