@@ -59,6 +59,40 @@ qué se decidió así.
   etiquetado penalizaría injustamente a un analizador que en realidad
   acertó.
 
+## Campos opcionales nuevos (encuadre / atribución / capas de sentimiento)
+
+Desde la ampliación del golden set para medir el Conflicto 4
+(`docs/planning/conflicts.md`), cada fila puede además etiquetar a mano los
+campos que solo producen los analizadores LLM (`GroqAnalyzer`/
+`GeminiAnalyzer`, ver `src/odin/analysis/gemini_analyzer.py:154-192`). Todos
+son **opcionales**: si una fila no los incluye, `scripts/evaluate.py`
+simplemente no puntúa ese campo para ese artículo — no cuenta como fallo ni
+como acierto.
+
+- `framing`: uno de `crisis_conflicto | logro_institucional | negligencia |
+  crecimiento | denuncia | neutro_informativo`.
+- `sentiment_basis`: uno de `hechos_reportados | discurso_citado | mixto` —
+  ¿la carga del artículo viene de los hechos que reporta, de lo que citan
+  las fuentes, o de ambos?
+- `facts_sentiment` / `quoted_sentiment`: `POS | NEG | NEU`, igual criterio
+  que `overall_sentiment` pero aplicado solo a los hechos reportados o solo
+  al discurso citado, respectivamente.
+- `media_stance`: uno de `neutra_transmisiva | critica | favorable |
+  editorializante` — la postura de la VOZ DEL MEDIO, no de las fuentes que
+  cita. Recoger una denuncia feroz de una fuente NO hace crítico al medio.
+- `content_flags`: lista (puede ser `[]` para "se revisó y no aplica
+  ninguna") de cero o más de `alarmismo | sensacionalismo |
+  dato_no_verificable | posible_ironia`. A diferencia de los campos
+  anteriores, es **multi-etiqueta**: se evalúa con precision/recall de
+  conjunto, no con una matriz de confusión.
+
+Etiquetar estos campos exige el mismo criterio que usaría `GeminiAnalyzer`
+al llenarlos (ver el prompt `_SYSTEM` en `gemini_analyzer.py`): leer el
+artículo completo y decidir cómo lo describiría un analista humano, no solo
+el sentimiento hacia cada entidad. Si un caso es genuinamente ambiguo,
+dejarlo sin etiquetar (omitir la clave) en vez de forzar un valor — igual
+que ya se hace hoy con `sentiment_toward: null`.
+
 ## Cómo correr la evaluación
 
 ```bash
@@ -74,6 +108,10 @@ python scripts/evaluate.py --analyzer gemini      # llamadas FACTURADAS — ver 
 2. Leer el cuerpo completo y decidir `overall_sentiment` y, por cada
    entidad real (PERSON/ORG), su `type` y `sentiment_toward`. Usar el
    nombre **canónico** (el que debería quedar tras `canonicalize.py`).
+   Etiquetar también, cuando el caso lo permita con confianza razonable,
+   `framing`, `sentiment_basis`, `facts_sentiment`, `quoted_sentiment`,
+   `media_stance` y `content_flags` (ver la sección de campos opcionales
+   arriba) — dejarlos sin poner cuando el caso es ambiguo.
 3. Si no se etiquetaron TODAS las entidades del artículo, marcar
    `"entities_exhaustive": false`.
 4. Anotar en `notes` cualquier caso límite y por qué se decidió así — es lo
