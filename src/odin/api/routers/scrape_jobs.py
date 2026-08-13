@@ -7,14 +7,14 @@ from __future__ import annotations
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from odin.core import auth
-from api.schemas import (
+from odin.api.schemas import (
     CrawlRunResponse,
     ScrapeJobAccepted,
     ScrapeJobResponse,
     ScrapeJobStartRequest,
 )
 from odin.core.scrape_jobs import run_scrape_job
-from services import scrape_job_service
+from odin.services import scrape_job_service
 
 router = APIRouter(tags=["scrape-jobs"])
 

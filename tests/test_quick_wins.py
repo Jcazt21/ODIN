@@ -133,7 +133,7 @@ class TestNoNPlusOne:
 
 class TestInitDbNotOnHotPath:
     def test_save_article_does_not_call_init_db(self, monkeypatch, api_client, sqlite_sessionmaker):
-        import api as api_module
+        import odin.api as api_module
 
         monkeypatch.setattr(db_session_module, "get_session", sqlite_sessionmaker)
         monkeypatch.setattr(canonicalize.alias_store, "resolve", lambda name: None)
@@ -169,8 +169,8 @@ class TestHealthCheck:
     def test_503_when_db_unreachable(self, monkeypatch):
         from fastapi.testclient import TestClient
 
-        import api as api_module
-        import api.deps as api_deps
+        import odin.api as api_module
+        import odin.api.deps as api_deps
 
         class _BrokenSession:
             def execute(self, *_args, **_kwargs):

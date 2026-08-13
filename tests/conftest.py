@@ -75,8 +75,8 @@ def api_client(monkeypatch, sqlite_sessionmaker):
     """
     from fastapi.testclient import TestClient
 
-    import api as api_module
-    import api.deps as api_deps
+    import odin.api as api_module
+    import odin.api.deps as api_deps
 
     monkeypatch.setattr(api_deps, "get_session", sqlite_sessionmaker)
     return TestClient(api_module.app)

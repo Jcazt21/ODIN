@@ -34,7 +34,7 @@ if settings.analyzer != "local":
     )
     sys.exit(1)
 
-from api import app  # noqa: E402
+from odin.api import app  # noqa: E402
 
 
 def main() -> None:

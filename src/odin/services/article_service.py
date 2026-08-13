@@ -16,9 +16,9 @@ from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
 from odin.analysis.canonicalize import canonicalize_entities, match_actor_name
 from odin.analysis.text_norm import accent_insensitive_regex as _accent_insensitive_regex
 from odin.analysis.text_norm import norm_key as _norm_key
-from api import deps
-from api.deps import log
-from api.schemas import (
+from odin.api import deps
+from odin.api.deps import log
+from odin.api.schemas import (
     FRAMING_VALUES,
     HEADLINE_INTENT_VALUES,
     LEAD_ORIENTATION_VALUES,
@@ -33,7 +33,7 @@ from api.schemas import (
 )
 from odin.db.models import Article, CanonicalEntity, Entity
 from odin.scrapers.base import _parse_date
-from services.analyzer_registry import analyzer
+from odin.services.analyzer_registry import analyzer
 
 _ACTOR_FIELDS = {
     "dominant_actor": "dominant_actor_id",

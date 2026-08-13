@@ -302,7 +302,7 @@ class TestSaveArticleLinksCanonicalEntity:
     def test_stamps_analyzer_lineage(self, monkeypatch, api_client, sqlite_sessionmaker):
         import odin.analysis.canonicalize as canonicalize
         import odin.db.session as db_session_module
-        import services.article_service as article_service
+        import odin.services.article_service as article_service
 
         class _FakeAnalyzer:
             name = "fake"

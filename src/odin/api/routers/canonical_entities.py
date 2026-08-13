@@ -4,14 +4,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from odin.core import auth
-from api.schemas import (
+from odin.api.schemas import (
     CanonicalEntityDetailResponse,
     CanonicalEntityListResponse,
     CanonicalEntityMergePayload,
     CanonicalEntityResponse,
     CanonicalEntityUpdatePayload,
 )
-from services import canonical_entity_service
+from odin.services import canonical_entity_service
 
 router = APIRouter(tags=["canonical-entities"])
 

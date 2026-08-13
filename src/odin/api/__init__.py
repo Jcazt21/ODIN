@@ -23,7 +23,7 @@ Pydantic en `api/schemas.py`, y la lógica de negocio (queries SQLAlchemy) en
 `services/` — los handlers HTTP ya no hablan SQLAlchemy directamente.
 
 Uso:
-  uvicorn api:app --reload --port 8000
+  uvicorn odin.api:app --reload --port 8000
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from odin.core import auth
 import odin.db.aliases as alias_store
-from api.routers import (
+from odin.api.routers import (
     aliases,
     analyze,
     articles,

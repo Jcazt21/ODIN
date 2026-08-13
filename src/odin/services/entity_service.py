@@ -6,9 +6,9 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from api import deps
-from api.deps import log
-from api.schemas import EntityMention, EntityUpdatePayload
+from odin.api import deps
+from odin.api.deps import log
+from odin.api.schemas import EntityMention, EntityUpdatePayload
 from odin.db.models import Entity
 
 

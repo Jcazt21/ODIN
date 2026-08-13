@@ -20,13 +20,13 @@ from odin.core import url_guard
 from odin.analysis.base import ANALYSIS_SCHEMA_VERSION
 from odin.analysis.canonicalize import canonicalize_result
 from odin.analysis.local_analyzer import sentence_mentions_venue_word
-from api import deps
-from api.deps import log
-from api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
+from odin.api import deps
+from odin.api.deps import log
+from odin.api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
 from odin.core.config import settings
 from odin.db.models import AnalyzeJob, Article
 from odin.scrapers.base import BaseScraper, _parse_date
-from services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
+from odin.services.analyzer_registry import IS_GEMINI_ANALYZER, analyzer
 from odin.core.url_guard import UrlNotAllowed
 
 _extractor = BaseScraper()
@@ -216,7 +216,7 @@ def start_analyze_job(url: str) -> tuple[AnalyzeResult | None, str | None]:
     """Si la URL ya estaba guardada, devuelve `(detalle, None)`. Si es nueva,
     crea la fila `AnalyzeJob` en estado `pending` y devuelve `(None, job_id)`
     — quien llama debe encolar `run_analyze_job(job_id, url)` en background."""
-    from services.article_service import serialize_article
+    from odin.services.article_service import serialize_article
 
     session = deps.get_session()
     try:
@@ -233,7 +233,7 @@ def start_analyze_job(url: str) -> tuple[AnalyzeResult | None, str | None]:
 
 
 def get_job(job_id: str):
-    from api.schemas import JobResponse
+    from odin.api.schemas import JobResponse
 
     session = deps.get_session()
     try:

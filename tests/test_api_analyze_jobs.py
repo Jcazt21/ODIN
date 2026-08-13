@@ -14,7 +14,7 @@ from __future__ import annotations
 from odin.analysis.base import AnalysisResult
 from odin.core.auth import create_token
 from odin.db.models import AnalyzeJob, Article
-from services import analyze_service
+from odin.services import analyze_service
 
 
 def _auth_headers() -> dict[str, str]:

@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from odin.core import auth
-from api.schemas import EntityMention, EntityUpdatePayload
-from services import entity_service
+from odin.api.schemas import EntityMention, EntityUpdatePayload
+from odin.services import entity_service
 
 router = APIRouter(tags=["entities"])
 

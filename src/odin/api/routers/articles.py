@@ -5,14 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from odin.core import auth
-from api.schemas import (
+from odin.api.schemas import (
     ArticleDetail,
     ArticleFiltersResponse,
     ArticleListResponse,
     ArticleUpdatePayload,
     SaveArticleRequest,
 )
-from services import article_service
+from odin.services import article_service
 
 router = APIRouter(tags=["articles"])
 

@@ -21,8 +21,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from api import deps
-from api.schemas import (
+from odin.api import deps
+from odin.api.schemas import (
     CrawlRunResponse,
     ScrapeJobAccepted,
     ScrapeJobResponse,

@@ -5,11 +5,11 @@ from fastapi import HTTPException
 from sqlalchemy import or_, select
 
 import odin.db.aliases as alias_store
-from api import deps
-from api.deps import log
-from api.schemas import AliasPayload, AliasUpdatePayload, EntityAliasResponse
+from odin.api import deps
+from odin.api.deps import log
+from odin.api.schemas import AliasPayload, AliasUpdatePayload, EntityAliasResponse
 from odin.db.models import EntityAlias
-from services.article_service import accent_insensitive_contains
+from odin.services.article_service import accent_insensitive_contains
 
 
 def list_aliases(q: str | None, limit: int, offset: int) -> list[EntityAliasResponse]:

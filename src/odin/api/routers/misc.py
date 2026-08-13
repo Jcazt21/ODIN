@@ -6,9 +6,9 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
-from api import deps
-from api.deps import log
-from api.schemas import HealthResponse
+from odin.api import deps
+from odin.api.deps import log
+from odin.api.schemas import HealthResponse
 from odin.core.observability import registry as metrics_registry
 
 router = APIRouter(tags=["misc"])
