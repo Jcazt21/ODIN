@@ -56,6 +56,16 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         --extra-index-url https://download.pytorch.org/whl/cpu \
         -r requirements.lock
 
+# Instala el paquete local (src/odin/) sin sus dependencias — ya están
+# resueltas por requirements.lock arriba. Esto registra `odin` en
+# site-packages, así "uvicorn odin.api:app" y el script de consola "odin"
+# funcionan sin importar el WORKDIR, en vez de depender de que uvicorn
+# agregue el cwd a sys.path por su cuenta.
+COPY pyproject.toml .
+COPY src/ src/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-deps .
+
 # Usuario sin privilegios para correr la app: si el proceso se ve
 # comprometido (RCE en alguna dependencia, etc.) no queda como root dentro
 # del contenedor. El cache de huggingface/spaCy vive bajo su home (ver
@@ -78,4 +88,4 @@ EXPOSE 8000
 # marcaría al scraper como "unhealthy" para siempre, porque ahí nunca hay
 # nada escuchando en el puerto 8000. El healthcheck real vive en
 # docker-compose.yml, donde sí se puede scopear al servicio "backend".
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "odin.api:app", "--host", "0.0.0.0", "--port", "8000"]
