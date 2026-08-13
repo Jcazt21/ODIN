@@ -21,12 +21,12 @@ import sys
 
 # (patrón de ruta que dispara el aviso, doc(s) a considerar, motivo corto)
 _TRIGGERS: list[tuple[str, str, str]] = [
-    ("db/models.py", "docs/DATA_DICTIONARY.md", "columna o tabla nueva"),
-    ("api/schemas.py", "docs/ARQUITECTURA.md", "contrato de la API"),
-    ("api/routers/", "docs/ARQUITECTURA.md", "endpoint nuevo o movido"),
-    ("scrapers/", "README.md / docs/ARQUITECTURA.md / docs/PROCESOS.md", "fuente nueva o conteo de fuentes"),
-    ("analysis/base.py", "docs/PROCESOS.md", "campo nuevo en AnalysisResult"),
-    ("config.py", "docs/RUNBOOK.md", "variable de entorno nueva o cambiada"),
+    ("src/odin/db/models.py", "docs/DATA_DICTIONARY.md", "columna o tabla nueva"),
+    ("src/odin/api/schemas.py", "docs/ARQUITECTURA.md", "contrato de la API"),
+    ("src/odin/api/routers/", "docs/ARQUITECTURA.md", "endpoint nuevo o movido"),
+    ("src/odin/scrapers/", "README.md / docs/ARQUITECTURA.md / docs/PROCESOS.md", "fuente nueva o conteo de fuentes"),
+    ("src/odin/analysis/base.py", "docs/PROCESOS.md", "campo nuevo en AnalysisResult"),
+    ("src/odin/core/config.py", "docs/RUNBOOK.md", "variable de entorno nueva o cambiada"),
     ("alembic/versions/", "docs/DATA_DICTIONARY.md", "migración de esquema"),
 ]
 

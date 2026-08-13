@@ -24,13 +24,10 @@ import argparse
 import math
 import sys
 from collections import defaultdict
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from odin.analysis.politics_filter import is_dominican_politics, make_filter  # noqa: E402
-from odin.scrapers import SCRAPERS  # noqa: E402
+from odin.analysis.politics_filter import is_dominican_politics, make_filter
+from odin.scrapers import SCRAPERS
 
 if TYPE_CHECKING:
     from odin.analysis.base import Analyzer
