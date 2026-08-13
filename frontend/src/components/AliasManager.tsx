@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from "react"
-import { Pencil, Trash2, Plus, Check, X, Search, ToggleLeft, ToggleRight } from "lucide-react"
+import { Pencil, Trash2, Plus, Check, X, Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import { useConfirm } from "@/lib/dialog"
 import {
@@ -151,14 +151,22 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
               )}
               <button
                 type="button"
+                role="switch"
+                aria-checked={alias.is_active}
                 disabled={busy}
                 onClick={handleToggle}
                 aria-label={alias.is_active ? "Desactivar" : "Activar"}
                 title={alias.is_active ? "Desactivar" : "Activar"}
-                className="rounded p-1.5"
-                style={{ color: alias.is_active ? "var(--pos)" : "var(--faint)" }}
+                className="relative mr-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50"
+                style={{
+                  background: alias.is_active ? "var(--pos)" : "var(--surface-3)",
+                  borderColor: alias.is_active ? "var(--pos)" : "var(--border)",
+                }}
               >
-                {alias.is_active ? <ToggleRight className="size-3.5" /> : <ToggleLeft className="size-3.5" />}
+                <span
+                  className="inline-block size-3.5 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform"
+                  style={{ transform: alias.is_active ? "translateX(18px)" : "translateX(2px)" }}
+                />
               </button>
               <button
                 type="button"
