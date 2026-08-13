@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "odin"
 version = "0.1.0"
 description = "Análisis de artículos de prensa dominicana: extracción, NER y sentimiento"
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.12,<4"
 # Las dependencias de ejecución siguen viviendo en requirements.txt: es lo que
 # copia Dockerfile.backend para aprovechar el cache de capas, y lo que citan el
 # README y docs/. Aquí se leen de ahí para no tener dos listas que se
@@ -29,14 +29,18 @@ dev = [
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
-# Layout plano: módulos sueltos en la raíz + varios paquetes. Se declara
-# explícito porque el autodescubrimiento de setuptools no sabe qué hacer con
-# esta mezcla.
+# Migración en curso hacia src/odin/ (layout estándar): mientras dura, este
+# bloque declara ambas raíces a la vez — "src" para lo ya migrado, "." para
+# lo que todavía vive suelto en la raíz — y `include` lista ambos conjuntos
+# de nombres. Cada tarea de la migración mueve un paquete y le quita su
+# nombre de la lista "legacy" de acá. Al terminar, esto colapsa a
+# where=["src"], include=["odin*"] únicamente.
 [tool.setuptools]
-py-modules = ["auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard"]
+py-modules = ["auth", "config", "main", "pipeline", "report", "scrape_jobs", "url_guard", "observability"]
 
 [tool.setuptools.packages.find]
-include = ["analysis*", "api*", "db*", "scrapers*", "services*"]
+where = ["src", "."]
+include = ["odin*", "analysis*", "api*", "db*", "scrapers*", "services*"]
 
 # ── ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
