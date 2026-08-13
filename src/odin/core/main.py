@@ -1,11 +1,11 @@
 """CLI de Odin.
 
 Ejemplos:
-  python main.py --init-db                 # solo crear tablas
-  python main.py                           # rastrear ambos periódicos
-  python main.py --source diario_libre     # solo uno
-  python main.py --limit 10                # máx. 10 artículos por fuente
-  python main.py --list-sources            # ver fuentes disponibles
+  odin --init-db                 # solo crear tablas
+  odin                           # rastrear ambos periódicos
+  odin --source diario_libre     # solo uno
+  odin --limit 10                # máx. 10 artículos por fuente
+  odin --list-sources            # ver fuentes disponibles
 """
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ def main() -> None:
         analyzer = LocalAnalyzer()
     limit = args.limit if args.limit and args.limit > 0 else None
 
-    from pipeline import run
+    from odin.core.pipeline import run
 
     stats = run(analyzer=analyzer, sources=args.sources, limit=limit)
 

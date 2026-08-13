@@ -1,8 +1,8 @@
 """Consultas rápidas sobre lo guardado (para revisar resultados sin SQL a mano).
 
 Ejemplos:
-  python report.py                      # resumen general
-  python report.py --entity "Abinader"  # opiniones hacia una figura/empresa
+  python -m odin.core.report                      # resumen general
+  python -m odin.core.report --entity "Abinader"   # opiniones hacia una figura/empresa
 """
 from __future__ import annotations
 

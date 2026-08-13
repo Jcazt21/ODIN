@@ -29,6 +29,9 @@ dev = [
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
+[project.scripts]
+odin = "odin.core.main:main"
+
 # Migración en curso hacia src/odin/ (layout estándar): mientras dura, este
 # bloque declara ambas raíces a la vez — "src" para lo ya migrado, "." para
 # lo que todavía vive suelto en la raíz — y `include` lista ambos conjuntos
@@ -36,7 +39,6 @@ dependencies = { file = ["requirements.txt"] }
 # nombre de la lista "legacy" de acá. Al terminar, esto colapsa a
 # where=["src"], include=["odin*"] únicamente.
 [tool.setuptools]
-py-modules = ["main", "pipeline", "report", "scrape_jobs"]
 
 [tool.setuptools.packages.find]
 where = ["src", "."]

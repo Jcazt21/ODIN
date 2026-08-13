@@ -103,7 +103,7 @@ def run_scrape_job(job_id: str, target: int, per_source_cap: int, analyzer_name:
         article_filter, _counts = make_filter(target, per_source_cap)
 
         try:
-            from pipeline import run as pipeline_run
+            from odin.core.pipeline import run as pipeline_run
 
             pipeline_run(
                 analyzer=analyzer,

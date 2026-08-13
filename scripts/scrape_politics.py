@@ -121,7 +121,7 @@ def main() -> None:
 
         analyzer = LocalAnalyzer()
 
-    from pipeline import run
+    from odin.core.pipeline import run
 
     article_filter, _ = make_filter(args.target, per_source_cap)
     print(f"Objetivo: {args.target} artículos de política, tope {per_source_cap} por fuente.\n")

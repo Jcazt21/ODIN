@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from odin.analysis.base import ANALYSIS_SCHEMA_VERSION, AnalysisResult, EntityResult
 from odin.db.models import CanonicalEntity, Entity
-from pipeline import _persist
+from odin.core.pipeline import _persist
 from odin.scrapers.base import ScrapedArticle
 
 

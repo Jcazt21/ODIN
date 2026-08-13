@@ -13,7 +13,7 @@ from api.schemas import (
     ScrapeJobResponse,
     ScrapeJobStartRequest,
 )
-from scrape_jobs import run_scrape_job
+from odin.core.scrape_jobs import run_scrape_job
 from services import scrape_job_service
 
 router = APIRouter(tags=["scrape-jobs"])
