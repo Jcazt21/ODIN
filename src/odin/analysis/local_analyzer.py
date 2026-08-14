@@ -51,13 +51,21 @@ _LOCAL_ANALYZER_VERSION = "6"
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
 _STOP_ENTITY_TOKENS = {"foto", "video", "listín", "listin", "diario", "libre"}
-# palabras de estado/país/gobierno genéricas: spaCy a veces las etiqueta como
-# ORG cuando aparecen solas y capitalizadas ("presidente... de la República"),
+# palabras de estado/país genéricas: spaCy a veces las etiqueta como ORG
+# cuando aparecen solas y capitalizadas ("presidente... de la República"),
 # pero no son el nombre propio de ninguna organización real. Solo se filtran
 # cuando son la entidad COMPLETA (p.ej. "República Dominicana" sigue
 # reconociéndose porque ahí "República" no es el span entero).
+#
+# "gobierno" NO está en esta lista a propósito (medido contra el golden set,
+# tests/eval/golden_set.jsonl: 12 de 131 entidades ORG etiquetadas a mano
+# son literalmente "Gobierno" — 9.2% del total — y el filtro viejo las
+# perdía las 7 verificadas en vivo). A diferencia de "República"/"Estado"
+# sueltos, "el Gobierno" SÍ es como la prensa dominicana nombra al actor
+# político de turno ("el Gobierno sostiene que...", "acusó al Gobierno de
+# ..."), no una referencia vaga al país.
 _GENERIC_STATE_ORGS = {
-    "republica", "estado", "gobierno", "nacion", "pais", "administracion",
+    "republica", "estado", "nacion", "pais", "administracion",
 }
 # las 31 provincias de RD + el Distrito Nacional: spaCy las etiqueta como
 # PERSON cuando aparecen solas y capitalizadas entre paréntesis tras un nombre

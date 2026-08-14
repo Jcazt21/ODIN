@@ -107,6 +107,33 @@ class TestVenueHeuristics:
             ), f"no se detectó patrón de lugar/venue en: {text}"
 
 
+class TestGenericStateOrgFilter:
+    """`_GENERIC_STATE_ORGS` filtra "República"/"Estado"/etc. sueltos, pero
+    NO "Gobierno" — 12 de 131 entidades ORG del golden set son literalmente
+    "Gobierno" (tests/eval/golden_set.jsonl) y el filtro viejo las perdía
+    todas (verificado en vivo, ver local_analyzer.py:54-61)."""
+
+    @staticmethod
+    def _org_names(nlp, text: str) -> set[str]:
+        doc = nlp(text)
+        sentences = _Sentences.from_doc(doc)
+        probas_by_index = [None for _ in sentences.texts]
+        entities = LocalAnalyzer()._entities(doc, probas_by_index, sentences)
+        return {e.name for e in entities if e.type == "ORG"}
+
+    def test_gobierno_is_extracted_as_an_org_entity(self, nlp):
+        orgs = self._org_names(
+            nlp, "La Fuerza del Pueblo presentó sus críticas y propuestas frente al Gobierno."
+        )
+        assert "Gobierno" in orgs
+
+    def test_bare_estado_is_still_filtered(self, nlp):
+        orgs = self._org_names(
+            nlp, "El Estado debe garantizar los derechos de todos los ciudadanos."
+        )
+        assert "Estado" not in orgs
+
+
 class TestEntitySentimentBoost:
     """`_entities()` recibe `probas_by_index` ya calculado (no llama a
     pysentimiento), así que se puede probar con probabilidades neutrales
