@@ -273,6 +273,7 @@ scripts/             utilidades sueltas (hash de contraseña, fusión de entidad
                      no forman parte del paquete `odin` instalable
 
 docs/
+  ESTRUCTURA.md      árbol completo de directorios y qué hace cada uno
   ARQUITECTURA.md    vista C4 (contexto, contenedores, componentes)
   PROCESOS.md        cada proceso del pipeline paso a paso, con diagramas
   DATA_DICTIONARY.md  cada columna de cada tabla: significado, quién la produce
