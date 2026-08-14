@@ -375,7 +375,7 @@ por:
 Run: `pytest tests/analysis/test_local_analyzer.py -v`
 Expected: PASS — todos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/odin/analysis/local_analyzer.py tests/analysis/test_local_analyzer.py
