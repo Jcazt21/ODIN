@@ -466,10 +466,11 @@ class LocalAnalyzer:
             nkey = _norm_key(name)
             if len(name) < 3 or nkey in _STOP_ENTITY_TOKENS:
                 continue
-            # "República"/"Estado"/"Gobierno" solas (no como parte de un
-            # nombre propio compuesto tipo "República Dominicana") no son una
-            # organización real, son una forma genérica de referirse al país
-            # o a la administración de turno.
+            # "República"/"Estado" solas (no como parte de un nombre propio
+            # compuesto tipo "República Dominicana") no son una organización
+            # real, son una forma genérica de referirse al país. ("Gobierno"
+            # ya no se filtra aquí — ver el comentario junto a
+            # _GENERIC_STATE_ORGS más arriba.)
             if etype == "ORG" and nkey in _GENERIC_STATE_ORGS:
                 continue
             # "Santiago", "Elías Piña", "María Trinidad Sánchez"... spaCy las

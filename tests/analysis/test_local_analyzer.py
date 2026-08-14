@@ -111,7 +111,7 @@ class TestGenericStateOrgFilter:
     """`_GENERIC_STATE_ORGS` filtra "República"/"Estado"/etc. sueltos, pero
     NO "Gobierno" — 12 de 131 entidades ORG del golden set son literalmente
     "Gobierno" (tests/eval/golden_set.jsonl) y el filtro viejo las perdía
-    todas (verificado en vivo, ver local_analyzer.py:54-61)."""
+    todas (verificado en vivo, ver local_analyzer.py:54-69)."""
 
     @staticmethod
     def _org_names(nlp, text: str) -> set[str]:
@@ -129,7 +129,7 @@ class TestGenericStateOrgFilter:
 
     def test_bare_estado_is_still_filtered(self, nlp):
         orgs = self._org_names(
-            nlp, "El Estado debe garantizar los derechos de todos los ciudadanos."
+            nlp, "La Fuerza del Pueblo presentó sus críticas y propuestas frente al Estado."
         )
         assert "Estado" not in orgs
 
