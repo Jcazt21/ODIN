@@ -46,13 +46,13 @@ se retoma, la relación costo/beneficio más alta está en las Tareas 1+2
 Línea base actual (`docs/PRECISION.md` §4, `tests/eval/baselines/2026-08-13-local.json`,
 42 artículos):
 
-| Métrica | Valor |
-|---|---|
-| Entidades F1 (overall) | 74.0% (P 75.2%, R 72.8%) |
-| Entidades F1 — PERSON | **94.9%** (P 92.3%, R 97.6%) |
-| Entidades F1 — ORG | **52.6%** (P 56.0%, R 49.6%, tp=65 fp=51 fn=66) |
-| `overall_sentiment` accuracy | 59.5% (17/42 artículos mal clasificados) |
-| `sentiment_toward` accuracy | 59.9% |
+| Métrica                      | Valor                                           |
+| ---------------------------- | ----------------------------------------------- |
+| Entidades F1 (overall)       | 74.0% (P 75.2%, R 72.8%)                        |
+| Entidades F1 — PERSON        | **94.9%** (P 92.3%, R 97.6%)                    |
+| Entidades F1 — ORG           | **52.6%** (P 56.0%, R 49.6%, tp=65 fp=51 fn=66) |
+| `overall_sentiment` accuracy | 59.5% (17/42 artículos mal clasificados)        |
+| `sentiment_toward` accuracy  | 59.9%                                           |
 
 La brecha ORG vs. PERSON (52.6% vs. 94.9%) es la señal más grande y más
 barata de cerrar. Se investigaron los 66 falsos negativos y 51 falsos
@@ -149,10 +149,12 @@ directas). Causas dominantes, en orden de impacto medido:
 ## Task 1: No filtrar "Gobierno" como ORG genérico
 
 **Files:**
+
 - Modify: `src/odin/analysis/local_analyzer.py:54-61`
 - Test: `tests/analysis/test_local_analyzer.py`
 
 **Interfaces:**
+
 - Consumes: nada nuevo.
 - Produces: nada que otra tarea consuma — cambio autocontenido.
 
@@ -162,7 +164,7 @@ directas). Causas dominantes, en orden de impacto medido:
 > la frase de ejemplo del test positivo (`"El Gobierno anunció..."`) etiqueta
 > "Gobierno" como LOC en `es_core_news_lg`, no ORG — nunca habría ejercido el
 > fix. Se usó en su lugar `"La Fuerza del Pueblo presentó sus críticas y
-> propuestas frente al Gobierno."` (misma construcción adversarial aplicada
+propuestas frente al Gobierno."` (misma construcción adversarial aplicada
 > también al test negativo de "Estado", que tenía el mismo problema).
 > Verificado en vivo contra spaCy antes de aceptar la desviación; ver
 > `git log` (commits `0c62077`, `ebe72b0`) para el texto final real.
@@ -268,17 +270,19 @@ git commit -m "fix: stop filtering 'Gobierno' as a generic state ORG"
 ## Task 2: Elegir el nombre de display más completo, no el más repetido
 
 **Files:**
+
 - Modify: `src/odin/analysis/local_analyzer.py:186-207` (agregar función
   cerca de `_extraction_confidence`), `:510` (usarla en `_entities`)
 - Test: `tests/analysis/test_local_analyzer.py`
 
 **Interfaces:**
+
 - Consumes: nada nuevo.
 - Produces: `_best_display_name(display: Counter[str]) -> str` — función
   libre a nivel de módulo, sin dependencias de spaCy. No la consume ninguna
   otra tarea de este plan, pero queda disponible para reutilizar.
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 Agregar a `tests/analysis/test_local_analyzer.py`. Primero, ampliar el
 import de `odin.analysis.local_analyzer` (líneas 15-22) agregando
@@ -323,7 +327,7 @@ class TestBestDisplayName:
         assert _best_display_name(display) == "MINERD"
 ```
 
-- [ ] **Step 2: Confirmar que fallan**
+- [x] **Step 2: Confirmar que fallan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py::TestBestDisplayName -v`
 Expected: FAIL — `ImportError: cannot import name '_best_display_name'`.
@@ -366,7 +370,7 @@ por:
             display = _best_display_name(g["display"])
 ```
 
-- [ ] **Step 4: Confirmar que pasan**
+- [x] **Step 4: Confirmar que pasan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py -v`
 Expected: PASS — todos.
@@ -383,15 +387,17 @@ git commit -m "fix: prefer the most complete entity name over the most frequent 
 ## Task 3: Resolver siglas dominicanas conocidas contra el catálogo estático
 
 **Files:**
+
 - Modify: `src/odin/analysis/local_analyzer.py:38-42` (import), `:112`
   (constante nueva), `:477-491` (loop de recolección de entidades)
 - Modify: `src/odin/db/seed_aliases.py:128-137` (agregar `ITLA`)
 - Test: `tests/analysis/test_local_analyzer.py`
 
 **Interfaces:**
+
 - Consumes: `SEED_ALIASES: list[tuple[str, str, str]]` de
   `odin.db.seed_aliases` (ya existe, formato `(sigla, nombre_canónico,
-  tipo)`; import directo de la lista, no de `db.aliases` — ese último exige
+tipo)`; import directo de la lista, no de `db.aliases` — ese último exige
   sesión de BD, ver Global Constraints).
 - Produces: `_SEED_ALIAS_MAP: dict[tuple[str, str], str]` — constante de
   módulo en `local_analyzer.py`, no consumida por otras tareas de este
@@ -543,6 +549,7 @@ git commit -m "feat: resolve known Dominican institutional acronyms via the stat
 ## Task 4: Atenuar hacia NEU las frases con negación/desmentido explícito
 
 **Files:**
+
 - Modify: `src/odin/analysis/sentiment_lexicon.py` (nueva constante +
   funciones)
 - Modify: `src/odin/analysis/local_analyzer.py:38-42` (import), `:412-414`
@@ -550,6 +557,7 @@ git commit -m "feat: resolve known Dominican institutional acronyms via the stat
 - Test: `tests/analysis/test_sentiment_lexicon.py`
 
 **Interfaces:**
+
 - Consumes: `_compile`, `strip_accents` (ya existen en
   `sentiment_lexicon.py`).
 - Produces: `has_negation_cue(text: str) -> bool`,
@@ -560,10 +568,10 @@ git commit -m "feat: resolve known Dominican institutional acronyms via the stat
 
 **Contexto de la lista de frases**: extraídas literalmente de los 2
 artículos donde se midió el fallo (`odin-db-024`, `odin-db-025` —
-`tests/eval/golden_set.jsonl`), no inventadas: *"No hay apagones, no
-podemos hablar de apagones sino de sobrecarga"*, *"nosotros no damos
-apagones de noche"* (x2), *"negó que la interrupción eléctrica... sean
-apagones"*, *"no se registran apagones"*. `odin-db-010` (el tercer artículo
+`tests/eval/golden_set.jsonl`), no inventadas: _"No hay apagones, no
+podemos hablar de apagones sino de sobrecarga"_, _"nosotros no damos
+apagones de noche"_ (x2), _"negó que la interrupción eléctrica... sean
+apagones"_, _"no se registran apagones"_. `odin-db-010` (el tercer artículo
 NEU→NEG del golden set) se investigó y **no** entra en el alcance de esta
 tarea: su causa es distinta (cita dos posturas enfrentadas sin que ninguna
 domine — "detectar que dos citas se contradicen" no es lo que este fix
@@ -764,11 +772,13 @@ git commit -m "feat: dampen sentiment toward neutral on explicit negation/denial
 ## Task 5: Re-evaluar contra el golden set y fijar la nueva línea base
 
 **Files:**
+
 - Modify: `src/odin/analysis/local_analyzer.py:49` (`_LOCAL_ANALYZER_VERSION`)
 - Create: `tests/eval/baselines/2026-08-14-local.json`
 - Modify: `docs/PRECISION.md` §4, `docs/planning/conflicts.md`
 
 **Interfaces:**
+
 - Consumes: los 4 fixes de las Tareas 1-4, ya commiteados.
 - Produces: nada que otra tarea consuma — última tarea del plan.
 
@@ -874,16 +884,16 @@ misma sesión (`docs/superpowers/plans/` — expansión del golden set, 7
 tareas, ~1.5M tokens totales incluyendo una tarea de etiquetado de datos
 mucho más cara que cualquiera de las de aquí):
 
-| Tarea | Estimado |
-|---|---|
-| Tarea 1 (filtro "Gobierno") | ~70k tokens |
-| Tarea 2 (nombre de display) | ~70k tokens |
-| Tarea 3 (catálogo de siglas) | ~90k tokens |
-| Tarea 4 (amortiguador de negación) | ~100k tokens |
-| Tarea 5 (re-evaluación + docs) | ~60k tokens |
-| Revisión final de rama completa | ~100-120k tokens |
-| Contingencia (1 ronda de fix, probable en la Tarea 4) | ~50-80k tokens |
-| **Total estimado** | **~550-650k tokens** |
+| Tarea                                                 | Estimado             |
+| ----------------------------------------------------- | -------------------- |
+| Tarea 1 (filtro "Gobierno")                           | ~70k tokens          |
+| Tarea 2 (nombre de display)                           | ~70k tokens          |
+| Tarea 3 (catálogo de siglas)                          | ~90k tokens          |
+| Tarea 4 (amortiguador de negación)                    | ~100k tokens         |
+| Tarea 5 (re-evaluación + docs)                        | ~60k tokens          |
+| Revisión final de rama completa                       | ~100-120k tokens     |
+| Contingencia (1 ronda de fix, probable en la Tarea 4) | ~50-80k tokens       |
+| **Total estimado**                                    | **~550-650k tokens** |
 
 **Relación costo/beneficio por tarea**: las Tareas 1 y 2 son las de mayor
 beneficio por token — cambios de una función o una constante, riesgo casi

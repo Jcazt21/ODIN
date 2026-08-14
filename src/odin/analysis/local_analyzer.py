@@ -215,6 +215,25 @@ def _extraction_confidence(display_name: str, etype: str, count: int) -> float:
     return round(max(score, 0.1), 2)
 
 
+def _best_display_name(display: Counter[str]) -> str:
+    """Elige la variante más COMPLETA como nombre a mostrar, no la más
+    repetida: dentro de un mismo artículo una sigla puede aparecer más veces
+    que el nombre completo (p.ej. "PLD" 5 veces vs. "Partido de la
+    Liberación Dominicana" 1 vez), pero el nombre completo es la forma
+    canónica que espera quien lee el resultado — y la que puede coincidir
+    con el nombre etiquetado a mano en el golden set (medido:
+    tests/eval/golden_set.jsonl, odin-db-008/013/037/038 fallaban así antes
+    de esta regla). Empate en palabras significativas -> gana la más usada.
+    """
+    return max(
+        display,
+        key=lambda name: (
+            len([w for w in _norm_key(name).split() if w not in _NAME_PARTICLES]),
+            display[name],
+        ),
+    )
+
+
 @dataclass
 class _Sentences:
     """Las frases del documento ya recortadas, más lo necesario para ubicar
@@ -516,7 +535,7 @@ class LocalAnalyzer:
         results: list[EntityResult] = []
         for key, g in groups.items():
             _nkey, etype = key
-            display = g["display"].most_common(1)[0][0]  # variante más usada
+            display = _best_display_name(g["display"])
             sent_indices = sorted(g["mentions"])
             probas = [
                 _apply_label_boost(probas_by_index[i], boosts.get((key, i)))

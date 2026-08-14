@@ -8,12 +8,15 @@ de token/entidad, sin pasar por LocalAnalyzer.analyze().
 """
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 
 pytest.importorskip("spacy")
 
 from odin.analysis.local_analyzer import (
     LocalAnalyzer,
+    _best_display_name,
     _extraction_confidence,
     _is_named_after_place,
     _norm_key,
@@ -67,6 +70,20 @@ class TestExtractionConfidence:
 
     def test_never_goes_below_floor(self):
         assert _extraction_confidence("X", "PERSON", count=1) >= 0.1
+
+
+class TestBestDisplayName:
+    def test_prefers_full_name_over_more_frequent_acronym(self):
+        display = Counter({"PLD": 5, "Partido de la Liberación Dominicana": 1})
+        assert _best_display_name(display) == "Partido de la Liberación Dominicana"
+
+    def test_falls_back_to_most_common_on_tied_word_count(self):
+        display = Counter({"Luis Abinader": 1, "Rafael Abinader": 3})
+        assert _best_display_name(display) == "Rafael Abinader"
+
+    def test_single_candidate_is_returned_unchanged(self):
+        display = Counter({"MINERD": 3})
+        assert _best_display_name(display) == "MINERD"
 
 
 class TestVenueHeuristics:
