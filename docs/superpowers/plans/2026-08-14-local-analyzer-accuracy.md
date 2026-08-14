@@ -156,7 +156,16 @@ directas). Causas dominantes, en orden de impacto medido:
 - Consumes: nada nuevo.
 - Produces: nada que otra tarea consuma — cambio autocontenido.
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
+
+> **Ejecutado 2026-08-14** — desviación respecto al texto literal de abajo:
+> la frase de ejemplo del test positivo (`"El Gobierno anunció..."`) etiqueta
+> "Gobierno" como LOC en `es_core_news_lg`, no ORG — nunca habría ejercido el
+> fix. Se usó en su lugar `"La Fuerza del Pueblo presentó sus críticas y
+> propuestas frente al Gobierno."` (misma construcción adversarial aplicada
+> también al test negativo de "Estado", que tenía el mismo problema).
+> Verificado en vivo contra spaCy antes de aceptar la desviación; ver
+> `git log` (commits `0c62077`, `ebe72b0`) para el texto final real.
 
 Agregar a `tests/analysis/test_local_analyzer.py`, después de la clase
 `TestVenueHeuristics` (termina en la línea 107) y antes de
@@ -193,13 +202,13 @@ class TestGenericStateOrgFilter:
 Esto usa `_Sentences` y `LocalAnalyzer`, ya importados en el archivo — no
 hace falta agregar imports.
 
-- [ ] **Step 2: Confirmar que fallan**
+- [x] **Step 2: Confirmar que fallan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py::TestGenericStateOrgFilter -v`
 Expected: FAIL en `test_gobierno_is_extracted_as_an_org_entity` — "Gobierno"
 no aparece en `orgs` porque el filtro actual lo descarta.
 
-- [ ] **Step 3: Quitar "gobierno" del filtro**
+- [x] **Step 3: Quitar "gobierno" del filtro**
 
 Reemplazar el bloque en `src/odin/analysis/local_analyzer.py` (líneas 54-61):
 
@@ -235,17 +244,24 @@ _GENERIC_STATE_ORGS = {
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasan**
+- [x] **Step 4: Confirmar que pasan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py -v`
 Expected: PASS — todos, incluidos los nuevos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/odin/analysis/local_analyzer.py tests/analysis/test_local_analyzer.py
 git commit -m "fix: stop filtering 'Gobierno' as a generic state ORG"
 ```
+
+> **Estado real:** commit `0c62077`. Un fix round posterior (revisión de
+> rama completa) corrigió dos hallazgos Important — el test negativo de
+> "Estado" también resultó vacío por el mismo problema de etiquetado LOC, y
+> un comentario en el sitio del filtro (`local_analyzer.py:469-472`) seguía
+> listando "Gobierno" como filtrado — commit `ebe72b0`. Mergeado a `main`
+> (fast-forward) con el suite completo en verde (264 tests).
 
 ---
 
