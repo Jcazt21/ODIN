@@ -122,9 +122,10 @@ propios porcentajes.
   correctamente: si el sistema falla en detectar la entidad, ese caso no
   penaliza la métrica de sentimiento — la precisión "hacia una entidad" es
   condicional a haberla detectado, no una medida end-to-end independiente.
-- Los campos de encuadre (`framing`, `headline_intent`, `lead_orientation`,
-  `source_quality`, `has_hard_data`) son **juicios editoriales de un LLM**
-  sin verdad de terreno objetiva evidente — el golden set actual no los
-  etiqueta; si se quiere medir su precisión, requiere una metodología
-  distinta (posiblemente acuerdo inter-anotador en vez de una única
-  respuesta "correcta").
+- El campo `framing` ya está etiquetado en 34 de 42 artículos del golden set
+  y se mide su precisión (ver §4); los demás campos de encuadre
+  (`headline_intent`, `lead_orientation`, `source_quality`, `has_hard_data`)
+  son **juicios editoriales de un LLM** sin verdad de terreno objetiva
+  evidente — el golden set actual no los etiqueta. Para estos últimos, medir
+  su precisión requiere una metodología distinta (posiblemente acuerdo
+  inter-anotador en vez de una única respuesta "correcta").
