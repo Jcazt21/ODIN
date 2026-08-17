@@ -43,7 +43,7 @@ export function Nav({ items, activeTab, onTabChange, username, onLogout }: NavPr
           className="rounded-full px-[6px] py-[1px] font-mono text-[9px] font-medium uppercase"
           style={{ background: "var(--surface-2)", color: "var(--faint)", letterSpacing: "0.04em" }}
         >
-          beta v2.1.1
+          beta v2.2.1
         </span>
       </span>
 
