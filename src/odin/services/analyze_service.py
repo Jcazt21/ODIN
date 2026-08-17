@@ -257,9 +257,15 @@ def run_analyze_job(job_id: str) -> None:
         job.stage = None  # solo tiene sentido mientras el job corre
         job.finished_at = datetime.now(UTC)
         session.commit()
+        duration = time.perf_counter() - started
         ANALYZE_JOBS_TOTAL.labels(status=job.status).inc()
-        ANALYZE_JOB_DURATION_SECONDS.labels(status=job.status).observe(
-            time.perf_counter() - started
+        ANALYZE_JOB_DURATION_SECONDS.labels(status=job.status).observe(duration)
+        log.info(
+            "analyze_job_finished",
+            job_id=job_id,
+            url=url,
+            status=job.status,
+            duration_seconds=round(duration, 4),
         )
     finally:
         session.close()

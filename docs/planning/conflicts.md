@@ -223,6 +223,66 @@ corrida completa sin reporte parcial. Sigue **bloqueando la validación de
 1, 2 y 3** hasta que exista al menos una línea base LLM (Groq o Gemini)
 medida.
 
+**Actualización (2026-08-14) — 4 fixes de `LocalAnalyzer` medidos contra el
+mismo golden set.** Plan
+`docs/superpowers/plans/2026-08-14-local-analyzer-accuracy.md`, 4 tareas:
+(1) dejar de filtrar "Gobierno" como ORG genérico, (2) preferir el nombre de
+display más completo sobre el más frecuente al fusionar alias de una misma
+entidad, (3) resolver siglas institucionales dominicanas conocidas (PLD,
+ITLA, etc.) vía el catálogo estático `SEED_ALIASES` (ya existía para
+`canonicalize.py`, pero `LocalAnalyzer` nunca lo consultaba), y (4) atenuar
+hacia NEU el sentimiento de frases con negación/desmentido explícito.
+Números reales, `local`, mismos 42 artículos (detalle y desglose por tipo en
+`docs/PRECISION.md` §4, reportes completos en
+`tests/eval/baselines/2026-08-13-local.json` y
+`tests/eval/baselines/2026-08-14-local.json`):
+
+- F1 entidades (overall): 74.0% → 80.4%.
+- F1 ORG: 52.6% → 65.9% — sube con claridad, el objetivo directo de las
+  Tareas 1-3.
+- F1 PERSON: 94.9% → 94.9% (sin cambio neto), pero **no fue tan directo
+  como parece**: la Tarea 2 introdujo una regresión real (94.1%,
+  tp/fp/fn 119/11/4), encontrada precisamente por este proceso de
+  re-medición contra el golden set completo. Se aisló a un solo caso
+  (`odin-db-040`: el artículo escribe el nombre del gold, "Eduardo Sanz
+  Lovatón", una vez con un apodo insertado entre guiones — "Eduardo -Yayo-
+  Sanz Lovatón" — que la regla de "preferir más palabras" de la Tarea 2
+  elegía como display name, rompiendo el emparejamiento por substring
+  contiguo del evaluador contra el gold). Se corrigió `_best_display_name`
+  con una guarda que excluye del conteo de palabras cualquier variante con
+  un apodo insertado entre guiones/paréntesis/comillas, validado contra los
+  42 artículos completos (no solo el caso que lo motivó) antes de darlo por
+  bueno — el resultado final vuelve exactamente al valor de 2026-08-13
+  (120/10/3).
+- Accuracy `overall_sentiment`: 59.5% → 59.5%, sin cambio (misma matriz de
+  confusión antes y después).
+- Accuracy `sentiment_toward`: 59.9% → 59.5%.
+
+**Dos cosas quedan explícitamente abiertas después de esta medición:**
+
+1. **Los 2 artículos que motivaron la Tarea 4 (`odin-db-024`, `odin-db-025`)
+   siguen prediciendo NEG con gold NEU** (0.4567 y 0.6221
+   respectivamente), re-chequeado en esta misma medición. El plan documenta
+   por qué (Tarea 4, "Estado real" bajo el Step 7): con el `factor=0.5`
+   literal del plan —el valor finalmente shippeado, después de que una
+   revisión rechazara un ajuste no validado (`factor=0.08`) curva-ajustado
+   contra solo esos 2 artículos por ser riesgo no medido contra el resto del
+   corpus— ninguno de los 2 casos llega a NEU. Arreglar esto sin volver a
+   curva-ajustar contra 2 casos requiere más artículos con negación/desmentido
+   en el golden set.
+2. **El clúster más grande de errores de `overall_sentiment` sigue sin
+   tocar**: 14 de los 17 artículos mal clasificados en la medición original
+   (`overall_sentiment` POS/NEG del gold cae a NEU por dilución en artículos
+   largos con mucho contenido administrativo/narrativo —
+   `odin-db-002/003/014/019/027`, etc.). El plan lo dejó deliberadamente
+   fuera de alcance (ver su sección "Fuera de alcance"): se investigó un
+   filtro de "frases tabulares" por densidad de dígitos y se descartó tras
+   medirlo contra el texto real (no discrimina de forma confiable), y
+   rediseñar la agregación de sentimiento con solo 42 artículos de
+   referencia es el mismo "ajuste a ciegas" que este documento ya advierte
+   evitar. Necesita más artículos en el golden set antes de intentar un fix
+   seguro.
+
 ### Deuda menor asociada
 
 - **El fallback no distingue "mal configurado" de "falló"**

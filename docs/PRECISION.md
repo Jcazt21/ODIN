@@ -84,12 +84,73 @@ el campo `source` de cada fila). El objetivo fijado en `task.md` §2.4 es
 | Fecha | Tamaño de muestra | Analizador | F1 entidades | Accuracy sentimiento global | Accuracy `sentiment_toward` | Publicable como cifra de producto |
 |---|---|---|---|---|---|---|
 | 2026-08-13 | 42 | `local` | 74.0% | 59.5% | 59.9% | **No** — muestra insuficiente (objetivo 150-300) |
+| 2026-08-14 | 42 | `local` | 80.4% | 59.5% | 59.5% | **No** — muestra insuficiente (objetivo 150-300) |
 
-Reporte completo: `tests/eval/baselines/2026-08-13-local.json`. Nota:
+Reporte completo: `tests/eval/baselines/2026-08-13-local.json` (2026-08-13),
+`tests/eval/baselines/2026-08-14-local.json` (2026-08-14). Nota:
 `LocalAnalyzer` no es un LLM y no llena de forma significativa los campos de
 encuadre/atribución (`framing`, `sentiment_basis`, etc.) — sus accuracies
 para esos campos, presentes en el JSON, no reflejan juicio real y no se
 copian aquí.
+
+**Medición 2026-08-14 — 4 fixes de extracción de entidades y sentimiento.**
+Corrida contra el mismo golden set de 42 artículos, después de implementar
+las 4 tareas de
+`docs/superpowers/plans/2026-08-14-local-analyzer-accuracy.md`: dejar de
+filtrar "Gobierno" como ORG genérico (Tarea 1), preferir el nombre de
+display más completo sobre el más frecuente al fusionar alias de una misma
+entidad (Tarea 2), resolver siglas institucionales dominicanas conocidas
+(PLD, ITLA, etc.) vía el catálogo estático `SEED_ALIASES` (Tarea 3), y
+atenuar hacia NEU el sentimiento de frases con negación/desmentido explícito
+(Tarea 4). Desglose por tipo (no está en la tabla, que solo reporta F1
+global de entidades):
+
+| Métrica | 2026-08-13 | 2026-08-14 |
+|---|---|---|
+| F1 ORG | 52.6% | **65.9%** |
+| F1 PERSON | 94.9% | 94.9% (sin cambio neto) |
+| F1 entidades (overall) | 74.0% | 80.4% |
+| Accuracy `overall_sentiment` | 59.5% | 59.5% (sin cambio) |
+| Accuracy `sentiment_toward` | 59.9% | 59.5% |
+
+F1 de ORG sube con claridad (+13.3 puntos, tp/fp/fn 65/51/66 → 83/38/48) —
+es el objetivo directo de las Tareas 1-3, consistente con las causas de
+falsos negativos de ORG medidas en el plan.
+
+**Nota sobre F1 de PERSON — pasó por una regresión real antes de esta
+medición final.** La primera corrida contra el código de las Tareas 1-4 dio
+94.1% (119/11/4), una caída de 0.8 puntos. Se investigó y se aisló a un solo
+caso real, no ruido de entorno: `odin-db-040` (gold `"Eduardo Sanz
+Lovatón"`) — el cuerpo del artículo escribe el nombre una vez como
+`"Eduardo -Yayo- Sanz Lovatón"` (apodo entre guiones, patrón común del
+periodismo dominicano) y tres veces como `"Sanz Lovatón"`. La regla de la
+Tarea 2 (preferir la variante con más palabras significativas) elegía la
+variante con el apodo por tener más palabras "en bruto", pero el apodo
+insertado rompía el emparejamiento por substring contiguo del evaluador
+contra el gold — convirtiendo un acierto en un falso positivo + un falso
+negativo. Se corrigió `_best_display_name` (guarda `_has_nickname_splice`:
+una variante con un segmento entre guiones/paréntesis/comillas con texto
+real a ambos lados no compite por conteo de palabras) y se validó de nuevo
+contra los 42 artículos: **F1 de PERSON vuelve exactamente a 94.9%
+(120/10/3)**, idéntico al valor de 2026-08-13, sin afectar el F1 de ORG.
+
+**Nota sobre `overall_sentiment` (59.5% → 59.5%, sin cambio) y
+`sentiment_toward` (59.9% → 59.5%, -0.4 puntos).** La matriz de confusión de
+`overall_sentiment` es idéntica antes y después. La Tarea 4 (amortiguador de
+negación) tiene un cortocircuito documentado en el plan (Tarea 4, "Estado
+real" bajo el Step 7): con el `factor=0.5` literal del plan (el valor
+finalmente shippeado, tras revertir un ajuste no validado contra solo 2
+artículos), **ninguno de los 2 artículos que motivaron la tarea alcanza
+NEU** — re-chequeado en esta misma medición: `odin-db-024` sigue
+prediciendo NEG (0.4567) y `odin-db-025` sigue prediciendo NEG (0.6221),
+ambos con gold NEU. La pequeña caída en `sentiment_toward` (0.4 puntos) no
+se investigó a fondo — es un efecto de segundo orden, probablemente por qué
+entidades terminan emparejadas con el gold cambia levemente entre las dos
+corridas; no se considera significativo dado el tamaño de muestra (42
+artículos). El clúster de error más grande de `overall_sentiment` (dilución
+de sentimiento en artículos largos y narrativos, 14 de los 17 casos mal
+clasificados en la medición original) queda fuera de alcance de este plan —
+ver `docs/planning/conflicts.md`, Conflicto 4.
 
 **Línea base de Groq bloqueada (2026-08-13).** Se intentó correr
 `scripts/evaluate.py --analyzer groq` contra el mismo golden set de 42

@@ -30,6 +30,7 @@ interfaz Analyzer); ver analysis/gemini_analyzer.py.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -37,16 +38,18 @@ from dataclasses import dataclass
 from odin.analysis.base import AnalysisResult, EntityResult
 from odin.analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
 from odin.analysis.sentiment_lexicon import apply_label_boost as _apply_label_boost
+from odin.analysis.sentiment_lexicon import apply_negation_dampening as _apply_negation_dampening
 from odin.analysis.sentiment_lexicon import entity_relation_hits as _entity_relation_hits
 from odin.analysis.text_norm import norm_key as _norm_key
 from odin.analysis.text_norm import strip_accents as _strip_accents
+from odin.db.seed_aliases import SEED_ALIASES as _SEED_ALIASES
 
 # Versión de la heurística de LocalAnalyzer (§2.1 de task.md): subirla cuando
 # cambie una regla que afecta el resultado (_VENUE_WORDS, _is_named_after_place,
 # _merge_aliases, umbrales de _extraction_confidence, el glosario de
 # analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
 # se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "6"
+_LOCAL_ANALYZER_VERSION = "7"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
@@ -118,6 +121,17 @@ _VENUE_WORDS = {
 # relaciones de dependencia que conectan un nombre propio con la palabra que
 # describe qué es (para subir por la cadena y encontrar la cabeza real).
 _HEAD_CHAIN_DEPS = {"appos", "flat", "nmod", "conj"}
+
+# Catálogo curado de siglas dominicanas (mismo que puebla la tabla
+# `entity_aliases`, ver db/seed_aliases.py) — import directo de la lista en
+# memoria, SIN tocar la BD: resuelve tanto siglas silábicas que
+# `_merge_aliases`/`_initials` no puede derivar (MINERD, SENASA, INTRANT,
+# ITLA...) como el caso en que el artículo NUNCA escribe el nombre completo
+# (medido: odin-db-008/odin-db-012 solo dicen "PLD", nunca "Partido de la
+# Liberación Dominicana" — ninguna fusión intra-artículo puede arreglar eso).
+_SEED_ALIAS_MAP: dict[tuple[str, str], str] = {
+    (_norm_key(alias), etype): canonical for alias, canonical, etype in _SEED_ALIASES
+}
 
 
 def sentence_mentions_venue_word(text: str) -> bool:
@@ -215,6 +229,32 @@ def _extraction_confidence(display_name: str, etype: str, count: int) -> float:
     return round(max(score, 0.1), 2)
 
 
+# Un apodo/alias insertado ENTRE guiones, paréntesis o comillas, en medio de
+# un nombre — patrón típico del periodismo dominicano ("Eduardo -Yayo- Sanz
+# Lovatón", "Danilo (el Rubio) Medina", 'Juan "Manguera" Pérez'). Un solo
+# guión suelto ("Jean-Claude") no matchea: hace falta el PAR que encierra
+# algo. La alternativa de guiones va anclada a límites de espacio/cadena
+# (`(?<!\S)...(?!\S)`) para que el guión de cierre solo pueda ser el que abre
+# el MISMO token "-apodo-", y no el guión de un apellido compuesto distinto
+# más adelante en el nombre (p.ej. "Jean-Claude Pérez-Gómez": sin el ancla,
+# el guión de "Jean-" se emparejaba con el de "-Gómez", tragándose "Claude
+# Pérez" como si fuera un apodo insertado).
+_NICKNAME_SPLICE_RE = re.compile(
+    r'(?<!\S)-[^-]{1,40}-(?!\S)|\([^)]{1,40}\)|"[^"]{1,40}"|\'[^\']{1,40}\'|“[^”]{1,40}”|«[^»]{1,40}»'
+)
+
+
+def _has_nickname_splice(name: str) -> bool:
+    """True si `name` tiene un segmento entre guiones/paréntesis/comillas con
+    texto real ANTES y DESPUÉS dentro del mismo nombre — es decir, insertado
+    en medio, no un nombre que simplemente EMPIEZA o TERMINA entre comillas.
+    """
+    for m in _NICKNAME_SPLICE_RE.finditer(name):
+        if name[: m.start()].strip() and name[m.end() :].strip():
+            return True
+    return False
+
+
 def _best_display_name(display: Counter[str]) -> str:
     """Elige la variante más COMPLETA como nombre a mostrar, no la más
     repetida: dentro de un mismo artículo una sigla puede aparecer más veces
@@ -224,14 +264,22 @@ def _best_display_name(display: Counter[str]) -> str:
     con el nombre etiquetado a mano en el golden set (medido:
     tests/eval/golden_set.jsonl, odin-db-008/013/037/038 fallaban así antes
     de esta regla). Empate en palabras significativas -> gana la más usada.
+
+    EXCEPCIÓN: una variante con un apodo insertado en medio (ver
+    `_has_nickname_splice`) no cuenta su longitud extra para esta regla,
+    aunque tenga más palabras "significativas" en bruto — ese apodo no es
+    parte del nombre canónico, y dejarlo ganar por longitud produce un
+    display name que ya no matchea por substring contiguo al nombre del
+    golden set (odin-db-040: "Eduardo -Yayo- Sanz Lovatón" NO debe ganarle a
+    "Sanz Lovatón" solo porque "Yayo" infla el conteo de palabras).
     """
-    return max(
-        display,
-        key=lambda name: (
-            len([w for w in _norm_key(name).split() if w not in _NAME_PARTICLES]),
-            display[name],
-        ),
-    )
+
+    def word_count(name: str) -> int:
+        if _has_nickname_splice(name):
+            return 0
+        return len([w for w in _norm_key(name).split() if w not in _NAME_PARTICLES])
+
+    return max(display, key=lambda name: (word_count(name), display[name]))
 
 
 @dataclass
@@ -438,7 +486,8 @@ class LocalAnalyzer:
             probs = torch.softmax(logits, dim=1)
             for orig, row in zip(batch_orig, probs, strict=True):
                 probas = {analyzer.id2label[i]: row[i].item() for i in analyzer.id2label}
-                results[orig] = _apply_sentiment_boost(orig, probas)
+                probas = _apply_sentiment_boost(orig, probas)
+                results[orig] = _apply_negation_dampening(orig, probas)
         return results
 
     def _keywords(self, doc, top_k: int = 8) -> list[str]:
@@ -473,7 +522,17 @@ class LocalAnalyzer:
         for ent in doc.ents:
             etype = _WANTED_ENT.get(ent.label_)
             if not etype:
-                continue
+                # Si no es un tipo deseado, verificar si es un acrónimo conocido
+                # del catálogo — pueden estar etiquetados como MISC por spaCy
+                name = " ".join(ent.text.split())
+                nkey = _norm_key(name)
+                # Checar ORG: todos los acrónimos silábicos del catálogo que
+                # necesitaban esta resolución (MINERD, SENASA, INTRANT, ITLA)
+                # son organizaciones. PERSON entries no necesitan este fallback.
+                if (nkey, "ORG") in _SEED_ALIAS_MAP:
+                    etype = "ORG"
+                else:
+                    continue
             # Un salto de línea dentro del span es la señal más confiable de
             # que trafilatura pegó un título con el subtítulo siguiente sin
             # puntuación ("Leonel\nCuestionamientos a operativos" -> spaCy
@@ -511,6 +570,10 @@ class LocalAnalyzer:
             ):
                 continue
             key = (nkey, etype)
+            canonical = _SEED_ALIAS_MAP.get(key)
+            if canonical is not None:
+                name = canonical
+                key = (_norm_key(canonical), etype)
             g = groups.setdefault(
                 key,
                 {"display": Counter(), "count": 0, "mentions": defaultdict(list)},
