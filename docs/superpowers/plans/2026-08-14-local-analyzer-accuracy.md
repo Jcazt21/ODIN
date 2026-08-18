@@ -332,7 +332,7 @@ class TestBestDisplayName:
 Run: `pytest tests/analysis/test_local_analyzer.py::TestBestDisplayName -v`
 Expected: FAIL — `ImportError: cannot import name '_best_display_name'`.
 
-- [ ] **Step 3: Implementar la función y usarla**
+- [x] **Step 3: Implementar la función y usarla**
 
 En `src/odin/analysis/local_analyzer.py`, agregar esta función justo
 después de `_extraction_confidence` (que termina en la línea 207) y antes
@@ -413,7 +413,21 @@ llegar a esta resolución — arreglar eso exigiría tocar ese filtro de
 longitud, sin evidencia de que valga la pena para un solo caso; queda fuera
 de este plan.
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
+
+> **Ejecutado 2026-08-14** — vía `superpowers:subagent-driven-development`
+> (implementador + revisor de tarea + 1 ronda de fix + re-revisión, todo en
+> la sesión actual). Desviación respecto al texto literal de abajo: además
+> del código de los Steps 3-5, hizo falta un fallback adicional en
+> `_entities` (justo después de `etype = _WANTED_ENT.get(ent.label_)`) para
+> resolver "ITLA" — spaCy lo etiqueta MISC, no ORG, así que sin este
+> fallback la entidad nunca llegaba al punto de resolución que describe el
+> Step 5. El primer intento del implementador cubría ORG y PERSON; la
+> revisión de tarea lo marcó Important (sin caso de uso ni test que lo
+> ejercitara, riesgo real de falso positivo sobre alias PERSON de un solo
+> nombre ya existentes en `SEED_ALIASES` como "Danilo"/"Leonel") y quedó
+> acotado a solo ORG tras una ronda de fix + re-revisión limpia. Ver
+> `local_analyzer.py:486-498` para el código final real.
 
 Agregar a `tests/analysis/test_local_analyzer.py`, después de la nueva
 clase `TestGenericStateOrgFilter` (Tarea 1) y antes de
@@ -447,13 +461,13 @@ class TestSeedAliasResolution:
         assert "ITLA" not in orgs
 ```
 
-- [ ] **Step 2: Confirmar que fallan**
+- [x] **Step 2: Confirmar que fallan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py::TestSeedAliasResolution -v`
 Expected: FAIL en ambos — hoy "PLD"/"ITLA" quedan tal cual, sin resolver
 (y `ITLA` tampoco existe todavía en `SEED_ALIASES`).
 
-- [ ] **Step 3: Agregar `ITLA` al catálogo**
+- [x] **Step 3: Agregar `ITLA` al catálogo**
 
 En `src/odin/db/seed_aliases.py`, en la sección `# --- Universidades ---`
 (líneas 127-137), agregar una línea después de `UFHEC`:
@@ -463,7 +477,7 @@ En `src/odin/db/seed_aliases.py`, en la sección `# --- Universidades ---`
     ("ITLA",   "Instituto Tecnológico de Las Américas", "ORG"),
 ```
 
-- [ ] **Step 4: Importar el catálogo y construir el mapa de resolución**
+- [x] **Step 4: Importar el catálogo y construir el mapa de resolución**
 
 En `src/odin/analysis/local_analyzer.py`, agregar el import junto a los
 demás `from odin...` (después de la línea 42):
@@ -488,7 +502,7 @@ _SEED_ALIAS_MAP: dict[tuple[str, str], str] = {
 }
 ```
 
-- [ ] **Step 5: Resolver en el loop de recolección de entidades**
+- [x] **Step 5: Resolver en el loop de recolección de entidades**
 
 En `_entities` (dentro de `src/odin/analysis/local_analyzer.py`), reemplazar:
 
@@ -532,10 +546,13 @@ por:
             g["display"][name] += 1
 ```
 
-- [ ] **Step 6: Confirmar que pasan**
+- [x] **Step 6: Confirmar que pasan**
 
 Run: `pytest tests/analysis/test_local_analyzer.py -v`
 Expected: PASS — todos, incluidas las Tareas 1 y 2 ya implementadas.
+
+> **Estado real:** 103/103 en `tests/analysis/` (suite completa de la
+> carpeta, no solo este archivo).
 
 - [ ] **Step 7: Commit**
 
@@ -543,6 +560,12 @@ Expected: PASS — todos, incluidas las Tareas 1 y 2 ya implementadas.
 git add src/odin/analysis/local_analyzer.py src/odin/db/seed_aliases.py tests/analysis/test_local_analyzer.py
 git commit -m "feat: resolve known Dominican institutional acronyms via the static seed alias catalog"
 ```
+
+> **Estado real:** sin commitear a propósito — CLAUDE.md de este proyecto
+> exige que los commits los haga el usuario manualmente. Cambios listos en
+> el working tree sobre `dev` (`local_analyzer.py`, `seed_aliases.py`,
+> `test_local_analyzer.py`); este checkbox queda sin marcar hasta que el
+> usuario commitee.
 
 ---
 
@@ -577,7 +600,21 @@ tarea: su causa es distinta (cita dos posturas enfrentadas sin que ninguna
 domine — "detectar que dos citas se contradicen" no es lo que este fix
 ataca).
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
+
+> **Ejecutado 2026-08-14** — vía `superpowers:subagent-driven-development`
+> (implementador + revisor de tarea + 1 ronda de fix + re-revisión). El
+> primer intento del implementador se desvió del texto literal de abajo:
+> subió el `factor` de `dampen_negated` de `0.5` a `0.08` y agregó
+> "tampoco"/"no hubo"/"no se prolonguen" a `_NEGATION_CUES` — ajustado por
+> curva contra solo 2 de los 42 artículos del golden set (odin-db-024/025),
+> no contra el corpus completo (eso es la Tarea 5). La revisión de tarea lo
+> marcó Critical (riesgo real de neutralizar de más contenido negativo
+> genuino en el resto del corpus, sin medir) y quedó revertido a los
+> valores literales de abajo (`factor=0.5`, lista de 14 frases sin
+> agregados) tras una ronda de fix + re-revisión limpia. Ver el Step 7 de
+> abajo para el resultado real con estos valores — no coincide con lo que
+> dice "Expected".
 
 Agregar a `tests/analysis/test_sentiment_lexicon.py`. Ampliar el import
 (líneas 9-16):
@@ -634,12 +671,12 @@ class TestApplyNegationDampening:
         assert apply_negation_dampening("Hubo un escándalo en el ministerio", probas) == probas
 ```
 
-- [ ] **Step 2: Confirmar que fallan**
+- [x] **Step 2: Confirmar que fallan**
 
 Run: `pytest tests/analysis/test_sentiment_lexicon.py -v`
 Expected: FAIL — `ImportError: cannot import name 'has_negation_cue'`.
 
-- [ ] **Step 3: Implementar en `sentiment_lexicon.py`**
+- [x] **Step 3: Implementar en `sentiment_lexicon.py`**
 
 Agregar, después de `_ENTITY_POS_PATTERNS` (línea 105) y antes del
 comentario de `BOOST` (línea 107):
@@ -698,12 +735,12 @@ def apply_negation_dampening(text: str, probas: dict[str, float]) -> dict[str, f
     return dampen_negated(probas, has_negation_cue(text))
 ```
 
-- [ ] **Step 4: Confirmar que pasan**
+- [x] **Step 4: Confirmar que pasan**
 
 Run: `pytest tests/analysis/test_sentiment_lexicon.py -v`
 Expected: PASS — todos.
 
-- [ ] **Step 5: Conectar en `_predict_batch`**
+- [x] **Step 5: Conectar en `_predict_batch`**
 
 En `src/odin/analysis/local_analyzer.py`, agregar el import junto a los
 demás de `sentiment_lexicon` (después de la línea 40):
@@ -729,12 +766,14 @@ por:
                 results[orig] = _apply_negation_dampening(orig, probas)
 ```
 
-- [ ] **Step 6: Correr toda la suite**
+- [x] **Step 6: Correr toda la suite**
 
 Run: `pytest tests/analysis/ -v`
 Expected: PASS — todos, incluidas las Tareas 1-3.
 
-- [ ] **Step 7: Validar contra los 2 artículos que motivaron el fix**
+> **Estado real:** 107/107 en `tests/analysis/`.
+
+- [x] **Step 7: Validar contra los 2 artículos que motivaron el fix**
 
 Esto es el paso que de verdad importa — los tests unitarios prueban la
 mecánica, no si el `factor=0.5` alcanza para mover el agregado del
@@ -760,12 +799,44 @@ los dos). Si sigue dando `NEG`, subir `factor` en `dampen_negated`
 (probar `0.7`) y repetir este chequeo antes de continuar — no avanzar a la
 Tarea 5 con este caso sin resolver, es la evidencia que motivó la tarea.
 
+> **Estado real, no coincide con "Expected":** con `factor=0.5` (valor
+> literal de este plan), **ninguno de los dos artículos llega a NEU**:
+> `odin-db-024` predice NEG (0.4567), `odin-db-025` predice NEG (0.6221).
+> No se subió el factor para forzar un "pase" — ver el aviso del Step 1
+> arriba: un intento anterior bajó el factor a 0.08 (curva ajustada contra
+> estos mismos 2 artículos) y sí lograba NEU en `odin-db-024`, pero la
+> revisión de tarea lo rechazó por riesgo no medido contra el resto del
+> corpus, y quedó revertido a los valores de este plan.
+>
+> **Además, la sugerencia de este mismo Step 7 ("subir factor... probar
+> 0.7") es matemáticamente incorrecta** dado el código real de
+> `dampen_negated`: `factor` más alto significa MENOS atenuación (más
+> cerca de la probabilidad original), no más — subir a 0.7 aleja el
+> resultado de NEU en vez de acercarlo. Confirmado por derivación directa
+> de la fórmula y por el barrido empírico que hizo el implementador
+> (0.5 a 0.85 probados, ninguno logra NEU en ninguno de los 2 artículos).
+>
+> **Esta tarea queda con este caso sin resolver**, en contra de lo que
+> pide el párrafo de arriba — decisión consciente (revisor + controlador),
+> no un descuido: la alternativa (ajustar el umbral a ciegas contra 2/42
+> artículos) viola el principio explícito de este plan de nunca ajustar un
+> umbral sin medir el efecto real contra el golden set completo. Queda
+> pendiente para cuando corra la Tarea 5 (medición contra los 42
+> artículos) o para el rediseño de `_aggregate` que la sección "Fuera de
+> alcance" de este plan ya reconoce como fuera de este plan.
+
 - [ ] **Step 8: Commit**
 
 ```bash
 git add src/odin/analysis/local_analyzer.py src/odin/analysis/sentiment_lexicon.py tests/analysis/test_sentiment_lexicon.py
 git commit -m "feat: dampen sentiment toward neutral on explicit negation/denial cues"
 ```
+
+> **Estado real:** sin commitear a propósito — CLAUDE.md exige que los
+> commits los haga el usuario manualmente. Cambios listos en el working
+> tree sobre `dev` (`sentiment_lexicon.py`, `local_analyzer.py`,
+> `test_sentiment_lexicon.py`); este checkbox queda sin marcar hasta que
+> el usuario commitee.
 
 ---
 
@@ -782,7 +853,18 @@ git commit -m "feat: dampen sentiment toward neutral on explicit negation/denial
 - Consumes: los 4 fixes de las Tareas 1-4, ya commiteados.
 - Produces: nada que otra tarea consuma — última tarea del plan.
 
-- [ ] **Step 1: Subir la versión del heurístico**
+- [x] **Step 1: Subir la versión del heurístico**
+
+> **Ejecutado 2026-08-15/16** — vía `superpowers:subagent-driven-development`
+> (implementador + revisor de tarea, en la misma sesión que las Tareas 3-4).
+> Esta tarea NO salió limpia al primer intento: el Step 4 de abajo disparó
+> el gate explícito de este mismo plan ("si PERSON F1 baja, no continuar")
+> — se investigó, se encontró una regresión REAL (no ruido de entorno,
+> como se sospechó al principio) en `_best_display_name` de la Tarea 2 ya
+> commiteada, se corrigió esa función (con su propio ciclo
+> implementador+revisor+1 ronda de fix), y esta tarea se re-corrió desde el
+> Step 3 contra el código corregido. Ver el Step 4 de abajo para el relato
+> completo.
 
 En `src/odin/analysis/local_analyzer.py`, cambiar (línea 49):
 
@@ -796,13 +878,16 @@ por:
 _LOCAL_ANALYZER_VERSION = "7"
 ```
 
-- [ ] **Step 2: Correr toda la suite de tests**
+- [x] **Step 2: Correr toda la suite de tests**
 
 Run: `pytest tests/ -q`
 Expected: PASS — sin regresiones en ningún archivo, no solo en
 `tests/analysis/`.
 
-- [ ] **Step 3: Correr la evaluación completa contra el golden set**
+> **Estado real:** 275/275 (corrida antes del fix de `_best_display_name`;
+> 112/112 en `tests/analysis/` reconfirmado después del fix — ver Step 4).
+
+- [x] **Step 3: Correr la evaluación completa contra el golden set**
 
 ```bash
 python scripts/evaluate.py --analyzer local --out tests/eval/baselines/2026-08-14-local.json
@@ -812,7 +897,14 @@ Anotar la salida impresa completa (F1 de entidades overall/PERSON/ORG,
 accuracy de `overall_sentiment`, accuracy de `sentiment_toward`) — son los
 números reales que van al siguiente paso, no se inventan.
 
-- [ ] **Step 4: Comparar contra la línea base anterior**
+> **Estado real:** corrida DOS VECES. La primera corrida (antes de
+> encontrar la regresión de la Tarea 2, ver Step 4) dio F1 PERSON 94.1%
+> (tp=119 fp=11 fn=4) — esa corrida NO se guardó como archivo, se descartó
+> tras el diagnóstico. La corrida final (después del fix) es la que quedó
+> en `tests/eval/baselines/2026-08-14-local.json` y es la que reportan los
+> números de abajo.
+
+- [x] **Step 4: Comparar contra la línea base anterior**
 
 ```bash
 python3 -c "
@@ -834,14 +926,52 @@ se mantiene (el objetivo de la Tarea 4 es arreglar 2 de 17 casos, no todo
 el clúster). Si ORG F1 no sube, o si PERSON F1 baja, **no continuar**:
 volver a la tarea responsable y revisar antes de documentar nada.
 
-- [ ] **Step 5: Registrar los resultados en `docs/PRECISION.md`**
+> **Estado real — este gate SÍ se disparó, y este plan lo respetó.** La
+> primera corrida dio F1 PERSON 94.1% (94.9%→94.1%, tp/fp/fn 120/10/3 →
+> 119/11/4) — una baja real, no ruido. Se investigó (primer intento con
+> `git stash` de los 3 archivos sin commitear fue metodológicamente
+> defectuoso: las Tareas 1-2 ya estaban commiteadas en `dev` antes de esta
+> sesión, así que ese stash nunca probó una base real pre-Tarea-1; llevó a
+> una conclusión errónea de "deriva de entorno" que la revisión de tarea
+> encontró y rechazó). Repetido correctamente contra `git show <commit
+> pre-Tarea-1>`: la baja es 100% real y se aisló a un solo caso,
+> `odin-db-040` — el artículo escribe el nombre del gold ("Eduardo Sanz
+> Lovatón") una vez como "Eduardo -Yayo- Sanz Lovatón" (apodo entre
+> guiones) y `_best_display_name` (Tarea 2) elegía esa variante por tener
+> más palabras, rompiendo el emparejamiento por substring del evaluador
+> contra el gold.
+>
+> Siguiendo literalmente la instrucción de este párrafo ("no continuar:
+> volver a la tarea responsable"): se reabrió la Tarea 2 (`_best_display_name`
+> en `local_analyzer.py`), se le agregó una guarda
+> `_has_nickname_splice` (excluye del conteo de palabras cualquier
+> variante con un apodo insertado entre guiones/paréntesis/comillas), con
+> su propio ciclo implementador+revisor+1 ronda de fix (una regex sin
+> anclar producía un falso positivo con apellidos compuestos con guión,
+> ej. "Jean-Claude Pérez-Gómez" — corregido con lookaround de límite de
+> palabra). Validado contra los 42 artículos completos, no solo contra
+> `odin-db-040`. Solo después de eso se re-corrió este Step 3-4 y se
+> escribieron los Steps 5-6 con los números finales (ver abajo). Los
+> `docs/PRECISION.md`/`docs/planning/conflicts.md` que se habían empezado
+> a escribir con la conclusión errónea de "deriva de entorno" se
+> revirtieron por completo antes de volver a intentarlo — nunca llegaron a
+> quedar en el working tree con esa explicación falsa.
+>
+> **Números finales reales** (`tests/eval/baselines/2026-08-14-local.json`,
+> post-fix): F1 overall 74.0%→80.4%; F1 ORG 52.6%→65.9% (tp/fp/fn
+> 65/51/66→83/38/48); F1 PERSON 94.9%→94.9% (120/10/3, idéntico a la línea
+> base — pero solo después de encontrar y arreglar la regresión, no porque
+> nada haya cambiado); `overall_sentiment` accuracy 59.5%→59.5% (matriz de
+> confusión idéntica); `sentiment_toward` accuracy 59.9%→59.5%.
+
+- [x] **Step 5: Registrar los resultados en `docs/PRECISION.md`**
 
 Agregar una fila nueva a la tabla de `## 4. Historial de mediciones` (junto
 a la fila `2026-08-13 | 42 | local | ...` ya existente) con los números
 reales del Step 3 — no los de este plan, los que imprimió tu propia
 corrida.
 
-- [ ] **Step 6: Actualizar `docs/planning/conflicts.md`**
+- [x] **Step 6: Actualizar `docs/planning/conflicts.md`**
 
 En la sección "Conflicto 4", agregar una nota fechada 2026-08-14 debajo del
 "Estado" ya existente, resumiendo: los 4 fixes de este plan (filtro de
@@ -852,12 +982,33 @@ en el Step 4, y — explícitamente — que el clúster más grande de errores d
 originales) sigue abierto y necesita más artículos en el golden set antes
 de intentar un fix seguro (ver la sección "Fuera de alcance" de este plan).
 
+> **Estado real:** hecho, más la historia de la regresión de PERSON F1
+> encontrada y arreglada (ver Step 4 arriba) — no estaba en el alcance
+> original del texto de este Step, pero es información real que un lector
+> de `conflicts.md` necesita para no malinterpretar "94.9%→94.9%" como que
+> no pasó nada. Verificado por un revisor independiente número por número
+> contra los dos JSON reales (`2026-08-13-local.json`,
+> `2026-08-14-local.json`), incluido un reconteo desde cero del "14 de 17"
+> del clúster de dilución — sin hallazgos.
+
 - [ ] **Step 7: Commit**
 
 ```bash
 git add src/odin/analysis/local_analyzer.py tests/eval/baselines/2026-08-14-local.json docs/PRECISION.md docs/planning/conflicts.md
 git commit -m "docs: record measured LocalAnalyzer accuracy improvements against golden set"
 ```
+
+> **Estado real:** sin commitear a propósito — CLAUDE.md exige que los
+> commits los haga el usuario manualmente. **Nota importante para el
+> commit**: la lista de archivos de arriba está incompleta para lo que de
+> verdad cambió en esta sesión — además de esos 4 archivos, quedan sin
+> commitear los cambios de las Tareas 3 y 4 completas
+> (`sentiment_lexicon.py`, `seed_aliases.py`, los archivos de test) y el
+> fix de la Tarea 2 dentro de `local_analyzer.py` (guarda
+> `_has_nickname_splice`) que se descubrió y arregló durante esta misma
+> Tarea 5. Probablemente tenga sentido como 2-3 commits separados (el fix
+> de Tarea 2 es conceptualmente distinto de "registrar resultados") en vez
+> de uno solo — queda a criterio del usuario.
 
 ---
 

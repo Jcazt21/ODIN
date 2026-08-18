@@ -85,6 +85,32 @@ class TestBestDisplayName:
         display = Counter({"MINERD": 3})
         assert _best_display_name(display) == "MINERD"
 
+    def test_ignores_nickname_spliced_in_middle_of_name(self):
+        # Regresión odin-db-040 (golden set): el artículo escribe el nombre
+        # una vez como "Eduardo -Yayo- Sanz Lovatón" (apodo entre guiones,
+        # patrón típico del periodismo dominicano) y tres veces como "Sanz
+        # Lovatón". El gold es "Eduardo Sanz Lovatón": la variante con
+        # apodo insertado tiene más palabras "significativas" en bruto (4
+        # contra 2), pero ese conteo extra viene de "Yayo", no de una
+        # extensión real del nombre, y romper el guion en medio hace que
+        # scripts/evaluate.py:_names_match dejara de reconocerla como el
+        # mismo nombre que el gold. "Sanz Lovatón" debe ganar.
+        display = Counter({"Eduardo -Yayo- Sanz Lovatón": 1, "Sanz Lovatón": 3})
+        assert _best_display_name(display) == "Sanz Lovatón"
+
+    def test_does_not_confuse_two_hyphenated_surnames_with_a_spliced_nickname(self):
+        # Falso positivo encontrado en revisión: sin anclar la alternativa de
+        # guiones a límites de espacio/cadena, el guión de cierre de
+        # "Jean-Claude" se emparejaba con el guión de apertura de
+        # "Pérez-Gómez" (un apellido compuesto distinto, más adelante en el
+        # mismo nombre), tragándose "Claude Pérez" como si fuera un apodo
+        # insertado y dejando ganar por default al nombre truncado — la
+        # misma clase de bug que esta regla existe para evitar, disparada de
+        # otra forma. "Jean-Claude Pérez-Gómez" no tiene ningún apodo
+        # insertado: debe ganarle a "Pérez-Gómez" por tener más palabras.
+        display = Counter({"Jean-Claude Pérez-Gómez": 1, "Pérez-Gómez": 3})
+        assert _best_display_name(display) == "Jean-Claude Pérez-Gómez"
+
 
 class TestVenueHeuristics:
     def test_homenaje_a_pattern_is_caught_by_linear_window(self, nlp):
@@ -149,6 +175,33 @@ class TestGenericStateOrgFilter:
             nlp, "La Fuerza del Pueblo presentó sus críticas y propuestas frente al Estado."
         )
         assert "Estado" not in orgs
+
+
+class TestSeedAliasResolution:
+    """Siglas del catálogo curado (db/seed_aliases.py) se resuelven al
+    nombre canónico SIN necesitar que el artículo escriba el nombre
+    completo — medido en el golden set: odin-db-008/012 solo dicen "PLD"
+    en todo el cuerpo (ver tests/eval/golden_set.jsonl)."""
+
+    @staticmethod
+    def _org_names(nlp, text: str) -> set[str]:
+        doc = nlp(text)
+        sentences = _Sentences.from_doc(doc)
+        probas_by_index = [None for _ in sentences.texts]
+        entities = LocalAnalyzer()._entities(doc, probas_by_index, sentences)
+        return {e.name for e in entities if e.type == "ORG"}
+
+    def test_acronym_only_mention_resolves_to_canonical_name(self, nlp):
+        orgs = self._org_names(nlp, "El vicepresidente del PLD, Iván Lorenzo, habló ayer.")
+        assert "Partido de la Liberación Dominicana" in orgs
+        assert "PLD" not in orgs
+
+    def test_silabic_acronym_not_derivable_from_initials_resolves(self, nlp):
+        orgs = self._org_names(
+            nlp, "El ITLA anunció nuevas becas técnicas para el próximo semestre."
+        )
+        assert "Instituto Tecnológico de Las Américas" in orgs
+        assert "ITLA" not in orgs
 
 
 class TestEntitySentimentBoost:

@@ -10,7 +10,10 @@ from odin.analysis.sentiment_lexicon import (
     PROMPT_GLOSSARY,
     apply_boost,
     apply_entity_relation_boost,
+    apply_negation_dampening,
+    dampen_negated,
     entity_relation_label,
+    has_negation_cue,
     lexicon_label,
     lexicon_matches,
 )
@@ -126,3 +129,38 @@ class TestPromptGlossary:
 
     def test_warns_against_conflating_event_and_entity_sentiment(self):
         assert "CADA entidad" in PROMPT_GLOSSARY
+
+
+class TestHasNegationCue:
+    def test_detects_common_denial_phrases(self):
+        assert has_negation_cue(
+            "No hay apagones, no podemos hablar de apagones sino de sobrecarga"
+        )
+        assert has_negation_cue("El funcionario negó las acusaciones en su contra")
+        assert has_negation_cue("Nosotros no damos apagones de noche")
+
+    def test_plain_statement_has_no_negation_cue(self):
+        assert not has_negation_cue("Hubo un apagón anoche en el sector Los Ríos")
+
+
+class TestDampenNegated:
+    def test_pulls_probabilities_toward_neutral(self):
+        probas = {"NEG": 0.7, "NEU": 0.2, "POS": 0.1}
+        dampened = dampen_negated(probas, negated=True)
+        assert dampened["NEG"] < probas["NEG"]
+        assert abs(sum(dampened.values()) - 1.0) < 1e-9
+
+    def test_noop_when_not_negated(self):
+        probas = {"NEG": 0.7, "NEU": 0.2, "POS": 0.1}
+        assert dampen_negated(probas, negated=False) == probas
+
+
+class TestApplyNegationDampening:
+    def test_dampens_when_text_has_negation_cue(self):
+        probas = {"NEG": 0.7, "NEU": 0.2, "POS": 0.1}
+        result = apply_negation_dampening("No hay irregularidades en el proceso", probas)
+        assert result["NEG"] < probas["NEG"]
+
+    def test_noop_when_no_negation_cue(self):
+        probas = {"NEG": 0.7, "NEU": 0.2, "POS": 0.1}
+        assert apply_negation_dampening("Hubo un escándalo en el ministerio", probas) == probas

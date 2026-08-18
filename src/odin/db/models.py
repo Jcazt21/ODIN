@@ -378,3 +378,27 @@ class EntityAlias(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<EntityAlias {self.alias} -> {self.canonical_name}>"
+
+
+class RuntimeSettings(Base):
+    """Fila única (id=1) de preferencias configurables desde Ajustes, sin
+    pasar por variables de entorno (ver core/config.py) ni reiniciar el
+    proceso.
+
+    Hoy solo `analyzer_mode` (motor de POST /api/analyze: "cascade" o
+    "local", ver services/analyzer_registry.py). Sin fila, ese servicio
+    sigue el comportamiento de ODIN_ANALYZER de siempre — esta tabla es un
+    override explícito, no un default duplicado.
+    """
+
+    __tablename__ = "runtime_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    analyzer_mode: Mapped[str] = mapped_column(String(20))
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<RuntimeSettings analyzer_mode={self.analyzer_mode!r}>"

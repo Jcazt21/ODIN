@@ -104,6 +104,22 @@ _ENTITY_POS_PATTERNS = [
     "elogiado por", "elogiada por", "elogiados por", "elogiadas por",
 ]
 
+# Frases de negación/desmentido explícito: pysentimiento (entrenado en
+# tuits generales) no distingue "hay apagones" de "no hay apagones" —
+# clasifica por el vocabulario que aparece sin pesar la negación que lo
+# precede (medido: "No hay apagones, no podemos hablar de apagones sino de
+# sobrecarga" puntúa NEG 0.63-0.96 pese a la negación explícita — ninguna
+# palabra de ese ejemplo está en el léxico de arriba, así que el boost NO
+# es la causa; es el modelo base). No intenta decidir hacia qué polaridad
+# debería caer la frase negada (podría ser NEU o incluso lo contrario de lo
+# que sugiere la palabra negada) — solo baja la confianza del modelo hacia
+# NEU en vez de forzar una etiqueta a ciegas.
+_NEGATION_CUES = [
+    "no hay", "no es", "no fue", "no fueron", "no son",
+    "no se registra", "no se registran", "no damos", "no dan",
+    "no podemos hablar de", "nego", "negaron", "no sean", "no sea",
+]
+
 # Empuje moderado sobre la probabilidad: alcanza para inclinar una frase que
 # el modelo ya veía cerca del límite entre etiquetas, pero no para voltear
 # una que el modelo clasificó con alta confianza en la dirección contraria
@@ -124,6 +140,7 @@ _NEG_RE = _compile(_NEG_TERMS)
 _POS_RE = _compile(_POS_TERMS)
 _ENTITY_NEG_RE = _compile(_ENTITY_NEG_PATTERNS)
 _ENTITY_POS_RE = _compile(_ENTITY_POS_PATTERNS)
+_NEGATION_RE = _compile(_NEGATION_CUES)
 
 
 def _label_from(text: str, neg_re: re.Pattern[str], pos_re: re.Pattern[str]) -> str | None:
@@ -212,6 +229,37 @@ def apply_label_boost(probas: dict[str, float], label: str | None) -> dict[str, 
     resolver a qué mención le corresponde el patrón relacional). No-op si
     `label` es None."""
     return _boosted(probas, label)
+
+
+def has_negation_cue(text: str) -> bool:
+    """True si el texto trae una negación/desmentido explícito de
+    `_NEGATION_CUES` — ver el comentario junto a la constante."""
+    normalized = strip_accents(text).lower()
+    return _NEGATION_RE.search(normalized) is not None
+
+
+def dampen_negated(
+    probas: dict[str, float], negated: bool, *, factor: float = 0.5
+) -> dict[str, float]:
+    """Si `negated`, acerca POS/NEG a NEU (con `factor=0.5`, reduce a la
+    mitad la distancia a NEU) en vez de invertir la etiqueta a ciegas: no
+    sabemos hacia qué polaridad debería caer la frase negada, solo que el
+    modelo no debería estar tan seguro. No-op si `negated` es False."""
+    if not negated:
+        return probas
+    neu = probas.get("NEU", 0.0)
+    adjusted = {
+        label: (neu + (prob - neu) * factor) if label != "NEU" else neu
+        for label, prob in probas.items()
+    }
+    total = sum(adjusted.values())
+    return {k: v / total for k, v in adjusted.items()}
+
+
+def apply_negation_dampening(text: str, probas: dict[str, float]) -> dict[str, float]:
+    """Combina `has_negation_cue` + `dampen_negated`: atenúa la frase hacia
+    NEU si trae una negación/desmentido explícito. No-op en caso contrario."""
+    return dampen_negated(probas, has_negation_cue(text))
 
 
 def lexicon_matches(text: str) -> dict[str, list[str]]:

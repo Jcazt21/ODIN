@@ -135,6 +135,7 @@ SEED_ALIASES: list[tuple[str, str, str]] = [
     ("UCNE",   "Universidad Católica Nordestana", "ORG"),
     ("UNAPEC", "Universidad APEC", "ORG"),
     ("UFHEC",  "Universidad Federico Henríquez y Carvajal", "ORG"),
+    ("ITLA",   "Instituto Tecnológico de Las Américas", "ORG"),
 
     # --- Agua, energía, medio ambiente y climatología ---
     ("INAPA",       "Instituto Nacional de Aguas Potables y Alcantarillados", "ORG"),
