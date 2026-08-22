@@ -1,0 +1,11 @@
+{
+  "prior": {
+    "NEG": 0.241571,
+    "NEU": 0.550586,
+    "POS": 0.207842
+  },
+  "n_articles": 210,
+  "n_sentences": 4194,
+  "estimated_at": "2026-08-21",
+  "note": "Tasa base de sentimiento por frase de pysentimiento sobre prensa dominicana, medida sobre artículos scrapeados SIN etiquetar y excluyendo las URLs del golden set. La consume LocalAnalyzer._aggregate_document. Regenerar con scripts/estimate_sentiment_prior.py."
+}

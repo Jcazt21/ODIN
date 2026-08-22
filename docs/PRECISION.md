@@ -85,6 +85,7 @@ el campo `source` de cada fila). El objetivo fijado en `task.md` §2.4 es
 |---|---|---|---|---|---|---|
 | 2026-08-13 | 42 | `local` | 74.0% | 59.5% | 59.9% | **No** — muestra insuficiente (objetivo 150-300) |
 | 2026-08-14 | 42 | `local` | 80.4% | 59.5% | 59.5% | **No** — muestra insuficiente (objetivo 150-300) |
+| 2026-08-20 | 42 | `local` | **82.7%** | **73.8%** | 68.7% (**e2e 58.6%**) | **No** — muestra insuficiente (objetivo 150-300) |
 
 Reporte completo: `tests/eval/baselines/2026-08-13-local.json` (2026-08-13),
 `tests/eval/baselines/2026-08-14-local.json` (2026-08-14). Nota:
@@ -151,6 +152,135 @@ artículos). El clúster de error más grande de `overall_sentiment` (dilución
 de sentimiento en artículos largos y narrativos, 14 de los 17 casos mal
 clasificados en la medición original) queda fuera de alcance de este plan —
 ver `docs/planning/conflicts.md`, Conflicto 4.
+
+**"Gobierno" seguía siendo el falso negativo más grande de ORG, y la Tarea 1 de
+2026-08-14 no lo había arreglado.** Al medir los 48 falsos negativos de ORG,
+11 (23%) eran literalmente `"Gobierno"`. La Tarea 1 lo había quitado de
+`_GENERIC_STATE_ORGS` justamente para esto, pero ese filtro **solo actúa sobre
+spans que spaCy ya marcó ORG** — y `es_core_news_lg` etiqueta "Gobierno" como
+**LOC 25 veces contra 2 como ORG** (medido sobre 20 artículos), porque lo trata
+como metonimia del país. El span nunca llegaba al filtro.
+
+El arreglo promueve a ORG las cabezas institucionales
+(`_INSTITUTION_HEADS`: gobierno, presidencia, poder judicial, ministerio
+público) sin importar qué etiqueta les puso spaCy, reutilizando el mismo punto
+de promoción que ya existía para los acrónimos MISC del catálogo. Resultado:
+
+| Métrica | Antes | Después |
+|---|---|---|
+| F1 ORG | 65.9% | **71.3%** |
+| Recall ORG | 63.4% | **74.1%** |
+| F1 entidades (overall) | 80.4% | **82.7%** |
+| F1 PERSON | 94.9% | 94.9% (sin tocar) |
+
+Se descartó de paso una hipótesis alternativa: que muchos falsos negativos
+fueran en realidad entidades sí detectadas pero nombradas distinto (p.ej.
+"UNICEF" vs. "Fondo de las Naciones Unidas para la Infancia"). Al medirlo,
+**solo 3 de los 48** comparten palabra con un falso positivo del mismo
+artículo — no es un problema de convención de nombres.
+
+**Medición 2026-08-20 — la agregación de sentimiento, y por qué la hipótesis
+de 2026-08-14 era incorrecta.** El plan del 2026-08-14 atribuyó el 59.5% de
+`overall_sentiment` a "dilución de sentimiento en artículos largos" y lo dejó
+fuera de alcance. **Esa hipótesis quedó refutada al medirla**: los artículos
+mal clasificados son de hecho **más cortos** que los acertados (457 vs. 525
+palabras de media). La longitud no explicaba nada.
+
+La causa real es un **sesgo de clase**. `_aggregate` era una media plana de
+probabilidades con argmax: pysentimiento está entrenado en tuits y deja ~50%
+de masa NEU por frase, así que promediar decenas de frases hace converger
+cualquier artículo a esa tasa base. Síntoma medido: el analizador emitía POS
+**solo 3 veces en 42 artículos cuando el gold trae 12**, con **cero**
+confusiones POS↔NEG — el modelo acertaba el signo, no se atrevía a salir de
+NEU. 14 de los 17 errores eran POS/NEG colapsando a NEU.
+
+Además, `_aggregate` servía a **dos problemas opuestos** con una sola función:
+el artículo agrega decenas de frases (hay que des-diluir), la entidad agrega
+**una sola** (mediana medida = 1 mención) y hay que ser conservador. Ese era el
+defecto de raíz. Se separó en `_aggregate_document` y `_aggregate_entity`.
+
+| Métrica | 2026-08-14 | 2026-08-20 |
+|---|---|---|
+| Accuracy `overall_sentiment` | 59.5% | **73.8%** |
+| Recall de POS (artículos) | 3/12 | **9/12** |
+| Accuracy `sentiment_toward` (end-to-end) | 47.4%\* | **58.6%** |
+| Precisión de etiquetas polares | 32.9% | **50.0%** |
+| F1 entidades (overall / ORG / PERSON) | 80.4 / 65.9 / 94.9 | **82.7 / 71.3** / 94.9 |
+
+\* Recalculada a mano sobre la línea base de 2026-08-14 (119 aciertos / 251
+entidades etiquetadas) porque aquel reporte no emitía la métrica end-to-end.
+
+**La `sentiment_toward` condicional bajó de 70.5% a 68.7%, y eso NO es una
+regresión** — es el mismo espejismo del denominador descrito más abajo, ahora
+disparado a propósito: al recuperar 14 entidades ORG más, el denominador pasó
+de 200 a 214. La end-to-end (denominador fijo) subió, y la precisión polar
+también. Es exactamente el caso que motivó añadir la métrica end-to-end.
+
+`_aggregate_document` descuenta la tasa base de cada clase (log-pooling con
+corrección de prior). **No tiene ningún umbral que tunear**, y el prior **no
+sale del golden set**: se mide con `scripts/estimate_sentiment_prior.py` sobre
+un corpus scrapeado aparte (162 artículos / 3.109 frases, excluyendo las URLs
+del golden set) y se guarda en `src/odin/analysis/sentiment_prior.json`. Es
+decir, los 42 artículos de evaluación **nunca participan en calibrar nada**:
+el 73.8% es una cifra limpia, no un ajuste al conjunto de prueba.
+
+Robustez verificada de tres formas:
+
+- Con el prior estimado **solo** sobre folds de entrenamiento del propio golden
+  set (7-fold × 30 seeds): **72.2% held-out vs. 59.5%** de la línea base.
+- Con ±10% de error en el prior el resultado se mueve entre 66.7% y 73.8% —
+  siempre muy por encima de la línea base, así que no depende de acertar el
+  valor exacto.
+- Con un prior **uniforme** (1/3 cada clase) reproduce exactamente el 59.5%
+  viejo: confirmación aritmética de que toda la ganancia viene de la
+  corrección de tasa base y de nada más.
+
+Nota operativa: el prior se puede regenerar cuando el corpus crezca
+(`python scripts/estimate_sentiment_prior.py`); el script se niega a escribir
+con menos de 100 artículos en vez de producir una estimación ruidosa en
+silencio. Al pasar de 106 a 162 artículos, `overall_sentiment` subió de 71.4% a
+73.8%, así que vale la pena rehacerlo cuando haya más corpus.
+
+`_aggregate_entity` va en la dirección **contraria**: exige corroboración antes
+de atribuir una etiqueta polar (≥2 frases de mención que coincidan, o que el
+léxico relacional haya apuntado explícitamente a esa entidad). Aplicarle la
+corrección de prior del documento lo **empeora** (59.5% → 54.5%), porque su
+gold es 71.5% NEU.
+
+**Advertencia honesta sobre `sentiment_toward`: 70.5% NO le gana al benchmark
+trivial.** Responder siempre NEU acierta el **71.5%** de las entidades
+etiquetadas. Se probaron 12 reglas de gating (margen, confianza mínima,
+corroboración) y **ninguna supera ese piso**. El techo es estructural: la
+entidad hereda el sentimiento de TODA la frase — en "X criticó la corrupción
+del Gobierno" toda entidad presente recibe NEG, incluida la que solo está
+mencionada de paso — y un modelo de frase no puede decidir de QUIÉN es el
+sentimiento. Superarlo exige atribución por rol sintáctico (que la entidad sea
+sujeto/objeto de la predicación polar) o un LLM; ninguna de las dos está
+implementada.
+
+Lo que sí mejora, y es la razón de shippear la regla, es la **precisión de lo
+que afirma**: las etiquetas polares emitidas sobre entidades cuyo gold es NEU
+—es decir, afirmar algo sobre alguien de quien el artículo no opina— bajan de
+**48 a 16** (precisión polar 32.9% → 45.2%; polares emitidos 73 → 31).
+`docs/planning/task.md` §8.2 liga
+precisamente esos juicios a exposición legal bajo Ley 172-13, así que es
+reducción de riesgo, no solo una métrica más bonita.
+
+**El "59.9% → 59.5%" del 2026-08-14 nunca fue una regresión.** La accuracy de
+`sentiment_toward` solo se puntúa sobre entidades **emparejadas**: en aquella
+corrida 51 entidades etiquetadas (20.3%) quedaron fuera del denominador, y los
+fixes de ORG añadieron 18 ORGs recién emparejados que diluyeron un numerador
+PERSON fijo. Las dos cifras no se calculaban sobre la misma población. Desde
+esta medición `scripts/evaluate.py` reporta **ambas** accuracies con sus
+denominadores visibles (condicional y end-to-end) y guarda el detalle por
+entidad en `per_article`, para que esto no vuelva a leerse mal.
+
+**`dampen_negated` ya no aporta nada medible.** Re-medido en este contexto: con
+y sin él, las tres métricas dan **idéntico**, y `odin-db-024`/`odin-db-025`
+(los 2 artículos que motivaron la Tarea 4 del plan anterior) siguen prediciendo
+NEG con gold NEU en ambos casos. Se deja intacto porque quitarlo sería un
+cambio no medido fuera de estos 42 artículos, pero queda anotado como candidato
+a eliminación cuando el golden set crezca.
 
 **Línea base de Groq bloqueada (2026-08-13).** Se intentó correr
 `scripts/evaluate.py --analyzer groq` contra el mismo golden set de 42

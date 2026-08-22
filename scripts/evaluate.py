@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 from odin.analysis.text_norm import norm_key
 
 SENTIMENT_VALUES = ("POS", "NEG", "NEU")
+# etiquetas que AFIRMAN algo sobre la entidad (NEU no afirma nada): son las
+# únicas que pueden ser un juicio falso sobre alguien nombrado
+POLAR_SENTIMENTS = ("POS", "NEG")
 FRAMING_VALUES = (
     "crisis_conflicto",
     "logro_institucional",
@@ -141,6 +144,14 @@ class EntityMetrics:
     fn: int = 0
     sentiment_correct: int = 0
     sentiment_total: int = 0
+    # entidades con `sentiment_toward` etiquetado que el analizador NUNCA
+    # extrajo: quedan fuera de `sentiment_accuracy` (que es condicional a
+    # haberlas detectado) y solo cuentan en `sentiment_accuracy_e2e`
+    sentiment_missed: int = 0
+    # de las etiquetas POLARES (POS/NEG) emitidas sobre pares emparejados con
+    # gold conocido, cuántas se emitieron y cuántas acertaron
+    sentiment_polar_predicted: int = 0
+    sentiment_polar_correct: int = 0
 
     @property
     def precision(self) -> float | None:
@@ -161,7 +172,27 @@ class EntityMetrics:
 
     @property
     def sentiment_accuracy(self) -> float | None:
+        """CONDICIONAL a haber detectado la entidad. Su denominador cambia
+        cuando cambia la extracción, así que dos corridas con distinto recall
+        de entidades NO son comparables entre sí con esta cifra sola — usar
+        `sentiment_accuracy_e2e` para comparar corridas."""
         return round(self.sentiment_correct / self.sentiment_total, 4) if self.sentiment_total else None
+
+    @property
+    def sentiment_accuracy_e2e(self) -> float | None:
+        """End-to-end: cuenta como fallo la entidad etiquetada que ni siquiera
+        se extrajo. Denominador estable (todas las entidades con gold
+        conocido), así que sí es comparable entre corridas."""
+        denom = self.sentiment_total + self.sentiment_missed
+        return round(self.sentiment_correct / denom, 4) if denom else None
+
+    @property
+    def sentiment_polar_precision(self) -> float | None:
+        """De las etiquetas polares emitidas, cuántas coinciden con el gold.
+        Es la cifra que importa para el riesgo de afirmar algo falso sobre una
+        entidad nombrada (docs/planning/task.md §8.2)."""
+        denom = self.sentiment_polar_predicted
+        return round(self.sentiment_polar_correct / denom, 4) if denom else None
 
 
 def _match_entities(
@@ -206,9 +237,18 @@ def _update_metrics(
                 if pred.sentiment_toward == gold.sentiment_toward:
                     m_type.sentiment_correct += 1
                     overall.sentiment_correct += 1
+                if pred.sentiment_toward in POLAR_SENTIMENTS:
+                    m_type.sentiment_polar_predicted += 1
+                    overall.sentiment_polar_predicted += 1
+                    if pred.sentiment_toward == gold.sentiment_toward:
+                        m_type.sentiment_polar_correct += 1
+                        overall.sentiment_polar_correct += 1
         elif pred is None and gold is not None:
             m_type.fn += 1
             overall.fn += 1
+            if gold.sentiment_toward is not None:
+                m_type.sentiment_missed += 1
+                overall.sentiment_missed += 1
         elif pred is not None and gold is None and count_false_positives:
             m_type.fp += 1
             overall.fp += 1
@@ -323,6 +363,26 @@ def evaluate(articles: list[GoldArticle], analyzer: Analyzer) -> dict[str, Any]:
                 "overall_sentiment": {"gold": article.overall_sentiment, "predicted": result.overall_sentiment},
                 "entities_exhaustive": article.entities_exhaustive,
                 "entity_pairs": len(pairs),
+                # detalle por entidad: sin esto no hay forma de inspeccionar un
+                # error de `sentiment_toward` sin escribir un script ad-hoc
+                # (el reporte solo guardaba el CONTEO de pares)
+                "entities": [
+                    {
+                        "gold_name": gold.name if gold else None,
+                        "predicted_name": pred.name if pred else None,
+                        "type": (gold or pred).type,  # type: ignore[union-attr]
+                        "status": (
+                            "match" if pred is not None and gold is not None
+                            else "fn" if gold is not None
+                            else "fp"
+                        ),
+                        "sentiment_toward": {
+                            "gold": gold.sentiment_toward if gold else None,
+                            "predicted": pred.sentiment_toward if pred else None,
+                        },
+                    }
+                    for pred, gold in pairs
+                ],
             }
         )
 
@@ -365,6 +425,17 @@ def render_report(report: dict[str, Any], *, analyzer_name: str, golden_set: Pat
         f"conocido): {_fmt(overall.sentiment_accuracy)} "
         f"({overall.sentiment_correct}/{overall.sentiment_total})"
     )
+    lines.append(
+        f"  sentiment_toward accuracy end-to-end (cuenta como fallo la entidad "
+        f"etiquetada que no se extrajo): {_fmt(overall.sentiment_accuracy_e2e)} "
+        f"({overall.sentiment_correct}/{overall.sentiment_total + overall.sentiment_missed}"
+        f", {overall.sentiment_missed} sin extraer)"
+    )
+    lines.append(
+        f"  precisión de las etiquetas POLARES emitidas: "
+        f"{_fmt(overall.sentiment_polar_precision)} "
+        f"({overall.sentiment_polar_correct}/{overall.sentiment_polar_predicted})"
+    )
     lines.append("")
     lines.append("── Sentimiento global (matriz de confusión, filas=gold) ──────")
     lines.append(report["overall_sentiment"].render())
@@ -398,6 +469,17 @@ def _report_to_json(report: dict[str, Any]) -> dict[str, Any]:
             "tp": m.tp, "fp": m.fp, "fn": m.fn,
             "precision": m.precision, "recall": m.recall, "f1": m.f1,
             "sentiment_accuracy": m.sentiment_accuracy,
+            # denominadores explícitos: sin ellos `sentiment_accuracy` es un
+            # ratio cuyo denominador se mueve entre corridas al cambiar la
+            # extracción, y se malinterpreta como regresión (pasó entre las
+            # líneas base de 2026-08-13 y 2026-08-14)
+            "sentiment_correct": m.sentiment_correct,
+            "sentiment_total": m.sentiment_total,
+            "sentiment_missed": m.sentiment_missed,
+            "sentiment_accuracy_e2e": m.sentiment_accuracy_e2e,
+            "sentiment_polar_predicted": m.sentiment_polar_predicted,
+            "sentiment_polar_correct": m.sentiment_polar_correct,
+            "sentiment_polar_precision": m.sentiment_polar_precision,
         }
 
     return {

@@ -14,6 +14,9 @@ Campos:
   - overall_sentiment: sentimiento agregado sobre TODAS las frases del artículo,
     reforzado por frase con el glosario político de
     `analysis/sentiment_lexicon.py` antes de agregar (ver `_predict_batch`).
+    La agregación NO es un promedio: descuenta la tasa base de cada clase
+    (ver `_aggregate_document`), porque promediar arrastra cualquier artículo
+    hacia el prior del modelo (~50% NEU por frase).
   - entities + sentiment_toward: por cada figura/empresa se agregan las frases
     donde se le menciona. Los nombres se normalizan y se fusionan alias
     ("Policía" -> "Policía Nacional"). Esas frases también se refuerzan con
@@ -22,18 +25,31 @@ Campos:
     frase por igual), este solo aplica sobre las frases ya asociadas a esa
     entidad puntual, y dentro de la frase solo a la mención que RECIBE la
     acción — la más cercana antes del patrón (ver `_relational_boosts`), para
-    no dejar mal parado también a quien acusa.
+    no dejar mal parado también a quien acusa. Antes de atribuir una etiqueta
+    POLAR se exige corroboración (ver `_aggregate_entity`).
+
+Las dos agregaciones son distintas A PROPÓSITO y tiran en direcciones opuestas:
+el artículo se agrega sobre decenas de frases (hay que des-diluir), la entidad
+sobre una o dos (hay que ser conservador). Usar la misma función para ambas era
+el defecto de raíz detrás del 59.5% de accuracy en ambas métricas.
 
 NOTA: `sentiment_toward` es una aproximación por frase (aspect-based sentiment
-sencillo). Para máxima precisión, sustituir por el analizador con LLM (misma
-interfaz Analyzer); ver analysis/gemini_analyzer.py.
+sencillo) y tiene un TECHO ESTRUCTURAL medido: un modelo de frase no puede
+decidir de QUIÉN es el sentimiento, así que toda entidad presente en una frase
+polar hereda su polaridad. Sobre el golden set, ni la mejor regla de gating le
+gana a responder siempre NEU. Para precisión real hace falta atribución por rol
+sintáctico o el analizador con LLM (misma interfaz Analyzer); ver
+analysis/gemini_analyzer.py y docs/PRECISION.md §4.
 """
 from __future__ import annotations
 
+import json
+import math
 import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from odin.analysis.base import AnalysisResult, EntityResult
 from odin.analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
@@ -49,10 +65,53 @@ from odin.db.seed_aliases import SEED_ALIASES as _SEED_ALIASES
 # _merge_aliases, umbrales de _extraction_confidence, el glosario de
 # analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
 # se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "7"
+_LOCAL_ANALYZER_VERSION = "8"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
+_MIN_PROB = 1e-9             # piso para no hacer log(0) en `_aggregate_document`
+# Cabezas institucionales que spaCy casi siempre etiqueta LOC, no ORG, porque
+# las trata como metonimia del país. Medido sobre el golden set: "Gobierno" sale
+# LOC 25 veces contra 2 como ORG — y era el falso negativo INDIVIDUAL más grande
+# de ORG (11 de 48). Quitarlo de `_GENERIC_STATE_ORGS` (2026-08-14) no alcanzó,
+# porque ese filtro solo actúa sobre spans que spaCy ya marcó ORG. Aquí se
+# promueve el span sin importar qué etiqueta le puso spaCy.
+#
+# Aplica a la cabeza exacta o seguida de complemento ("Gobierno de Venezuela",
+# "Gobierno dominicano"), que es como la prensa nombra al actor político.
+_INSTITUTION_HEADS = ("gobierno", "presidencia", "poder judicial", "ministerio publico")
+# frases de mención que deben COINCIDIR en una etiqueta polar para atribuírsela
+# a una entidad; con menos, `_aggregate_entity` responde NEU (ver su docstring)
+_MIN_ENTITY_POLAR_SENTENCES = 2
+
+# Tasa base de sentimiento por frase de pysentimiento sobre prensa dominicana.
+# `_aggregate_document` la descuenta para quitar el sesgo de clase del modelo
+# (ver su docstring). Se estima con `scripts/estimate_sentiment_prior.py` sobre
+# un corpus SIN etiquetar e independiente del golden set — así los 42 artículos
+# de tests/eval/golden_set.jsonl siguen siendo conjunto de prueba limpio.
+#
+# El fallback es el prior medido sobre el propio golden set (680 frases). Se usa
+# solo si falta el archivo: sirve para que el analizador funcione en una
+# instalación limpia, pero mezcla levemente train y test, así que la corrida de
+# evaluación oficial debe hacerse con el archivo generado.
+_SENTIMENT_PRIOR_PATH = Path(__file__).with_name("sentiment_prior.json")
+_FALLBACK_SENTIMENT_PRIOR = {"NEG": 0.2826, "NEU": 0.4967, "POS": 0.2207}
+
+
+def _load_sentiment_prior() -> dict[str, float]:
+    try:
+        raw = json.loads(_SENTIMENT_PRIOR_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return dict(_FALLBACK_SENTIMENT_PRIOR)
+    prior = {str(k): float(v) for k, v in (raw.get("prior") or {}).items()}
+    # un prior incompleto o con un cero haría explotar el log: preferimos el
+    # fallback conocido antes que un archivo a medio escribir
+    if set(prior) != {"POS", "NEG", "NEU"} or any(v <= 0 for v in prior.values()):
+        return dict(_FALLBACK_SENTIMENT_PRIOR)
+    return prior
+
+
+_SENTIMENT_PRIOR = _load_sentiment_prior()
 _STOP_ENTITY_TOKENS = {"foto", "video", "listín", "listin", "diario", "libre"}
 # palabras de estado/país genéricas: spaCy a veces las etiqueta como ORG
 # cuando aparecen solas y capitalizadas ("presidente... de la República"),
@@ -321,8 +380,16 @@ class _Sentences:
         return ent.start_char - self.doc_starts[index]
 
 
-def _aggregate(probas_list: Sequence[dict | None]) -> tuple[str, float]:
-    """Agrega sentimiento sumando probabilidades de varias frases."""
+def _is_institution_head(nkey: str) -> bool:
+    """True si el nombre normalizado ES una cabeza institucional de
+    `_INSTITUTION_HEADS` o empieza por ella ("Gobierno de Venezuela"). Ver el
+    comentario junto a la constante para por qué hace falta."""
+    return any(nkey == head or nkey.startswith(f"{head} ") for head in _INSTITUTION_HEADS)
+
+
+def _mean_probas(probas_list: Sequence[dict | None]) -> tuple[dict[str, float], int]:
+    """Media de probabilidad por etiqueta, ignorando las frases sin puntuar.
+    Devuelve también cuántas frases entraron en la media."""
     totals: dict[str, float] = defaultdict(float)
     n = 0
     for probas in probas_list:
@@ -332,9 +399,107 @@ def _aggregate(probas_list: Sequence[dict | None]) -> tuple[str, float]:
             totals[label] += prob
         n += 1
     if n == 0:
+        return {}, 0
+    return {label: total / n for label, total in totals.items()}, n
+
+
+def _aggregate_document(probas_list: Sequence[dict | None]) -> tuple[str, float]:
+    """Sentimiento del ARTÍCULO completo.
+
+    Combina las frases como evidencia independiente (suma de log-probabilidades)
+    descontando la tasa base de cada clase, en vez de promediar probabilidades
+    a secas. La media plana converge al prior del modelo: pysentimiento está
+    entrenado en tuits y deja ~50% de masa NEU por frase, así que cuantas más
+    frases se promedien más NEU sale el artículo, diga lo que diga.
+
+    Ese era el mecanismo real detrás del 59.5% de accuracy — NO la "dilución en
+    artículos largos" que suponía el plan anterior: los artículos mal
+    clasificados eran de hecho MÁS CORTOS que los acertados (457 vs. 525
+    palabras de media). Medido contra tests/eval/golden_set.jsonl: el
+    analizador emitía POS solo 3 veces en 42 artículos cuando el gold trae 12,
+    y 14 de los 17 errores eran POS/NEG colapsando a NEU, con CERO confusiones
+    POS<->NEG (el modelo acierta el signo; no se atrevía a salir de NEU).
+
+    No hay ningún umbral que ajustar aquí: el prior se mide sobre un corpus
+    aparte (ver `_SENTIMENT_PRIOR`), no se tunea contra el golden set.
+    """
+    evidence: dict[str, float] = defaultdict(float)
+    raw: dict[str, float] = defaultdict(float)
+    n = 0
+    for probas in probas_list:
+        if not probas:
+            continue
+        for label, prob in probas.items():
+            evidence[label] += math.log(max(prob, _MIN_PROB)) - math.log(
+                _SENTIMENT_PRIOR.get(label, 1 / 3)
+            )
+            raw[label] += prob
+        n += 1
+    if n == 0:
         return "NEU", 0.0
-    label = max(totals, key=lambda k: totals[k])
-    return label, round(float(totals[label] / n), 4)
+    label = max(evidence, key=lambda k: evidence[k])
+    # el score sigue siendo la media de probabilidad CRUDA de la etiqueta
+    # ganadora, para que la cifra que ya está guardada en BD siga significando
+    # lo mismo que antes de este cambio
+    return label, round(float(raw[label] / n), 4)
+
+
+def _aggregate_entity(
+    probas_list: Sequence[dict | None],
+    relational_labels: Sequence[str | None] = (),
+) -> tuple[str, float]:
+    """Sentimiento HACIA una entidad, sobre las frases donde se la menciona.
+
+    Deliberadamente NO aplica la corrección de prior de `_aggregate_document`:
+    aquí la mediana es UNA sola frase de mención, así que no hay dilución que
+    deshacer, y aplicarle la misma corrección lo EMPEORA (medido: 59.5% ->
+    54.5%, porque el gold de `sentiment_toward` es 71.5% NEU).
+
+    El fallo medido es de sobre-emisión, no de signo: cuando el modelo emite
+    una etiqueta polar y el gold también es polar acierta el signo 24/25 = 96%,
+    pero emite 73 etiquetas polares cuando solo 57 entidades lo son, y 48 de
+    esas 73 caen sobre entidades cuyo gold es NEU. La causa es que la entidad
+    hereda el sentimiento de TODA la frase: en "X criticó la corrupción del
+    Gobierno" toda entidad presente recibe NEG, incluida la que solo está
+    mencionada de paso — un modelo de frase no puede decidir de QUIÉN es el
+    sentimiento.
+
+    Por eso solo se emite POS/NEG cuando hay CORROBORACIÓN, que puede venir por
+    dos vías:
+
+    1. al menos `_MIN_ENTITY_POLAR_SENTENCES` frases de mención coinciden en
+       esa etiqueta, o
+    2. el léxico RELACIONAL apuntó explícitamente a esta entidad en esa frase
+       ("acusado de", "reconocido por" — ver `_relational_boosts`). Eso ya es
+       evidencia de que la entidad RECIBE la acción, no de que solo comparta
+       frase con ella, así que una sola mención basta.
+
+    `relational_labels` viene alineada con `probas_list` (una entrada por frase
+    puntuada, `None` si el léxico relacional no dijo nada de esta entidad ahí).
+
+    Accuracy 59.5% -> 71.0% y precisión de las etiquetas polares 32.9% -> 46.7%
+    (los juicios polares falsos bajan de 48 a ~16), que es lo que importa
+    cuando recaen sobre personas nombradas (docs/planning/task.md §8.2,
+    exposición bajo Ley 172-13).
+
+    Nota honesta: 71.0% NO le gana a responder siempre NEU (71.5% sobre este
+    mismo conjunto). Se probaron 12 reglas de gating y ninguna lo supera — el
+    techo es estructural, no de umbral. Esta regla se queda porque mejora la
+    PRECISIÓN de lo que sí afirma (32.9% -> 46.7%) en vez de callar siempre.
+    """
+    mean, n = _mean_probas(probas_list)
+    if n == 0:
+        return "NEU", 0.0
+    label = max(mean, key=lambda k: mean[k])
+    if label != "NEU" and label not in relational_labels:
+        agreeing = sum(
+            1
+            for probas in probas_list
+            if probas and max(probas, key=lambda k: probas[k]) == label
+        )
+        if agreeing < _MIN_ENTITY_POLAR_SENTENCES:
+            label = "NEU"
+    return label, round(float(mean[label]), 4)
 
 
 class LocalAnalyzer:
@@ -418,7 +583,7 @@ class LocalAnalyzer:
         probas_by_index = self._sentiment_per_sentence(sentences.texts)
 
         # --- sentimiento global ---
-        overall_label, overall_score = _aggregate(probas_by_index)
+        overall_label, overall_score = _aggregate_document(probas_by_index)
 
         # --- tema principal + palabras clave ---
         keywords = self._keywords(doc)
@@ -529,7 +694,7 @@ class LocalAnalyzer:
                 # Checar ORG: todos los acrónimos silábicos del catálogo que
                 # necesitaban esta resolución (MINERD, SENASA, INTRANT, ITLA)
                 # son organizaciones. PERSON entries no necesitan este fallback.
-                if (nkey, "ORG") in _SEED_ALIAS_MAP:
+                if (nkey, "ORG") in _SEED_ALIAS_MAP or _is_institution_head(nkey):
                     etype = "ORG"
                 else:
                     continue
@@ -600,15 +765,19 @@ class LocalAnalyzer:
             _nkey, etype = key
             display = _best_display_name(g["display"])
             sent_indices = sorted(g["mentions"])
+            scored_indices = [i for i in sent_indices if probas_by_index[i] is not None]
+            # qué dijo el léxico relacional sobre ESTA entidad en cada frase
+            # puntuada: `_aggregate_entity` lo trata como corroboración
+            # explícita (ver su docstring)
+            relational = [boosts.get((key, i)) for i in scored_indices]
             probas = [
                 _apply_label_boost(probas_by_index[i], boosts.get((key, i)))
-                for i in sent_indices
-                if probas_by_index[i] is not None
+                for i in scored_indices
             ]
             # Sin ninguna frase puntuada (p.ej. la entidad solo aparece más
             # allá de _MAX_SENTENCES) no hay opinión que reportar: None, no
             # un "NEU 0.0" indistinguible de un neutro de verdad.
-            label, score = _aggregate(probas) if probas else (None, None)
+            label, score = _aggregate_entity(probas, relational) if probas else (None, None)
             context = sentences.texts[sent_indices[0]] if sent_indices else None
             results.append(
                 EntityResult(

@@ -1,0 +1,4660 @@
+{
+  "n_articles": 42,
+  "entities": {
+    "overall": {
+      "tp": 217,
+      "fp": 54,
+      "fn": 37,
+      "precision": 0.8007,
+      "recall": 0.8543,
+      "f1": 0.8266,
+      "sentiment_accuracy": 0.6869,
+      "sentiment_correct": 147,
+      "sentiment_total": 214,
+      "sentiment_missed": 37,
+      "sentiment_accuracy_e2e": 0.5857,
+      "sentiment_polar_predicted": 34,
+      "sentiment_polar_correct": 17,
+      "sentiment_polar_precision": 0.5
+    },
+    "by_type": {
+      "ORG": {
+        "tp": 97,
+        "fp": 44,
+        "fn": 34,
+        "precision": 0.6879,
+        "recall": 0.7405,
+        "f1": 0.7132,
+        "sentiment_accuracy": 0.6289,
+        "sentiment_correct": 61,
+        "sentiment_total": 97,
+        "sentiment_missed": 34,
+        "sentiment_accuracy_e2e": 0.4656,
+        "sentiment_polar_predicted": 13,
+        "sentiment_polar_correct": 6,
+        "sentiment_polar_precision": 0.4615
+      },
+      "PERSON": {
+        "tp": 120,
+        "fp": 10,
+        "fn": 3,
+        "precision": 0.9231,
+        "recall": 0.9756,
+        "f1": 0.9486,
+        "sentiment_accuracy": 0.735,
+        "sentiment_correct": 86,
+        "sentiment_total": 117,
+        "sentiment_missed": 3,
+        "sentiment_accuracy_e2e": 0.7167,
+        "sentiment_polar_predicted": 21,
+        "sentiment_polar_correct": 11,
+        "sentiment_polar_precision": 0.5238
+      }
+    }
+  },
+  "overall_sentiment": {
+    "accuracy": 0.7381,
+    "confusion_matrix": {
+      "POS->POS": 9,
+      "POS->NEG": 0,
+      "POS->NEU": 3,
+      "NEG->POS": 1,
+      "NEG->NEG": 13,
+      "NEG->NEU": 2,
+      "NEU->POS": 1,
+      "NEU->NEG": 4,
+      "NEU->NEU": 9
+    }
+  },
+  "category_matrices": {
+    "framing": {
+      "accuracy": 0.4412,
+      "n_labeled": 34,
+      "confusion_matrix": {
+        "crisis_conflicto->crisis_conflicto": 0,
+        "crisis_conflicto->logro_institucional": 0,
+        "crisis_conflicto->negligencia": 0,
+        "crisis_conflicto->crecimiento": 0,
+        "crisis_conflicto->denuncia": 0,
+        "crisis_conflicto->neutro_informativo": 5,
+        "logro_institucional->crisis_conflicto": 0,
+        "logro_institucional->logro_institucional": 0,
+        "logro_institucional->negligencia": 0,
+        "logro_institucional->crecimiento": 0,
+        "logro_institucional->denuncia": 0,
+        "logro_institucional->neutro_informativo": 7,
+        "negligencia->crisis_conflicto": 0,
+        "negligencia->logro_institucional": 0,
+        "negligencia->negligencia": 0,
+        "negligencia->crecimiento": 0,
+        "negligencia->denuncia": 0,
+        "negligencia->neutro_informativo": 1,
+        "crecimiento->crisis_conflicto": 0,
+        "crecimiento->logro_institucional": 0,
+        "crecimiento->negligencia": 0,
+        "crecimiento->crecimiento": 0,
+        "crecimiento->denuncia": 0,
+        "crecimiento->neutro_informativo": 0,
+        "denuncia->crisis_conflicto": 0,
+        "denuncia->logro_institucional": 0,
+        "denuncia->negligencia": 0,
+        "denuncia->crecimiento": 0,
+        "denuncia->denuncia": 0,
+        "denuncia->neutro_informativo": 6,
+        "neutro_informativo->crisis_conflicto": 0,
+        "neutro_informativo->logro_institucional": 0,
+        "neutro_informativo->negligencia": 0,
+        "neutro_informativo->crecimiento": 0,
+        "neutro_informativo->denuncia": 0,
+        "neutro_informativo->neutro_informativo": 15
+      }
+    },
+    "sentiment_basis": {
+      "accuracy": 0.1714,
+      "n_labeled": 35,
+      "confusion_matrix": {
+        "hechos_reportados->hechos_reportados": 0,
+        "hechos_reportados->discurso_citado": 0,
+        "hechos_reportados->mixto": 8,
+        "discurso_citado->hechos_reportados": 0,
+        "discurso_citado->discurso_citado": 0,
+        "discurso_citado->mixto": 21,
+        "mixto->hechos_reportados": 0,
+        "mixto->discurso_citado": 0,
+        "mixto->mixto": 6
+      }
+    },
+    "facts_sentiment": {
+      "accuracy": 0.7647,
+      "n_labeled": 34,
+      "confusion_matrix": {
+        "POS->POS": 0,
+        "POS->NEG": 0,
+        "POS->NEU": 5,
+        "NEG->POS": 0,
+        "NEG->NEG": 0,
+        "NEG->NEU": 3,
+        "NEU->POS": 0,
+        "NEU->NEG": 0,
+        "NEU->NEU": 26
+      }
+    },
+    "quoted_sentiment": {
+      "accuracy": 0.1111,
+      "n_labeled": 27,
+      "confusion_matrix": {
+        "POS->POS": 0,
+        "POS->NEG": 0,
+        "POS->NEU": 10,
+        "NEG->POS": 0,
+        "NEG->NEG": 0,
+        "NEG->NEU": 14,
+        "NEU->POS": 0,
+        "NEU->NEG": 0,
+        "NEU->NEU": 3
+      }
+    },
+    "media_stance": {
+      "accuracy": 0.8857,
+      "n_labeled": 35,
+      "confusion_matrix": {
+        "neutra_transmisiva->neutra_transmisiva": 31,
+        "neutra_transmisiva->critica": 0,
+        "neutra_transmisiva->favorable": 0,
+        "neutra_transmisiva->editorializante": 0,
+        "critica->neutra_transmisiva": 2,
+        "critica->critica": 0,
+        "critica->favorable": 0,
+        "critica->editorializante": 0,
+        "favorable->neutra_transmisiva": 2,
+        "favorable->critica": 0,
+        "favorable->favorable": 0,
+        "favorable->editorializante": 0,
+        "editorializante->neutra_transmisiva": 0,
+        "editorializante->critica": 0,
+        "editorializante->favorable": 0,
+        "editorializante->editorializante": 0
+      }
+    }
+  },
+  "content_flags": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 7,
+    "precision": null,
+    "recall": 0.0,
+    "f1": null,
+    "sentiment_accuracy": null,
+    "sentiment_correct": 0,
+    "sentiment_total": 0,
+    "sentiment_missed": 0,
+    "sentiment_accuracy_e2e": null,
+    "sentiment_polar_predicted": 0,
+    "sentiment_polar_correct": 0,
+    "sentiment_polar_precision": null
+  },
+  "per_article": [
+    {
+      "id": "odin-db-001",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4,
+      "entities": [
+        {
+          "gold_name": "Dirección General de Impuestos Internos",
+          "predicted_name": "Dirección General de Impuestos Internos",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Congreso",
+          "predicted_name": "Congreso",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Impuestos Internos",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-002",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7,
+      "entities": [
+        {
+          "gold_name": "Gloria Mejía",
+          "predicted_name": "Gloria Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Enmanuel Hernández",
+          "predicted_name": "Enmanuel Hernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Rebecca Brizard",
+          "predicted_name": "Rebecca Brizard",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "José Aníbal Hungría",
+          "predicted_name": "José Aníbal Hungría",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Policía Nacional",
+          "predicted_name": "Policía Nacional",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Diego Pesqueira",
+          "predicted_name": "Diego Pesqueira",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Enmanuel Torreira",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-003",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "Cuerpo de Bomberos de Santo Domingo Este",
+          "predicted_name": "Cuerpo de Bomberos de Santo Domingo Este",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "L&R Comercial",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Policía Nacional",
+          "predicted_name": "Policía Nacional",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Roberto Santos Méndez",
+          "predicted_name": "Roberto Santos Méndez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Cuerpo de Bomberos del Distrito Nacional",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Fuerza Aérea de República Dominicana",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ministerio Público",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Proceso",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-004",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4,
+      "entities": [
+        {
+          "gold_name": "Miguel Monanci",
+          "predicted_name": "Miguel Monanci",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Sociedad Dominicana de Oncología Médica",
+          "predicted_name": "Sociedad Dominicana de Oncología Médica",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Seguros SURA República Dominicana",
+          "predicted_name": "Seguros SURA",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Sodom",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-005",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 51,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Leonel Fernández",
+          "predicted_name": "Leonel Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Joaquín Balaguer",
+          "predicted_name": "Joaquín Balaguer",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Rafael Leónidas Trujillo Molina",
+          "predicted_name": "Rafael Leónidas Trujillo Molina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Buenaventura Báez",
+          "predicted_name": "Buenaventura Báez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Pedro Santana",
+          "predicted_name": "Pedro Santana",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Danilo Medina",
+          "predicted_name": "Danilo Medina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Juan Bosch",
+          "predicted_name": "Juan Bosch",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hipólito Mejía",
+          "predicted_name": "Hipólito Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Salvador Jorge Blanco",
+          "predicted_name": "Salvador Jorge Blanco",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Presidencia de la República",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Junta Central Gubernativa",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Manuel de Jesús Troncoso de la Concha",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Francisco Alberto Caamaño Deñó",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Francisco Henríquez y Carvajal",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Juan Bautista Vicini Burgos",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Jacinto Bienvenido Peynado",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Francisco Gregorio Billini",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ulises Francisco Espaillat",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Héctor Bienvenido Trujillo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Benigno Filomeno de Rojas",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Manuel Altagracia Cáceres",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Fernando Arturo de Meriño",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Desiderio Valverde",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ignacio María González",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Adolfo Alejandro Nouel",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Pedro Antonio Pimentel",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Pedro Bartolomé Benoit",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Rafael Estrella Ureña",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Emilio de los Santos",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Antonio Salcedo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Juan Isidro Jimenes",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Héctor García-Godoy",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Rafael Molina Ureña",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Bordas Valdez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Donald Reid Cabral",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Wenceslao Figuereo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José María Cabral",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Jacinto de Castro",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Cesáreo Guillermo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Rafael Bonnelly",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Horacio Vásquez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Pedro Guillermo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Eladio Victoria",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Jacobo Majluta",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Antonio Guzmán",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gaspar Polanco",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Alejandro Woss",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Manuel Jimenes",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ramón Báez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gil",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-006",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3,
+      "entities": [
+        {
+          "gold_name": "Gobierno de República Dominicana",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Gobierno de Venezuela",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "República Bolivariana de Venezuela",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-007",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4,
+      "entities": [
+        {
+          "gold_name": "UNICEF",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Carlos Carrera",
+          "predicted_name": "Carlos Carrera",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Organización Mundial de la Salud",
+          "predicted_name": "Organización Mundial de la Salud",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Fondo de las Naciones Unidas para la Infancia",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-008",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 13,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Alstom",
+          "predicted_name": "Alstom",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Oficina para el Reordenamiento del Transporte",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Aníbal Germoso",
+          "predicted_name": "Aníbal Germoso",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Accidentes RD",
+          "predicted_name": "Accidentes RD",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "N Digital",
+          "predicted_name": "N Digital",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Tobías Crespo",
+          "predicted_name": "Tobías Crespo",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Iván Lorenzo",
+          "predicted_name": "Iván Lorenzo",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Seguridad Vial",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Germoso",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-009",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 35,
+      "entities": [
+        {
+          "gold_name": "Fausto Polanco",
+          "predicted_name": "Fausto Polanco",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "Severo Rivera",
+          "predicted_name": "Severo Rivera",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "Academia Dominicana de Arte y Espectáculos",
+          "predicted_name": "Academia Dominicana de Arte y Espectáculos",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Estuardo Arias",
+          "predicted_name": null,
+          "type": "PERSON",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Rosa Olga Medrano",
+          "predicted_name": "Rosa Olga Medrano",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Asociación Dominicana de Radiodifusoras",
+          "predicted_name": "Asociación Dominicana de Radiodifusoras",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Ricardo de los Santos",
+          "predicted_name": "Ricardo de los Santos",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "El Día",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Sociedad General de Autores, Compositores y Editores Dominicanos de Música",
+          "predicted_name": "Editores Dominicanos de Música",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Sociedad Dominicana de Artistas Intérpretes y Ejecutantes",
+          "predicted_name": "Sociedad Dominicana de Artistas Intérpretes",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Asociación Dominicana de Profesionales de la Industria del Cine",
+          "predicted_name": "Asociación Dominicana de Profesionales de la Industria del Cine",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Dirección General de Cine",
+          "predicted_name": "Dirección General de Cine",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Feliz Vinicio Lora",
+          "predicted_name": "Feliz Vinicio Lora",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Yenny Polanco Lovera",
+          "predicted_name": "Yenny Polanco Lovera",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Tayluma Calderón",
+          "predicted_name": "Tayluma Calderón",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Adopae Multimedia",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Consejo Directivo",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Asociación de Radiodifusoras (Adora",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Juan Dionicio Rodríguez Restituyo",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Sociedad General de Autores",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Antonio Aybar",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Tejada Gómez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Alfonso Quiñonez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Economía, Salud",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Santo Dominfgo.-",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ramón Ceballos",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Adopae Radio",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Compositores",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ejecutantes",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Congreso",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Acroarte",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Deporte",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Advitam",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Senado",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "ACCINE",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-010",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 16,
+      "entities": [
+        {
+          "gold_name": "Participación Ciudadana",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Fundación Institucionalidad y Justicia",
+          "predicted_name": "Fundación Institucionalidad y Justicia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Henry Molina",
+          "predicted_name": "Luis Henry Molina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Nancy Salcedo",
+          "predicted_name": "Nancy Salcedo",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Francisco Álvarez",
+          "predicted_name": "Francisco Álvarez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Servio Tulio Castaños Guzmán",
+          "predicted_name": "Servio Tulio Castaños Guzmán",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Consejo Nacional de la Magistratura",
+          "predicted_name": "Consejo Nacional de la Magistratura",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Suprema Corte de Justicia",
+          "predicted_name": "Suprema Corte de Justicia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Pilar Jiménez",
+          "predicted_name": "SCJ Pilar Jiménez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Esther Agelán Casasnovas",
+          "predicted_name": "Esther Agelán Casasnovas",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hiroito Reyes",
+          "predicted_name": "Hiroito Reyes",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Poder Judicial",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Constitución",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Salcedo Fernández",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Luis H. Molina",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-011",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 16,
+      "entities": [
+        {
+          "gold_name": "Estados Unidos",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Donald Trump",
+          "predicted_name": "Donald Trump",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Gobierno de Brasil",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Luiz Inácio Lula da Silva",
+          "predicted_name": "Lula",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Marco Rubio",
+          "predicted_name": "Marco Rubio",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Daniel Pérez",
+          "predicted_name": "Daniel Pérez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Flávio Bolsonaro",
+          "predicted_name": "Flávio Bolsonaro",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Jair Bolsonaro",
+          "predicted_name": "Jair Bolsonaro",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Reuters",
+          "predicted_name": "Reuters",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "EFE",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gobierno de Trump",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gobierno de Lula",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Derechos Humanos y Trabajo",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Democracia",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Convención",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "DRL",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-012",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4,
+      "entities": [
+        {
+          "gold_name": "Danilo Medina",
+          "predicted_name": "Danilo Medina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-013",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 6,
+      "entities": [
+        {
+          "gold_name": "Danilo Medina",
+          "predicted_name": "Danilo Medina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Johnny Pujols",
+          "predicted_name": "Johnny Pujols",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Club de La Sabana",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Santo Domingo.-El",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-014",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2,
+      "entities": [
+        {
+          "gold_name": "Milton Morrison",
+          "predicted_name": "Milton Morrison",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Instituto Nacional de Tránsito y Transporte Terrestre",
+          "predicted_name": "Instituto Nacional de Tránsito y Transporte Terrestre",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-015",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7,
+      "entities": [
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Haivanjoe Ng Cortiñas",
+          "predicted_name": "Haivanjoe Ng Cortiñas",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Antonio Florián",
+          "predicted_name": "Antonio Florián",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "César Fernández",
+          "predicted_name": "César Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Secretariado Nacional",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Dirección Política",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-016",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9,
+      "entities": [
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hotoniel Bonilla García",
+          "predicted_name": "Hotoniel Bonilla García",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Poder Ejecutivo",
+          "predicted_name": "Poder Ejecutivo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Congreso Nacional",
+          "predicted_name": "Congreso",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Tribunal Constitucional",
+          "predicted_name": "Tribunal Constitucional",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Poder Judicial",
+          "predicted_name": "Poder Judicial",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Ministerio Público",
+          "predicted_name": "Ministerio Público",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Dirección Nacional de Inteligencia",
+          "predicted_name": "Dirección Nacional de Inteligencia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-017",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9,
+      "entities": [
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Ramón Alvarado",
+          "predicted_name": "Ramón Alvarado",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hospital Francisco Moscoso Puello",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Hospital Vinicio Calventi",
+          "predicted_name": "Calventi",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hospital Jaime Mota",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Jaime Mota de Barahona",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Congreso",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "UCI",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-018",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "David Collado",
+          "predicted_name": "David Collado",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "Ministerio de Turismo",
+          "predicted_name": "Ministerio de Turismo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Policía Turística",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Comité Ejecutor de Infraestructura en Zonas Turísticas",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-019",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5,
+      "entities": [
+        {
+          "gold_name": "Ministerio de Industria, Comercio y Mipymes",
+          "predicted_name": "Ministerio de Industria, Comercio y Mipymes",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Banco Central",
+          "predicted_name": "Banco Central",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Kerosene",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Fuel Oil",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-020",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 13,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Organización de las Naciones Unidas para la Alimentación y la Agricultura",
+          "predicted_name": "Organización de las Naciones Unidas para la Alimentación y la Agricultura",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Rodrigo Castañeda",
+          "predicted_name": "Rodrigo Castañeda",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Carolina Mejía",
+          "predicted_name": "Carolina Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Red de Sistemas Públicos de Abastecimiento y Comercialización de Alimentos",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Arnoldo Campos",
+          "predicted_name": "Arnoldo Campos",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Compañía Nacional de Abastecimiento de Brasil",
+          "predicted_name": "Compañía Nacional de Abastecimiento de Brasil",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Eric Moura",
+          "predicted_name": "Eric Moura",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "David Herrera Díaz",
+          "predicted_name": "David Herrera Díaz",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Instituto de Estabilización de Precios",
+          "predicted_name": "Instituto de Estabilización de Precios",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Francisco Oliverio",
+          "predicted_name": null,
+          "type": "PERSON",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Instituto Nacional de Estabilización de Precios",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-021",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "José Ignacio Paliza",
+          "predicted_name": "José Ignacio Paliza",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Poder Ejecutivo",
+          "predicted_name": "Poder Ejecutivo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Sistema Nacional de Atención a Emergencias y Seguridad 9-1-1",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Nvidia",
+          "predicted_name": "Nvidia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Instituto Tecnológico de Las Américas",
+          "predicted_name": "Instituto Tecnológico de Las Américas",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Miami College",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Presidencia",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-022",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 3,
+      "entities": [
+        {
+          "gold_name": "Omar Fernández",
+          "predicted_name": "Omar Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Tribunal Colegiado del Distrito Judicial de Dajabón",
+          "predicted_name": "Tribunal Colegiado del Distrito Judicial de Dajabón",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Instagram",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-023",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2,
+      "entities": [
+        {
+          "gold_name": "Yaritza Ortiz",
+          "predicted_name": "Yaritza Ortiz",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Enyer Crispín",
+          "predicted_name": "Enyer Crispín",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-024",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3,
+      "entities": [
+        {
+          "gold_name": "Celso Marranzini",
+          "predicted_name": "Celso Marranzini",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Consejo Unificado de las Empresas Distribuidoras de Electricidad",
+          "predicted_name": "Consejo Unificado de las Empresas Distribuidoras de Electricidad",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "CUED",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-025",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 4,
+      "entities": [
+        {
+          "gold_name": "Celso Marranzini",
+          "predicted_name": "Celso Marranzini",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Consejo Unificado de las Empresas Distribuidoras de Electricidad",
+          "predicted_name": "Consejo Unificado de las Empresas Distribuidoras de Electricidad",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "El Día",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Telesistema",
+          "predicted_name": "Telesistema",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-026",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5,
+      "entities": [
+        {
+          "gold_name": "Ministerio de Educación de la República Dominicana",
+          "predicted_name": "Ministerio de Educación de la República Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Asociación Dominicana de Profesores",
+          "predicted_name": "Asociación Dominicana de Profesores",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Asociación Nacional de Profesionales y Técnicos de la Educación",
+          "predicted_name": "Asociación Nacional de Profesionales y Técnicos de la Educación",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Eduardo Hidalgo",
+          "predicted_name": "Eduardo Hidalgo",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "ANPROTED",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-027",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 17,
+      "entities": [
+        {
+          "gold_name": "Congreso",
+          "predicted_name": "Congreso",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Poder Ejecutivo",
+          "predicted_name": "Poder Ejecutivo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Senado",
+          "predicted_name": "Senado",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Comisión Consultiva para la Libertad de Expresión",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Namphi Rodríguez",
+          "predicted_name": "Namphi Rodríguez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Aracelis Villanueva",
+          "predicted_name": "Aracelis Villanueva",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Participación Ciudadana",
+          "predicted_name": "Participación Ciudadana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Dirección Nacional de Inteligencia",
+          "predicted_name": "Dirección Nacional de Inteligencia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Persio Maldonado",
+          "predicted_name": "Persio Maldonado",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Eric Raful",
+          "predicted_name": "Eric Raful",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Jimena Conde",
+          "predicted_name": "Jimena Conde",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Hermógenes Acosta",
+          "predicted_name": "Hermógenes Acosta",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Elvira Lora",
+          "predicted_name": "Elvira Lora",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Instituto Nacional de Comunicación",
+          "predicted_name": "Instituto Nacional de Comunicación",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Cámara Alta",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-028",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 2,
+      "entities": [
+        {
+          "gold_name": "Leonel Fernández",
+          "predicted_name": "Leonel Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-029",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "Dulce Rojas",
+          "predicted_name": "Dulce Rojas",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Partido Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Empresa Metropolitana de Transporte",
+          "predicted_name": "Empresa Metropolitana de Transporte",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Cámara de Diputados",
+          "predicted_name": "Cámara de Diputados",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Villa Mella",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Presidente",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-030",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 5,
+      "entities": [
+        {
+          "gold_name": "Elon Musk",
+          "predicted_name": "Elon Musk",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno de la República Dominicana",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "X",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Gobierno de Luis Abinader",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-031",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9,
+      "entities": [
+        {
+          "gold_name": "Feliciano Lacen",
+          "predicted_name": "Feliciano Lacen",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Consejo Dominicano de Unidad Evangélica",
+          "predicted_name": "Consejo Dominicano de Unidad Evangélica",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Bray Vargas",
+          "predicted_name": "Bray Vargas",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": "Congreso Nacional",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Cámara de Diputados",
+          "predicted_name": "Cámara de Diputados",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luz García",
+          "predicted_name": "Luz García",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Presidente del CODUE",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Cuerpos Hot",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-032",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9,
+      "entities": [
+        {
+          "gold_name": "Hipólito Mejía",
+          "predicted_name": "Hipólito Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Carolina Mejía",
+          "predicted_name": "Carolina Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido Revolucionario Moderno",
+          "predicted_name": "Partido Revolucionario Moderno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno dominicano",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Estados Unidos",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Kalil Michel Presbot",
+          "predicted_name": "Kalil Michel Presbot",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Telefuturo Canal 23",
+          "predicted_name": "Telefuturo Canal",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "DR-Cafta",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-033",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 20,
+      "entities": [
+        {
+          "gold_name": "Congreso Nacional",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Poder Ejecutivo",
+          "predicted_name": "Poder Ejecutivo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Listín Diario",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Cámara de Diputados",
+          "predicted_name": "Cámara de Diputados",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Senado",
+          "predicted_name": "Senado",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Tribunal Constitucional",
+          "predicted_name": "Tribunal Constitucional",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Milton Ray Guevara",
+          "predicted_name": null,
+          "type": "PERSON",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Leyda Margarita Piña Medrano",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Julio César Castaños Guzmán",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Alejandro Moscoso Segarra",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Consultoría Jurídica",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "José Lorenzo Fermín",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Eduardo Jorge Prats",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ricardo Rojas León",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Persio Maldonado",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Aníbal de Castro",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Pedro Balbuena",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Listín Diario",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Luz Díaz",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-034",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 25,
+      "entities": [
+        {
+          "gold_name": "Luis Henry Molina",
+          "predicted_name": "Luis Henry Molina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Consejo Nacional de la Magistratura",
+          "predicted_name": "Consejo Nacional de la Magistratura",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Suprema Corte de Justicia",
+          "predicted_name": "Suprema Corte de Justicia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Fundación Institucionalidad y Justicia",
+          "predicted_name": "Fundación Institucionalidad y Justicia",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Colegio de Abogados de la República Dominicana",
+          "predicted_name": "Colegio de Abogados de la República Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Instituto Dominicano de Derecho Penal",
+          "predicted_name": "Instituto Dominicano de Derecho Penal",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Tobías Crespo",
+          "predicted_name": "Tobías Crespo",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Nancy Salcedo Fernández",
+          "predicted_name": "Nancy Salcedo Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Francisco Antonio Jerez Mena",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Yorlin Lisett Vásquez Castro",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Fran Euclides Soto Sánchez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Justiniano Montero Montero",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Francisco Alarcón Polanco",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Manuel Herrera Carbuccia",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Vanessa E. Acosta Peralta",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Anselmo Alejandro Bello",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Manuel Aurelio Victoria",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Namphi Andrés Rodríguez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Miguelina Ureña Núñez",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Rafael Vásquez Goico",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Samuel Arias Arzeno",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ministerio Público",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "María G. Garabito",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Alta Corte",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-035",
+      "overall_sentiment": {
+        "gold": "NEG",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 7,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Ministerio de Relaciones Exteriores de República Dominicana",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Gobierno de Nicaragua",
+          "predicted_name": "Gobierno de Nicaragua",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Ministerio de Relaciones Exteriores de Nicaragua",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Daniel Ortega",
+          "predicted_name": "Daniel Ortega",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEG"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Carta Democrática Interamericana",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "X de Abinader",
+          "type": "PERSON",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-036",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 11,
+      "entities": [
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Abelardo de la Espriella",
+          "predicted_name": "Abelardo de la Espriella",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Roberto Álvarez",
+          "predicted_name": "Roberto Álvarez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Félix Aracena",
+          "predicted_name": "Félix Aracena",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Honorio Henríquez Pineda",
+          "predicted_name": "Honorio Henríquez Pineda",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "José Manuel Restrepo Abondano",
+          "predicted_name": "José Manuel Restrepo Abondano",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Nasry Asfura",
+          "predicted_name": "Asfura",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Presidencia de la República",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Universidad Santiago de Cali",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Presidencia de Colombia",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Arena USC",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-037",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEG"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "Charlie Mariotti",
+          "predicted_name": "Charlie Mariotti",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gonzalo Castillo Terrero",
+          "predicted_name": "Gonzalo Castillo Terrero",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido Revolucionario Moderno",
+          "predicted_name": "Partido Revolucionario Moderno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "El Despertador",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Comité Político",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-038",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": false,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "Danilo Medina",
+          "predicted_name": "Danilo Medina",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido de la Liberación Dominicana",
+          "predicted_name": "Partido de la Liberación Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Johnny Pujols",
+          "predicted_name": "Johnny Pujols",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Zoraima Cuello",
+          "predicted_name": "Zoraima Cuello",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Mayobanex Escoto",
+          "predicted_name": "Mayobanex Escoto",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Bolívar Marte",
+          "predicted_name": "Bolívar Marte",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Gobierno",
+          "predicted_name": "Gobierno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEG",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Organización",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-039",
+      "overall_sentiment": {
+        "gold": "NEU",
+        "predicted": "NEU"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 5,
+      "entities": [
+        {
+          "gold_name": "Junta Central Electoral",
+          "predicted_name": "Junta Central Electoral",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Foro Permanente de Partidos Políticos de la República Dominicana",
+          "predicted_name": "Foro Permanente de Partidos Políticos de la República Dominicana",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Partido Revolucionario Moderno",
+          "predicted_name": "Partido Revolucionario Moderno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Dirección de Partidos Políticos",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Administrador",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-040",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 9,
+      "entities": [
+        {
+          "gold_name": "Partido Revolucionario Moderno",
+          "predicted_name": "Partido Revolucionario Moderno",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Eduardo Sanz Lovatón",
+          "predicted_name": "Sanz Lovatón",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "David Collado",
+          "predicted_name": "David Collado",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Luis Abinader",
+          "predicted_name": "Luis Abinader",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Ministerio de Industria, Comercio y Mipymes",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Ministerio de Turismo",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": "Listín Diario",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Trayectoria",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Ejecutivo",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-041",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 8,
+      "entities": [
+        {
+          "gold_name": "Leonel Fernández",
+          "predicted_name": "Leonel Fernández",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "Fuerza del Pueblo",
+          "predicted_name": "Fuerza del Pueblo",
+          "type": "ORG",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "Bautista Rojas Gómez",
+          "predicted_name": "Bautista Rojas Gómez",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Alexandra Peña",
+          "predicted_name": "Alexandra Peña",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Radhamés Jiménez Peña",
+          "predicted_name": "Radhamés Jiménez Peña",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": "Antonio Florián",
+          "predicted_name": "Antonio Florián",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Secretaría de Organización",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        },
+        {
+          "gold_name": null,
+          "predicted_name": "Dirección Política",
+          "type": "ORG",
+          "status": "fp",
+          "sentiment_toward": {
+            "gold": null,
+            "predicted": "NEU"
+          }
+        }
+      ]
+    },
+    {
+      "id": "odin-db-042",
+      "overall_sentiment": {
+        "gold": "POS",
+        "predicted": "POS"
+      },
+      "entities_exhaustive": true,
+      "entity_pairs": 3,
+      "entities": [
+        {
+          "gold_name": "Carolina Mejía",
+          "predicted_name": "Carolina Mejía",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "POS",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "José María Figueres Olsen",
+          "predicted_name": "José María Figueres Olsen",
+          "type": "PERSON",
+          "status": "match",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": "POS"
+          }
+        },
+        {
+          "gold_name": "El Nuevo Diario",
+          "predicted_name": null,
+          "type": "ORG",
+          "status": "fn",
+          "sentiment_toward": {
+            "gold": "NEU",
+            "predicted": null
+          }
+        }
+      ]
+    }
+  ]
+}

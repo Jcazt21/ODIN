@@ -144,6 +144,62 @@ class TestMatchEntitiesAndMetrics:
         assert overall.sentiment_total == 1  # solo "A" tenía gold de sentimiento
         assert overall.sentiment_correct == 1
 
+    def test_end_to_end_sentiment_counts_unextracted_labeled_entities_as_failures(self):
+        """`sentiment_accuracy` es condicional a haber detectado la entidad, así
+        que su denominador se mueve cuando cambia la extracción — por eso el
+        "59.9% -> 59.5%" entre las líneas base de 2026-08-13 y 2026-08-14 se
+        leyó como regresión sin serlo. `sentiment_accuracy_e2e` cuenta la
+        entidad etiquetada que nunca se extrajo como fallo, y su denominador
+        no depende del recall."""
+        predicted = [EntityResult(name="A", type="ORG", sentiment_toward="POS")]
+        gold = [
+            GoldEntity(name="A", type="ORG", sentiment_toward="POS"),  # extraída y correcta
+            GoldEntity(name="B", type="ORG", sentiment_toward="NEG"),  # nunca extraída
+        ]
+        pairs = _match_entities(predicted, gold)
+        by_type: dict[str, EntityMetrics] = {}
+        overall = EntityMetrics()
+        _update_metrics(by_type, overall, pairs, count_false_positives=True)
+
+        assert overall.sentiment_total == 1
+        assert overall.sentiment_correct == 1
+        assert overall.sentiment_missed == 1
+        assert overall.sentiment_accuracy == 1.0      # condicional: 1/1
+        assert overall.sentiment_accuracy_e2e == 0.5  # end-to-end: 1/2
+
+    def test_unextracted_entity_without_gold_sentiment_is_not_counted_as_missed(self):
+        predicted: list[EntityResult] = []
+        gold = [GoldEntity(name="A", type="ORG", sentiment_toward=None)]
+        pairs = _match_entities(predicted, gold)
+        overall = EntityMetrics()
+        _update_metrics({}, overall, pairs, count_false_positives=True)
+
+        assert overall.fn == 1
+        assert overall.sentiment_missed == 0  # no había juicio que acertar
+        assert overall.sentiment_accuracy_e2e is None
+
+    def test_polar_precision_ignores_neutral_predictions(self):
+        """Solo POS/NEG afirman algo sobre la entidad; NEU no puede ser un
+        juicio falso. La precisión polar mide exactamente eso."""
+        predicted = [
+            EntityResult(name="A", type="ORG", sentiment_toward="NEG"),  # polar, acierta
+            EntityResult(name="B", type="ORG", sentiment_toward="NEG"),  # polar, falla
+            EntityResult(name="C", type="ORG", sentiment_toward="NEU"),  # no polar
+        ]
+        gold = [
+            GoldEntity(name="A", type="ORG", sentiment_toward="NEG"),
+            GoldEntity(name="B", type="ORG", sentiment_toward="NEU"),
+            GoldEntity(name="C", type="ORG", sentiment_toward="NEU"),
+        ]
+        pairs = _match_entities(predicted, gold)
+        overall = EntityMetrics()
+        _update_metrics({}, overall, pairs, count_false_positives=True)
+
+        assert overall.sentiment_polar_predicted == 2
+        assert overall.sentiment_polar_correct == 1
+        assert overall.sentiment_polar_precision == 0.5
+        assert overall.sentiment_accuracy == round(2 / 3, 4)  # A y C aciertan
+
 
 class TestEntityMetricsProperties:
     def test_precision_recall_f1_none_when_no_data(self):

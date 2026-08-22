@@ -283,6 +283,56 @@ Números reales, `local`, mismos 42 artículos (detalle y desglose por tipo en
    evitar. Necesita más artículos en el golden set antes de intentar un fix
    seguro.
 
+#### Actualización 2026-08-20 — el punto 2 de arriba estaba mal diagnosticado
+
+**La hipótesis de "dilución en artículos largos" quedó refutada al medirla.**
+Los artículos mal clasificados son **más cortos** que los acertados (457 vs.
+525 palabras de media). La longitud no explicaba el error, así que "necesita
+más artículos en el golden set antes de intentar un fix seguro" tampoco era
+cierto: el fix se podía identificar y validar con los 42 que ya había.
+
+La causa real es un **sesgo de clase del modelo base**. `_aggregate` era una
+media plana de probabilidades: pysentimiento deja ~50% de masa NEU por frase,
+así que promediar converge a esa tasa base. El analizador emitía POS **solo 3
+veces en 42 artículos cuando el gold trae 12**, con **cero** confusiones
+POS↔NEG. Y la misma función servía a dos problemas opuestos —el artículo
+(decenas de frases, hay que des-diluir) y la entidad (mediana de 1 frase, hay
+que ser conservador)—, que era el defecto de raíz.
+
+Se separó en `_aggregate_document` (log-pooling con corrección de prior, sin
+umbral que tunear, prior medido sobre corpus aparte vía
+`scripts/estimate_sentiment_prior.py` sobre 162 artículos scrapeados que
+excluyen las URLs del golden set) y `_aggregate_entity` (gate de
+corroboración). Resultado medido: `overall_sentiment` 59.5% → **73.8%**
+(recall de POS 3/12 → 9/12), `sentiment_toward` 59.5% → **70.5%**, F1 de
+entidades idéntico. El golden set no participa en calibrar el prior, así que
+la cifra no es un ajuste al conjunto de prueba. Detalle completo en
+`docs/PRECISION.md` §4.
+
+**Dos cosas nuevas que este documento debe registrar:**
+
+1. **El "59.9% → 59.5%" de la medición del 2026-08-14 nunca fue una
+   regresión.** `sentiment_toward` solo se puntuaba sobre entidades
+   emparejadas: 51 entidades etiquetadas (20.3%) quedaron fuera del
+   denominador, y los 18 ORGs recién emparejados por los fixes de ORG
+   diluyeron un numerador PERSON fijo. La nota de arriba que lo atribuye a "un
+   efecto de segundo orden, probablemente por qué entidades terminan
+   emparejadas" apuntaba en la dirección correcta pero se quedó corta: es
+   aritmética del denominador, no ruido. `scripts/evaluate.py` ahora reporta
+   también una accuracy **end-to-end** con denominador estable.
+2. **`sentiment_toward` tiene un techo estructural, no un umbral mal puesto.**
+   Responder siempre NEU acierta el **71.5%**; el 70.5% actual no le gana, y
+   ninguna de las 12 reglas de gating probadas lo supera. La entidad hereda el
+   sentimiento de toda la frase y un modelo de frase no puede decidir de quién
+   es. Superarlo exige atribución por rol sintáctico o un LLM. **Ninguna cifra
+   de `sentiment_toward` debería presentarse sin ese piso al lado.**
+
+Sigue abierto el punto 1 (los 2 artículos con negación explícita): `odin-db-024`
+y `odin-db-025` siguen prediciendo NEG con gold NEU. Además, re-medido en este
+contexto, **`dampen_negated` ya no cambia ninguna de las tres métricas** — se
+deja intacto por no ser un cambio medido fuera de estos 42 artículos, pero
+queda como candidato a eliminación cuando el golden set crezca.
+
 ### Deuda menor asociada
 
 - **El fallback no distingue "mal configurado" de "falló"**
