@@ -150,6 +150,49 @@ def _apply_article_filters(
     return stmt
 
 
+# Columnas por las que se puede ordenar el listado. Lista blanca explícita y no
+# un getattr(Article, sort): eso dejaría ordenar por cualquier columna de la
+# tabla, `password_hash` de un futuro join incluido, con el nombre viajando
+# desde el query string.
+SORTABLE_COLUMNS = {
+    "published_at": Article.published_at,
+    "source": Article.source,
+    "analyzed_on": Article.analyzed_on,
+}
+
+# Alias del contrato anterior, donde `sort` mezclaba campo y dirección. Se
+# mantienen para no romper enlaces guardados.
+_SORT_ALIASES = {
+    "recent": ("published_at", "desc"),
+    "oldest": ("published_at", "asc"),
+}
+
+
+def _order_by(sort: str | None, order: str | None):
+    """Cláusula ORDER BY a partir del campo y la dirección pedidos."""
+    field, direction = _SORT_ALIASES.get(sort or "", (sort or "published_at", order or "desc"))
+    if order and sort not in _SORT_ALIASES:
+        direction = order
+
+    column = SORTABLE_COLUMNS.get(field)
+    if column is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se puede ordenar por '{field}'. Válidos: {', '.join(SORTABLE_COLUMNS)}.",
+        )
+    if direction not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=422, detail=f"Dirección inválida: '{direction}'. Válidas: asc, desc."
+        )
+
+    clause = column.asc() if direction == "asc" else column.desc()
+    # Los nulos siempre al final: `analyzed_on` está vacío en lo que nadie
+    # trabajó, y en descendente esos vacíos coparían la primera pantalla.
+    # Segundo criterio por id para que el orden sea estable entre páginas
+    # cuando varias filas empatan.
+    return [column.is_(None).asc(), clause, Article.id.desc()]
+
+
 def serialize_summary(article: Article) -> ArticleSummary:
     return ArticleSummary(
         id=article.id,
@@ -233,7 +276,8 @@ def list_articles(
     documentalist: int | None,
     date_from: str | None,
     date_to: str | None,
-    sort: str,
+    sort: str | None,
+    order: str | None,
     limit: int,
     offset: int,
 ) -> ArticleListResponse:
@@ -264,7 +308,7 @@ def list_articles(
 
         total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
 
-        order_col = Article.published_at.asc() if sort == "oldest" else Article.published_at.desc()
+        order_clauses = _order_by(sort, order)
         # selectinload: una query con IN(...) por relación para toda la página,
         # en vez de lazy-load por artículo (N+1) al pedir `len(article.entities)`,
         # `article.dominant_actor.name` (+blamed/credited) y `article.documentalist.
@@ -277,7 +321,7 @@ def list_articles(
                 selectinload(Article.credited_actor),
                 selectinload(Article.documentalist),
             )
-            .order_by(order_col, Article.id.desc())
+            .order_by(*order_clauses)
             .limit(limit)
             .offset(offset)
         ).all()

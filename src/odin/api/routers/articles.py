@@ -38,7 +38,8 @@ def list_articles(
     documentalist: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-    sort: str = "recent",
+    sort: str | None = None,
+    order: str | None = None,
     limit: int = 20,
     offset: int = 0,
 ):
@@ -49,6 +50,10 @@ def list_articles(
     `locality` es el id de un lugar del catálogo e incluye su subárbol: filtrar
     por la provincia Santiago trae también lo marcado en sus municipios.
     `documentalist` es el id del documentalista que dejó guardado el reporte.
+
+    `sort` es la columna (`published_at`, `source`, `analyzed_on`) y `order`
+    la dirección (`asc`/`desc`). "recent" y "oldest" siguen aceptándose como
+    alias del contrato anterior, donde `sort` mezclaba ambas cosas.
     """
     return article_service.list_articles(
         q=q,
@@ -65,6 +70,7 @@ def list_articles(
         date_from=date_from,
         date_to=date_to,
         sort=sort,
+        order=order,
         limit=limit,
         offset=offset,
     )

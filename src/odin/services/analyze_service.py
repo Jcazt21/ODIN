@@ -33,6 +33,7 @@ from odin.core.observability import (
 )
 from odin.core.url_guard import UrlNotAllowed
 from odin.db.models import AnalyzeJob, Article
+from odin.scrapers import source_from_url, strip_outlet_from_authors
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import ANALYZER_READS_WHOLE_ARTICLE, analyzer
 
@@ -41,6 +42,29 @@ from odin.services.analyzer_registry import ANALYZER_READS_WHOLE_ARTICLE, analyz
 ANALYZE_STAGES = ("fetching", "analyzing", "canonicalizing")
 
 _thread_state = threading.local()
+
+
+def resolve_source(url: str, extracted_sitename: str | None) -> str:
+    """Medio de una nota analizada por URL.
+
+    Orden deliberado: primero el dominio contra el registro de scrapers, que da
+    la MISMA clave que usa el rastreo masivo (`listin_diario`), y solo si no lo
+    reconocemos se cae al nombre que haya extraído trafilatura.
+
+    Importa el orden: antes mandaba el `sitename` extraído, y como es una
+    heurística sobre el HTML, una nota de un medio que sí rastreamos podía
+    quedar guardada con un texto libre distinto del slug — dos entradas para el
+    mismo medio en el filtro. Y sin `sitename`, con "manual", que ni siquiera
+    es un medio.
+
+    "manual" sigue siendo el último recurso: dice honestamente que no se pudo
+    determinar, en vez de inventar una clave que aparecería en los filtros como
+    si fuera un medio conocido.
+    """
+    known = source_from_url(url)
+    if known:
+        return known
+    return (extracted_sitename or "").strip() or "manual"
 
 
 def _http_session() -> requests.Session:
@@ -207,12 +231,14 @@ def run_analyze_job(job_id: str) -> None:
             session.commit()
             canonicalize_result(result)
 
+            resolved_source = resolve_source(url, extracted.get("sitename"))
             detail = AnalyzeResult(
                 already_saved=False,
-                source=extracted.get("sitename") or "manual",
+                source=resolved_source,
                 url=url,
                 title=extracted["title"],
-                authors=extracted["authors"],
+                # El medio se lista a sí mismo como autor en varios sitios.
+                authors=strip_outlet_from_authors(extracted["authors"], resolved_source),
                 section=extracted["section"],
                 published_at=extracted["published_at"],
                 body=extracted["body"],

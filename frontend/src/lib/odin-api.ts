@@ -94,9 +94,16 @@ export interface ArticleListParams {
   source_quality?: string
   has_hard_data?: boolean
   entity?: string
+  /** Id de un lugar del catálogo. El backend incluye su subárbol: filtrar
+   *  por una provincia trae también lo marcado en sus municipios. */
+  locality?: number
   date_from?: string
   date_to?: string
-  sort?: "recent" | "oldest"
+  /** Columna por la que ordenar. El backend además acepta "recent"/"oldest"
+   *  como alias del contrato anterior, para enlaces ya guardados; el cliente
+   *  no los emite, así que no entran en este tipo. */
+  sort?: "published_at" | "source" | "analyzed_on"
+  order?: "asc" | "desc"
   documentalist?: number
   limit?: number
   offset?: number

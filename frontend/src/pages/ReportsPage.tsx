@@ -9,7 +9,9 @@ import { useExportArticles } from "@/lib/queries/documentalists"
 import { OdinApiError, type ArticleListParams } from "@/lib/odin-api"
 
 const PAGE_SIZE = 12
-const EMPTY_FILTERS: ArticleListParams = { sort: "recent" }
+// El orden se maneja desde las cabeceras de la tabla, no desde la barra de
+// filtros: dos controles para lo mismo se contradicen en cuanto uno cambia.
+const EMPTY_FILTERS: ArticleListParams = { sort: "published_at", order: "desc" }
 
 /** Debounce solo de los campos de texto libre (q, entity): clicks en selects,
  *  fechas, orden o paginación deben reflejarse de inmediato — antes heredaban
@@ -153,8 +155,9 @@ export function ReportsPage() {
             articles={items}
             loading={loading}
             onOpen={(id) => navigate(`/reports/${id}`)}
-            sortDir={filters.sort ?? "recent"}
-            onToggleSort={() => updateFilters({ sort: filters.sort === "oldest" ? "recent" : "oldest" })}
+            sort={filters.sort ?? "published_at"}
+            order={filters.order ?? "desc"}
+            onSort={(sort, order) => updateFilters({ sort, order })}
             selectedIds={selectedIds}
             onSelectionChange={setSelectedIds}
           />

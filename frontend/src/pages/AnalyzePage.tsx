@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
+import { LocalityPicker } from "@/components/LocalityPicker"
+import type { PickedLocality } from "@/lib/localities"
 import { AnalyzeProgress } from "@/components/AnalyzeProgress"
 import { EntitiesCard } from "@/components/EntitiesCard"
 import { ActionButtons } from "@/components/ActionButtons"
@@ -46,6 +48,11 @@ export function AnalyzePage() {
     setJobStage(stage)
   })
   const saveMutation = useSaveArticle()
+  // Los lugares se acumulan acá y viajan en el mismo POST que el reporte.
+  // No se escriben al vuelo como en `LocalitiesCard` porque todavía no hay
+  // artículo al que vincularlos: existe recién al guardar, y por eso el
+  // guardado es una sola transacción que los incluye.
+  const [localities, setLocalities] = useState<PickedLocality[]>([])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -69,9 +76,18 @@ export function AnalyzePage() {
   async function handleSave() {
     if (!draft || saveMutation.isPending) return
     try {
-      const saved = await saveMutation.mutateAsync(draft)
+      const saved = await saveMutation.mutateAsync({
+        ...draft,
+        localities: localities.map((l) => ({
+          locality_id: l.locality_id,
+          kind: l.kind,
+          origin: "MANUAL",
+          confidence: null,
+        })),
+      })
       setResult(saved)
       setDraft(null)
+      setLocalities([])
       setUrl("")
     } catch {
       // el error queda en saveMutation.error, mostrado abajo
@@ -192,6 +208,24 @@ export function AnalyzePage() {
             editable={isDraft}
             onChange={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))}
           />
+          {isDraft && (
+            <div
+              className="odin-glass overflow-hidden rounded-xl border px-6 py-5"
+              style={{ boxShadow: "var(--shadow-sm)" }}
+            >
+              <h3 className="text-[15px] font-semibold">Lugar de la noticia</h3>
+              <p className="mt-1 mb-3 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+                Se guardan junto con el reporte. Podés agregar más de uno.
+              </p>
+              <LocalityPicker
+                selected={localities}
+                onAdd={(picked) => setLocalities((prev) => [...prev, picked])}
+                onRemove={(_picked, index) =>
+                  setLocalities((prev) => prev.filter((_, i) => i !== index))
+                }
+              />
+            </div>
+          )}
           <EntitiesCard
             entities={isDraft ? draft.entities : view.entities}
             editable={isDraft}

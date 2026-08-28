@@ -21,6 +21,7 @@ export function LocalityCombobox({
   onSelect,
   disabled = false,
   placeholder = "Todas",
+  hideLabel = false,
 }: {
   label: string
   entries: LocalityEntry[]
@@ -28,6 +29,10 @@ export function LocalityCombobox({
   onSelect: (entry: LocalityEntry | null) => void
   disabled?: boolean
   placeholder?: string
+  /** Oculta la etiqueta a la vista sin quitarla del árbol de accesibilidad.
+   *  Para filas de filtros donde todos los controles miden lo mismo y el
+   *  placeholder ya dice qué es. */
+  hideLabel?: boolean
 }) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -86,8 +91,11 @@ export function LocalityCombobox({
 
   return (
     <div className="relative flex flex-col gap-1">
-      <label className="flex flex-col gap-1">
-        <span className="text-[11.5px]" style={{ color: "var(--faint)" }}>
+      <label className={hideLabel ? "block" : "flex flex-col gap-1"}>
+        <span
+          className={hideLabel ? "sr-only" : "text-[11.5px]"}
+          style={hideLabel ? undefined : { color: "var(--faint)" }}
+        >
           {label}
         </span>
         <div className="relative">

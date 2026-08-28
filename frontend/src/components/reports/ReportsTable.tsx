@@ -4,20 +4,75 @@ import { FRAMING_LABELS } from "@/lib/labels"
 import { formatDateShort, formatDay } from "@/lib/format"
 import type { ArticleSummary } from "@/lib/odin-api"
 
+
+export type SortField = "published_at" | "source" | "analyzed_on"
+export type SortOrder = "asc" | "desc"
+
+const HEADER_CLASS =
+  "border-b px-[14px] py-[10px] text-left font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
+
+function PlainHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <th className={HEADER_CLASS} style={{ borderColor: "var(--border)", color: "var(--faint)" }}>
+      {children}
+    </th>
+  )
+}
+
+/** Cabecera que ordena. Un `<button>` y no un `<th onClick>`: así se alcanza
+ *  con teclado y los lectores de pantalla lo anuncian como accionable. El
+ *  `aria-sort` va en el `<th>`, que es donde lo espera la especificación. */
+function SortableHeader({
+  label,
+  field,
+  sort,
+  order,
+  onSort,
+}: {
+  label: string
+  field: SortField
+  sort: SortField
+  order: SortOrder
+  onSort?: (field: SortField, order: SortOrder) => void
+}) {
+  const active = sort === field
+  return (
+    <th
+      className={HEADER_CLASS}
+      aria-sort={active ? (order === "asc" ? "ascending" : "descending") : "none"}
+      style={{ borderColor: "var(--border)", color: active ? "var(--primary)" : "var(--faint)" }}
+    >
+      <button
+        type="button"
+        // Cambiar de columna arranca en descendente (lo más reciente o lo
+        // último alfabéticamente primero); volver a pulsar la activa invierte.
+        onClick={() => onSort?.(field, active && order === "desc" ? "asc" : "desc")}
+        className="inline-flex cursor-pointer items-center gap-1 font-[inherit] tracking-[inherit] uppercase select-none"
+        style={{ color: "inherit" }}
+      >
+        {label}
+        {active && <span aria-hidden>{order === "desc" ? "↓" : "↑"}</span>}
+      </button>
+    </th>
+  )
+}
+
 export function ReportsTable({
   articles,
   loading = false,
   onOpen,
-  sortDir = "recent",
-  onToggleSort,
+  sort = "published_at",
+  order = "desc",
+  onSort,
   selectedIds,
   onSelectionChange,
 }: {
   articles: ArticleSummary[]
   loading?: boolean
   onOpen?: (id: number) => void
-  sortDir?: "recent" | "oldest"
-  onToggleSort?: () => void
+  sort?: SortField
+  order?: SortOrder
+  onSort?: (field: SortField, order: SortOrder) => void
   selectedIds: number[]
   onSelectionChange: (ids: number[]) => void
 }) {
@@ -38,22 +93,11 @@ export function ReportsTable({
                 }
               />
             </th>
-            <th
-              onClick={onToggleSort}
-              className="cursor-pointer border-b px-[14px] py-[10px] text-left font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap select-none"
-              style={{ borderColor: "var(--border)", color: "var(--primary)" }}
-            >
-              Fecha {sortDir === "recent" ? "↓" : "↑"}
-            </th>
-            {["Artículo", "Fuente", "Sentimiento", "Encuadre"].map((h) => (
-              <th
-                key={h}
-                className="border-b px-[14px] py-[10px] text-left font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
-                style={{ borderColor: "var(--border)", color: "var(--faint)" }}
-              >
-                {h}
-              </th>
-            ))}
+            <SortableHeader label="Fecha" field="published_at" sort={sort} order={order} onSort={onSort} />
+            <PlainHeader>Artículo</PlainHeader>
+            <SortableHeader label="Fuente" field="source" sort={sort} order={order} onSort={onSort} />
+            <PlainHeader>Sentimiento</PlainHeader>
+            <PlainHeader>Encuadre</PlainHeader>
             <th
               className="border-b px-[14px] py-[10px] text-right font-mono text-[10.5px] font-medium tracking-[0.1em] uppercase whitespace-nowrap"
               style={{ borderColor: "var(--border)", color: "var(--faint)" }}
@@ -66,8 +110,8 @@ export function ReportsTable({
             >
               Datos
             </th>
-            <th className="px-2 py-1.5 text-left font-medium">Documentalista</th>
-            <th className="px-2 py-1.5 text-left font-medium">Analizado</th>
+            <PlainHeader>Documentalista</PlainHeader>
+            <SortableHeader label="Analizado" field="analyzed_on" sort={sort} order={order} onSort={onSort} />
           </tr>
         </thead>
         <tbody>
@@ -125,7 +169,10 @@ export function ReportsTable({
                   <td className="px-[14px] py-3 align-top">
                     {a.framing ? (
                       <span
-                        className="rounded-[5px] border px-2 py-0.5 text-[11.5px]"
+                        // inline-block: en línea, el fondo y el borde se reparten
+                        // por línea de texto y "Crisis / conflicto" se dibuja como
+                        // dos rectángulos desfasados al saltar de línea.
+                        className="inline-block rounded-[5px] border px-2 py-0.5 text-[11.5px] leading-[1.35]"
                         style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
                       >
                         {FRAMING_LABELS[a.framing] ?? a.framing}

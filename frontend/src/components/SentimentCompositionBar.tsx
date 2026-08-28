@@ -20,7 +20,7 @@ export function SentimentCompositionBar({ aggregate }: { aggregate: SentimentAgg
         </span>
         {lowSample && (
           <span
-            className="rounded-[5px] border px-1.5 py-0.5 text-[10px] font-medium"
+            className="inline-block rounded-[5px] border px-1.5 py-0.5 text-[10px] font-medium"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--faint)" }}
             title={`Solo ${sampleSize} menciones — el promedio puede ser poco representativo`}
           >

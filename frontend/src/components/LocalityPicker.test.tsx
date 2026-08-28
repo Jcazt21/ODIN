@@ -304,6 +304,41 @@ describe("LocalityPicker", () => {
       expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ locality_id: 1 }))
     })
 
+    it("elegir solo la provincia alcanza: no hay que bajar a municipio", async () => {
+      /* El caso del cliente: si el hecho ocurrió "en Barahona" sin precisar
+         municipio, se guarda la provincia. El nodo elegido ES el alcance de la
+         noticia, así que dejar Municipio en "Todas" no es un dato incompleto:
+         es el dato. */
+      const onAdd = renderPicker()
+      const user = userEvent.setup()
+      await ready()
+
+      await user.click(field("Provincia"))
+      await user.click(within(listFor("Provincia")).getByRole("option", { name: /Santiago/ }))
+
+      expect(screen.getByRole("button", { name: /agregar/i }).hasAttribute("disabled")).toBe(false)
+
+      await user.click(screen.getByRole("button", { name: /agregar/i }))
+
+      expect(onAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ locality_id: 4, kind: "HECHO" })
+      )
+    })
+
+    it("elegir solo la región alcanza", async () => {
+      const onAdd = renderPicker()
+      const user = userEvent.setup()
+      await ready()
+
+      await user.click(field("Región"))
+      await user.click(
+        within(listFor("Región")).getByRole("option", { name: /Región Norte o Cibao/ })
+      )
+      await user.click(screen.getByRole("button", { name: /agregar/i }))
+
+      expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ locality_id: 2 }))
+    })
+
     it("no permite agregar sin haber elegido nada", async () => {
       renderPicker()
       await ready()
