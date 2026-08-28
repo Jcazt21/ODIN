@@ -35,6 +35,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 import odin.db.aliases as alias_store
+import odin.db.localities as loc_store
+import odin.db.users as user_store
 from odin.analysis.local_analyzer import LocalAnalyzer
 from odin.api.routers import (
     aliases,
@@ -42,8 +44,10 @@ from odin.api.routers import (
     articles,
     canonical_entities,
     entities,
+    localities,
     misc,
     scrape_jobs,
+    users,
 )
 from odin.core import auth
 from odin.core.config import settings
@@ -55,7 +59,7 @@ from odin.core.observability import (
     get_logger,
     init_sentry,
 )
-from odin.db.session import init_db
+from odin.db.session import get_session, init_db
 from odin.services import analyze_service
 from odin.services.analyzer_registry import analyzer
 
@@ -104,6 +108,36 @@ async def _lifespan(app: FastAPI):
             log.info("seed_catalog_loaded", aliases=n)
     except Exception as exc:
         log.warning("seed_catalog_load_failed", error=str(exc))
+
+    # El catalogo geografico va en su PROPIO try: compartir el de las siglas
+    # hacia que un fallo alla se llevara por delante la siembra de aqui, y al
+    # reves. Ademas se registra con exception() y no warning(): si esto falla,
+    # el selector de lugar queda vacio sin decir por que, y hace falta el
+    # traceback completo para entender por que (p. ej. el JSON de la semilla no
+    # empaquetado, que es como se descubrio este bug).
+    try:
+        session = get_session()
+        try:
+            m = loc_store.seed_localities(session)
+        finally:
+            session.close()
+        if m:
+            log.info("seed_localities_loaded", localities=m)
+    except Exception:
+        log.exception("seed_localities_failed")
+
+    # El operador del entorno se convierte en el primer documentalista admin. Va en su
+    # propio try y con exception(): si esto falla en una base vacía, NADIE puede
+    # entrar, y el traceback es lo único que lo explica.
+    try:
+        session = get_session()
+        try:
+            if user_store.seed_operator(session):
+                log.info("seed_operator_created", username=settings.auth_username)
+        finally:
+            session.close()
+    except Exception:
+        log.exception("seed_operator_failed")
     try:
         # Arrancar es justo el momento en que hay jobs huérfanos: los que
         # estaban corriendo cuando este proceso (o el anterior) se cayó.
@@ -122,8 +156,10 @@ app.include_router(articles.router)
 app.include_router(entities.router)
 app.include_router(aliases.router)
 app.include_router(canonical_entities.router)
+app.include_router(localities.router)
 app.include_router(scrape_jobs.router)
 app.include_router(misc.router)
+app.include_router(users.router)
 
 
 # Rutas parametrizadas (`/api/articles/{article_id}`) colapsan a su plantilla

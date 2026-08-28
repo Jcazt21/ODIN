@@ -1,0 +1,774 @@
+{
+  "_fuente": "Decreto 710-04 (regiones) + ONE division territorial. 31 provincias + Distrito Nacional, 158 municipios. Incluye La Victoria (Ley 15-24, vigente 2026-01-01) y La Caleta (Ley 39-24).",
+  "pais": {
+    "nombre": "República Dominicana",
+    "codigo": "DO"
+  },
+  "macrorregiones": [
+    {
+      "nombre": "Región Norte o Cibao",
+      "nombre_oficial": "Cibao",
+      "regiones": [
+        {
+          "nombre": "Cibao Norte",
+          "provincias": [
+            {
+              "nombre": "Santiago",
+              "municipios": [
+                {
+                  "nombre": "Santiago de los Caballeros"
+                },
+                {
+                  "nombre": "Baitoa"
+                },
+                {
+                  "nombre": "Jánico"
+                },
+                {
+                  "nombre": "Licey al Medio"
+                },
+                {
+                  "nombre": "Puñal"
+                },
+                {
+                  "nombre": "Sabana Iglesia"
+                },
+                {
+                  "nombre": "San José de las Matas"
+                },
+                {
+                  "nombre": "Tamboril"
+                },
+                {
+                  "nombre": "Villa Bisonó",
+                  "alias": [
+                    "Navarrete"
+                  ]
+                },
+                {
+                  "nombre": "Villa González"
+                }
+              ],
+              "alias": [
+                "Santiago de los Caballeros"
+              ]
+            },
+            {
+              "nombre": "Puerto Plata",
+              "municipios": [
+                {
+                  "nombre": "San Felipe de Puerto Plata",
+                  "alias": [
+                    "Puerto Plata"
+                  ]
+                },
+                {
+                  "nombre": "Altamira"
+                },
+                {
+                  "nombre": "Guananico"
+                },
+                {
+                  "nombre": "Imbert"
+                },
+                {
+                  "nombre": "Los Hidalgos"
+                },
+                {
+                  "nombre": "Luperón"
+                },
+                {
+                  "nombre": "Sosúa"
+                },
+                {
+                  "nombre": "Villa Isabela"
+                },
+                {
+                  "nombre": "Villa Montellano"
+                }
+              ]
+            },
+            {
+              "nombre": "Espaillat",
+              "municipios": [
+                {
+                  "nombre": "Moca"
+                },
+                {
+                  "nombre": "Cayetano Germosén"
+                },
+                {
+                  "nombre": "Gaspar Hernández"
+                },
+                {
+                  "nombre": "Jamao al Norte"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Cibao Sur",
+          "provincias": [
+            {
+              "nombre": "La Vega",
+              "municipios": [
+                {
+                  "nombre": "Concepción de La Vega",
+                  "alias": [
+                    "La Vega"
+                  ]
+                },
+                {
+                  "nombre": "Constanza"
+                },
+                {
+                  "nombre": "Jarabacoa"
+                },
+                {
+                  "nombre": "Jima Abajo"
+                }
+              ]
+            },
+            {
+              "nombre": "Monseñor Nouel",
+              "municipios": [
+                {
+                  "nombre": "Bonao"
+                },
+                {
+                  "nombre": "Maimón"
+                },
+                {
+                  "nombre": "Piedra Blanca"
+                }
+              ]
+            },
+            {
+              "nombre": "Sánchez Ramírez",
+              "municipios": [
+                {
+                  "nombre": "Cotuí"
+                },
+                {
+                  "nombre": "Cevicos"
+                },
+                {
+                  "nombre": "Fantino"
+                },
+                {
+                  "nombre": "La Mata"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Cibao Nordeste",
+          "provincias": [
+            {
+              "nombre": "Duarte",
+              "municipios": [
+                {
+                  "nombre": "San Francisco de Macorís"
+                },
+                {
+                  "nombre": "Arenoso"
+                },
+                {
+                  "nombre": "Castillo"
+                },
+                {
+                  "nombre": "Eugenio María de Hostos"
+                },
+                {
+                  "nombre": "Las Guáranas"
+                },
+                {
+                  "nombre": "Pimentel"
+                },
+                {
+                  "nombre": "Villa Riva"
+                }
+              ]
+            },
+            {
+              "nombre": "Hermanas Mirabal",
+              "municipios": [
+                {
+                  "nombre": "Salcedo"
+                },
+                {
+                  "nombre": "Tenares"
+                },
+                {
+                  "nombre": "Villa Tapia"
+                }
+              ],
+              "alias": [
+                "Salcedo"
+              ]
+            },
+            {
+              "nombre": "María Trinidad Sánchez",
+              "municipios": [
+                {
+                  "nombre": "Nagua"
+                },
+                {
+                  "nombre": "Cabrera"
+                },
+                {
+                  "nombre": "El Factor"
+                },
+                {
+                  "nombre": "Río San Juan"
+                }
+              ]
+            },
+            {
+              "nombre": "Samaná",
+              "municipios": [
+                {
+                  "nombre": "Santa Bárbara de Samaná",
+                  "alias": [
+                    "Samaná"
+                  ]
+                },
+                {
+                  "nombre": "Las Terrenas"
+                },
+                {
+                  "nombre": "Sánchez"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Cibao Noroeste",
+          "provincias": [
+            {
+              "nombre": "Valverde",
+              "municipios": [
+                {
+                  "nombre": "Santa Cruz de Mao",
+                  "alias": [
+                    "Mao"
+                  ]
+                },
+                {
+                  "nombre": "Esperanza"
+                },
+                {
+                  "nombre": "Laguna Salada"
+                }
+              ]
+            },
+            {
+              "nombre": "Monte Cristi",
+              "municipios": [
+                {
+                  "nombre": "San Fernando de Monte Cristi",
+                  "alias": [
+                    "Montecristi",
+                    "Monte Cristi"
+                  ]
+                },
+                {
+                  "nombre": "Castañuelas"
+                },
+                {
+                  "nombre": "Guayubín"
+                },
+                {
+                  "nombre": "Las Matas de Santa Cruz"
+                },
+                {
+                  "nombre": "Pepillo Salcedo",
+                  "alias": [
+                    "Manzanillo"
+                  ]
+                },
+                {
+                  "nombre": "Villa Vásquez"
+                }
+              ],
+              "alias": [
+                "Montecristi"
+              ]
+            },
+            {
+              "nombre": "Santiago Rodríguez",
+              "municipios": [
+                {
+                  "nombre": "San Ignacio de Sabaneta",
+                  "alias": [
+                    "Sabaneta"
+                  ]
+                },
+                {
+                  "nombre": "Monción"
+                },
+                {
+                  "nombre": "Villa Los Almácigos"
+                }
+              ]
+            },
+            {
+              "nombre": "Dajabón",
+              "municipios": [
+                {
+                  "nombre": "Dajabón"
+                },
+                {
+                  "nombre": "El Pino"
+                },
+                {
+                  "nombre": "Loma de Cabrera"
+                },
+                {
+                  "nombre": "Partido"
+                },
+                {
+                  "nombre": "Restauración"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Región Sur",
+      "nombre_oficial": "Suroeste",
+      "regiones": [
+        {
+          "nombre": "Valdesia",
+          "provincias": [
+            {
+              "nombre": "San Cristóbal",
+              "municipios": [
+                {
+                  "nombre": "San Cristóbal"
+                },
+                {
+                  "nombre": "Bajos de Haina"
+                },
+                {
+                  "nombre": "Cambita Garabitos"
+                },
+                {
+                  "nombre": "Los Cacaos"
+                },
+                {
+                  "nombre": "Sabana Grande de Palenque"
+                },
+                {
+                  "nombre": "San Gregorio de Nigua"
+                },
+                {
+                  "nombre": "Villa Altagracia"
+                },
+                {
+                  "nombre": "Yaguate"
+                }
+              ]
+            },
+            {
+              "nombre": "Peravia",
+              "municipios": [
+                {
+                  "nombre": "Baní"
+                },
+                {
+                  "nombre": "Matanzas"
+                },
+                {
+                  "nombre": "Nizao"
+                }
+              ]
+            },
+            {
+              "nombre": "San José de Ocoa",
+              "municipios": [
+                {
+                  "nombre": "San José de Ocoa"
+                },
+                {
+                  "nombre": "Rancho Arriba"
+                },
+                {
+                  "nombre": "Sabana Larga"
+                }
+              ]
+            },
+            {
+              "nombre": "Azua",
+              "municipios": [
+                {
+                  "nombre": "Azua de Compostela",
+                  "alias": [
+                    "Azua"
+                  ]
+                },
+                {
+                  "nombre": "Estebanía"
+                },
+                {
+                  "nombre": "Guayabal"
+                },
+                {
+                  "nombre": "Las Charcas"
+                },
+                {
+                  "nombre": "Las Yayas de Viajama"
+                },
+                {
+                  "nombre": "Padre Las Casas"
+                },
+                {
+                  "nombre": "Peralta"
+                },
+                {
+                  "nombre": "Pueblo Viejo"
+                },
+                {
+                  "nombre": "Sabana Yegua"
+                },
+                {
+                  "nombre": "Tábara Arriba"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "El Valle",
+          "provincias": [
+            {
+              "nombre": "San Juan",
+              "municipios": [
+                {
+                  "nombre": "San Juan de la Maguana"
+                },
+                {
+                  "nombre": "Bohechío"
+                },
+                {
+                  "nombre": "El Cercado"
+                },
+                {
+                  "nombre": "Juan de Herrera"
+                },
+                {
+                  "nombre": "Las Matas de Farfán"
+                },
+                {
+                  "nombre": "Vallejuelo"
+                }
+              ],
+              "alias": [
+                "San Juan de la Maguana"
+              ]
+            },
+            {
+              "nombre": "Elías Piña",
+              "municipios": [
+                {
+                  "nombre": "Comendador",
+                  "alias": [
+                    "Elías Piña"
+                  ]
+                },
+                {
+                  "nombre": "Bánica"
+                },
+                {
+                  "nombre": "El Llano"
+                },
+                {
+                  "nombre": "Hondo Valle"
+                },
+                {
+                  "nombre": "Juan Santiago"
+                },
+                {
+                  "nombre": "Pedro Santana"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Enriquillo",
+          "provincias": [
+            {
+              "nombre": "Barahona",
+              "municipios": [
+                {
+                  "nombre": "Santa Cruz de Barahona",
+                  "alias": [
+                    "Barahona"
+                  ]
+                },
+                {
+                  "nombre": "Cabral"
+                },
+                {
+                  "nombre": "El Peñón"
+                },
+                {
+                  "nombre": "Enriquillo"
+                },
+                {
+                  "nombre": "Fundación"
+                },
+                {
+                  "nombre": "Jaquimeyes"
+                },
+                {
+                  "nombre": "La Ciénaga"
+                },
+                {
+                  "nombre": "Las Salinas"
+                },
+                {
+                  "nombre": "Paraíso"
+                },
+                {
+                  "nombre": "Polo"
+                },
+                {
+                  "nombre": "Vicente Noble"
+                }
+              ]
+            },
+            {
+              "nombre": "Bahoruco",
+              "municipios": [
+                {
+                  "nombre": "Neiba"
+                },
+                {
+                  "nombre": "Galván"
+                },
+                {
+                  "nombre": "Los Ríos"
+                },
+                {
+                  "nombre": "Tamayo"
+                },
+                {
+                  "nombre": "Villa Jaragua"
+                }
+              ],
+              "alias": [
+                "Baoruco"
+              ]
+            },
+            {
+              "nombre": "Independencia",
+              "municipios": [
+                {
+                  "nombre": "Jimaní"
+                },
+                {
+                  "nombre": "Cristóbal"
+                },
+                {
+                  "nombre": "Duvergé"
+                },
+                {
+                  "nombre": "La Descubierta"
+                },
+                {
+                  "nombre": "Mella"
+                },
+                {
+                  "nombre": "Postrer Río"
+                }
+              ]
+            },
+            {
+              "nombre": "Pedernales",
+              "municipios": [
+                {
+                  "nombre": "Pedernales"
+                },
+                {
+                  "nombre": "Oviedo"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "nombre": "Región Este o Sureste",
+      "nombre_oficial": "Sureste",
+      "regiones": [
+        {
+          "nombre": "Ozama o Metropolitana",
+          "provincias": [
+            {
+              "nombre": "Distrito Nacional",
+              "municipios": [],
+              "alias": [
+                "DN",
+                "Santo Domingo de Guzmán",
+                "Capital"
+              ],
+              "es_distrito_nacional": true
+            },
+            {
+              "nombre": "Santo Domingo",
+              "municipios": [
+                {
+                  "nombre": "Santo Domingo Este"
+                },
+                {
+                  "nombre": "Santo Domingo Oeste"
+                },
+                {
+                  "nombre": "Santo Domingo Norte"
+                },
+                {
+                  "nombre": "Boca Chica"
+                },
+                {
+                  "nombre": "San Antonio de Guerra"
+                },
+                {
+                  "nombre": "Los Alcarrizos"
+                },
+                {
+                  "nombre": "Pedro Brand"
+                },
+                {
+                  "nombre": "La Victoria"
+                },
+                {
+                  "nombre": "La Caleta"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Higüamo",
+          "provincias": [
+            {
+              "nombre": "San Pedro de Macorís",
+              "municipios": [
+                {
+                  "nombre": "San Pedro de Macorís"
+                },
+                {
+                  "nombre": "Consuelo"
+                },
+                {
+                  "nombre": "Guayacanes"
+                },
+                {
+                  "nombre": "Quisqueya"
+                },
+                {
+                  "nombre": "Ramón Santana"
+                },
+                {
+                  "nombre": "San José de los Llanos"
+                }
+              ]
+            },
+            {
+              "nombre": "Hato Mayor",
+              "municipios": [
+                {
+                  "nombre": "Hato Mayor del Rey",
+                  "alias": [
+                    "Hato Mayor"
+                  ]
+                },
+                {
+                  "nombre": "El Valle"
+                },
+                {
+                  "nombre": "Sabana de la Mar"
+                }
+              ]
+            },
+            {
+              "nombre": "Monte Plata",
+              "municipios": [
+                {
+                  "nombre": "Monte Plata"
+                },
+                {
+                  "nombre": "Bayaguana"
+                },
+                {
+                  "nombre": "Peralvillo"
+                },
+                {
+                  "nombre": "Sabana Grande de Boyá"
+                },
+                {
+                  "nombre": "Yamasá"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "nombre": "Yuma",
+          "provincias": [
+            {
+              "nombre": "La Romana",
+              "municipios": [
+                {
+                  "nombre": "La Romana"
+                },
+                {
+                  "nombre": "Guaymate"
+                },
+                {
+                  "nombre": "Villa Hermosa"
+                }
+              ]
+            },
+            {
+              "nombre": "La Altagracia",
+              "municipios": [
+                {
+                  "nombre": "Salvaleón de Higüey",
+                  "alias": [
+                    "Higüey"
+                  ]
+                },
+                {
+                  "nombre": "San Rafael del Yuma"
+                }
+              ]
+            },
+            {
+              "nombre": "El Seibo",
+              "municipios": [
+                {
+                  "nombre": "Santa Cruz de El Seibo",
+                  "alias": [
+                    "El Seibo"
+                  ]
+                },
+                {
+                  "nombre": "Miches"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -259,7 +259,7 @@ class TestSaveArticleLinksCanonicalEntity:
             },
             headers=_auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201  # alta de reporte
 
         session = sqlite_sessionmaker()
         entity = session.query(Entity).filter_by(name="Luis Abinader").one()
@@ -332,7 +332,7 @@ class TestSaveArticleLinksCanonicalEntity:
             },
             headers=_auth_headers(),
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201  # alta de reporte
         body = resp.json()
         assert body["analyzer_name"] == "fake"
         assert body["analyzer_model"] == "fake-model"

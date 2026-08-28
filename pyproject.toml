@@ -37,6 +37,14 @@ odin = "odin.core.main:main"
 where = ["src"]
 include = ["odin*"]
 
+# Los .json de datos NO se instalan solos: setuptools empaqueta únicamente
+# módulos .py salvo que se declaren aquí. Sin esta línea el catálogo geográfico
+# existe al correr desde el árbol de fuentes (dev, tests) pero desaparece dentro
+# del contenedor, que instala el paquete — y la siembra falla al arrancar con un
+# FileNotFoundError que solo se ve en los logs.
+[tool.setuptools.package-data]
+odin = ["db/seeds/*.json"]
+
 # ── ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]
 target-version = "py313"

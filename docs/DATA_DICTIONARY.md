@@ -31,6 +31,8 @@ artículo, la fila se sobrescribe (no existe `article_revisions`).
 | `analyzer_version` | String(64) | sí | sistema | versión del prompt/heurística (linaje del análisis, `task.md` §2.1) |
 | `analysis_schema_version` | Integer | sí | sistema | versión de `AnalysisResult` (`ANALYSIS_SCHEMA_VERSION` en `analysis/base.py`) usada al producir esta fila |
 | `analyzed_at` | DateTime(tz) | sí | sistema | momento del análisis |
+| `documentalist_id` | FK → `users.id`, `ON DELETE SET NULL`, índice | sí | usuario (login) | **quién** revisó y dejó guardado el reporte — no confundir con `analyzer_name`/`analyzed_at` de arriba, que dicen qué motor lo produjo y cuándo corrió, no qué persona lo firmó. `NULL` en los artículos que entran por el rastreo masivo (no hay persona detrás) y en los guardados antes de esta columna |
+| `analyzed_on` | Date, índice | sí | usuario (login) | **cuándo** lo trabajó el documentalista, solo día/mes/año — distinto de `analyzed_at`, que es el timestamp completo de cuándo corrió el motor de análisis. Es `Date` y no `DateTime` a propósito: el dato que pidió el cliente es la fecha sin hora, y el tipo lo deja dicho en el esquema en vez de depender de que cada consulta recuerde recortarla; además hace trivial agrupar por día para el KPI |
 | `framing` | String(40) | sí | analyzer (**solo LLM**) | encuadre editorial inferido; `NULL` si el análisis fue con `LocalAnalyzer` |
 | `headline_intent` | String(20) | sí | analyzer (**solo LLM**) | intención del titular |
 | `lead_orientation` | String(20) | sí | analyzer (**solo LLM**) | orientación del primer párrafo |
@@ -172,6 +174,112 @@ produce un `crawl_run`.
 Solo puede haber un `scrape_job` activo (`pending`/`running`) a la vez —
 `POST /api/scrape-jobs` responde `409` si ya hay uno.
 
+## `localities`
+
+Catálogo geográfico jerárquico: el lugar de la noticia. Una sola tabla
+autorreferencial para los cinco niveles (`PAIS`, `MACRORREGION`, `REGION`,
+`PROVINCIA`, `MUNICIPIO`).
+
+Contenido: 31 provincias + el Distrito Nacional y 158 municipios, agrupados en
+las 3 macrorregiones y las 10 regiones de planificación del **Decreto 710-04**.
+Incluye los municipios creados por ley en 2024 (La Victoria, Ley 15-24, vigente
+desde el 2026-01-01; y La Caleta, Ley 39-24).
+
+| Columna | Tipo | Null | Significado |
+|---|---|---|---|
+| `id` | Integer PK | no | — |
+| `name` | String(160), índice | no | nombre para mostrar ("Santiago de los Caballeros") |
+| `norm_key` | String(160), índice | no | forma normalizada (`norm_key`), para buscar sin acentos |
+| `level` | String(20), índice | no | `PAIS` \| `MACRORREGION` \| `REGION` \| `PROVINCIA` \| `MUNICIPIO` |
+| `parent_id` | FK → `localities.id`, `ON DELETE CASCADE` | sí | nulo solo en el país |
+| `path` | String(255), índice | no | ruta de ids materializada (`/1/2/6/19/`) |
+| `is_active` | Boolean, default `True` | no | desactivar sin borrar, para no huerfanar artículos ya etiquetados |
+| `created_at` / `updated_at` | DateTime(tz) | no | — |
+
+Restricción: `UNIQUE(parent_id, norm_key)` — dos hermanos no pueden llamarse
+igual, pero el mismo nombre sí puede repetirse bajo padres distintos
+("Santiago" es provincia y también municipio dentro de esa provincia).
+
+**Por qué `path`**: la consulta caliente es "todo lo que cuelga del Cibao", que
+con solo `parent_id` exigiría un CTE recursivo — cuya sintaxis difiere entre
+PostgreSQL, SQLite y SQL Server. Con la ruta materializada el mismo filtro es
+un `LIKE '/1/2/%'`: una pasada, indexable e idéntico en los tres motores. El
+precio es mantener `path` al mover un nodo, y por eso `update_locality` no
+permite cambiar de padre.
+
+Semilla en `db/seeds/localities_rd.json`, cargada de forma idempotente por
+`db/localities.seed_localities()` en el `lifespan` de la API — mismo patrón que
+`entity_aliases`. Es tabla y no constante en el código porque el catálogo
+cambia por ley (Baitoa pasó a municipio en 2013).
+
+## `locality_aliases`
+
+Otros nombres por los que la prensa cita un lugar.
+
+| Columna | Tipo | Null | Significado |
+|---|---|---|---|
+| `id` | Integer PK | no | — |
+| `locality_id` | FK → `localities.id`, `ON DELETE CASCADE`, índice | no | — |
+| `alias` | String(160) | no | forma tal como aparece en texto ("Navarrete") |
+| `alias_key` | String(160), índice | no | forma normalizada, para el lookup |
+
+Restricción: `UNIQUE(locality_id, alias_key)`. Hace falta más de lo que parece:
+la provincia Hermanas Mirabal se llamó **Salcedo** hasta 2007 y los medios
+siguen usando el nombre viejo; Villa Bisonó aparece casi siempre como
+**Navarrete**; y el municipio cabecera suele nombrarse por su provincia
+("Higüey" por "Salvaleón de Higüey").
+
+## `article_localities`
+
+Vínculo N:M artículo ↔ lugar. N:M y no una columna en `articles` porque una
+noticia puede ocurrir en varios lugares.
+
+| Columna | Tipo | Null | Significado |
+|---|---|---|---|
+| `id` | Integer PK | no | — |
+| `article_id` | FK → `articles.id`, `ON DELETE CASCADE`, índice | no | — |
+| `locality_id` | FK → `localities.id`, `ON DELETE CASCADE`, índice | no | — |
+| `kind` | String(20), default `HECHO` | no | `HECHO` (dónde ocurrió) \| `MENCIONADO` (nombrado de pasada) |
+| `origin` | String(20), default `MANUAL` | no | `MANUAL` \| `AUTO` — quién hizo el vínculo |
+| `confidence` | Float | sí | confianza de la detección automática; `NULL` cuando lo puso una persona |
+| `created_at` | DateTime(tz) | no | — |
+
+Restricción: `UNIQUE(article_id, locality_id, kind)` — el mismo lugar puede
+estar dos veces en una nota si juega dos papeles distintos, pero no dos veces
+con el mismo papel.
+
+**El nivel del nodo apuntado ES el alcance de la noticia**: apuntar al país
+significa ámbito nacional, a una región significa regional, a un municipio
+significa municipal. Por eso no hay cuatro columnas con centinelas "Todas" — el
+"Todas" del formulario solo dice hasta dónde bajó el documentalista, y eso ya
+queda registrado en cuál nodo se eligió.
+
+`origin` y `confidence` existen desde la primera versión aunque hoy solo se
+escriba `MANUAL`: la detección automática es la fase siguiente, y así no tendrá
+que migrar datos ya guardados.
+
+## `users`
+
+Personas que usan Odin. Antes de esta tabla la autenticación era un operador
+único contra credenciales del entorno (`ODIN_AUTH_*`): si todos entraban con
+la misma credencial, todo reporte quedaba atribuido al mismo nombre y medir
+el trabajo por documentalista no significaba nada. El operador del `.env` no
+desaparece: al arrancar se siembra como primer usuario con rol `admin`
+(`db/users.seed_operator`), así que quien hoy entra sigue entrando igual.
+
+| Columna | Tipo | Null | Significado |
+|---|---|---|---|
+| `id` | Integer PK | no | — |
+| `username` | String(80) | no | tal como se muestra y se teclea al entrar, p. ej. `jperez` |
+| `username_key` | String(80), índice | no | `username` normalizado a minúsculas; se deriva solo en cada alta y edición (`@validates`), para que renombrar a alguien no deje una clave vieja que el login ya no encuentre |
+| `display_name` | String(160) | no | nombre para mostrar en reportes y KPI, p. ej. "Juan Pérez" |
+| `password_hash` | String(255) | no | formato de `core/auth.py` |
+| `role` | String(20), default `documentalista` | no | `admin` \| `documentalista` (`USER_ROLES`) — `documentalista` captura y revisa reportes; `admin` además administra el catálogo de documentalistas |
+| `is_active` | Boolean, default `True` | no | dar de baja sin borrar: los reportes que firmó siguen atribuidos a él |
+| `created_at` / `updated_at` | DateTime(tz) | no | `updated_at` con `onupdate` automático |
+
+Restricción: `UNIQUE(username_key)` (`uq_user_username`).
+
 ## Convenciones generales
 
 - **Timestamps**: columnas `DateTime(timezone=True)`; el objetivo es siempre
@@ -185,3 +293,11 @@ Solo puede haber un `scrape_job` activo (`pending`/`running`) a la vez —
 - **Nada se borra en cascada hacia `canonical_entities`**: los FKs de actor y
   de mención usan `ON DELETE SET NULL`, nunca `CASCADE` — borrar una entidad
   canónica no borra artículos ni menciones, solo desvincula.
+- **Tampoco hacia `users`**: `articles.documentalist_id` usa `ON DELETE SET NULL` —
+  dar de baja a un documentalista (o borrarlo) jamás borra los reportes que firmó,
+  solo los deja sin autor asignado.
+- **Los vínculos de lugar sí van en cascada**: `article_localities` es una
+  tabla de unión sin datos propios que valgan sin sus dos extremos, así que
+  borrar el artículo o el lugar borra el vínculo (`ON DELETE CASCADE`). Para
+  retirar un municipio de circulación sin perder el histórico se usa
+  `localities.is_active`, no el borrado.

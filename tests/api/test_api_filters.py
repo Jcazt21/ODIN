@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from odin.core.auth import create_token
 from odin.db.models import Article, Entity
+
+
+def _auth_headers():
+    token, _ = create_token("tester")
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _make_article(**overrides) -> Article:
@@ -41,7 +47,7 @@ class TestSourceFilter:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"source": ["diario_libre"]})
+        resp = api_client.get("/api/articles", params={"source": ["diario_libre"]}, headers=_auth_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 1
@@ -58,7 +64,7 @@ class TestSourceFilter:
         session.close()
 
         resp = api_client.get(
-            "/api/articles", params={"source": ["diario_libre", "hoy"]}
+            "/api/articles", params={"source": ["diario_libre", "hoy"]}, headers=_auth_headers()
         )
         assert resp.json()["total"] == 2
 
@@ -73,7 +79,7 @@ class TestSentimentAndFramingFilters:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"sentiment": "POS"})
+        resp = api_client.get("/api/articles", params={"sentiment": "POS"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["overall_sentiment"] == "POS"
@@ -87,7 +93,7 @@ class TestSentimentAndFramingFilters:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"framing": "crisis_conflicto"})
+        resp = api_client.get("/api/articles", params={"framing": "crisis_conflicto"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["framing"] == "crisis_conflicto"
@@ -104,8 +110,8 @@ class TestHasHardDataFilter:
         session.commit()
         session.close()
 
-        resp_true = api_client.get("/api/articles", params={"has_hard_data": "true"})
-        resp_false = api_client.get("/api/articles", params={"has_hard_data": "false"})
+        resp_true = api_client.get("/api/articles", params={"has_hard_data": "true"}, headers=_auth_headers())
+        resp_false = api_client.get("/api/articles", params={"has_hard_data": "false"}, headers=_auth_headers())
         assert resp_true.json()["total"] == 1
         assert resp_false.json()["total"] == 1
 
@@ -145,12 +151,16 @@ class TestDateRangeFilter:
         session.close()
 
         resp = api_client.get(
-            "/api/articles", params={"date_from": "2026-01-10", "date_to": "2026-01-12"}
+            "/api/articles",
+            params={"date_from": "2026-01-10", "date_to": "2026-01-12"},
+            headers=_auth_headers(),
         )
         body = resp.json()
         assert body["total"] == 3
         urls = {item["url"] for item in api_client.get(
-            "/api/articles", params={"date_from": "2026-01-10", "date_to": "2026-01-12", "limit": 100}
+            "/api/articles",
+            params={"date_from": "2026-01-10", "date_to": "2026-01-12", "limit": 100},
+            headers=_auth_headers(),
         ).json()["items"]}
         assert urls == {
             "https://diariolibre.com/d10",
@@ -169,7 +179,7 @@ class TestTextSearchFilter:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"q": "AGUA"})
+        resp = api_client.get("/api/articles", params={"q": "AGUA"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert "agua" in body["items"][0]["title"].lower()
@@ -186,7 +196,7 @@ class TestEntityFilter:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"entity": "Abinader"})
+        resp = api_client.get("/api/articles", params={"entity": "Abinader"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["url"] == "https://diariolibre.com/a"
@@ -200,7 +210,7 @@ class TestEntityFilter:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"entity": "Partido"})
+        resp = api_client.get("/api/articles", params={"entity": "Partido"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert len(body["items"]) == 1
@@ -221,8 +231,8 @@ class TestPaginationAndSort:
         session.commit()
         session.close()
 
-        page1 = api_client.get("/api/articles", params={"limit": 2, "offset": 0}).json()
-        page2 = api_client.get("/api/articles", params={"limit": 2, "offset": 2}).json()
+        page1 = api_client.get("/api/articles", params={"limit": 2, "offset": 0}, headers=_auth_headers()).json()
+        page2 = api_client.get("/api/articles", params={"limit": 2, "offset": 2}, headers=_auth_headers()).json()
         assert page1["total"] == 5
         assert len(page1["items"]) == 2
         assert len(page2["items"]) == 2
@@ -231,7 +241,7 @@ class TestPaginationAndSort:
         assert ids_page1.isdisjoint(ids_page2)
 
     def test_limit_is_capped_at_100(self, api_client, sqlite_sessionmaker):
-        resp = api_client.get("/api/articles", params={"limit": 500})
+        resp = api_client.get("/api/articles", params={"limit": 500}, headers=_auth_headers())
         assert resp.json()["limit"] == 100
 
     def test_sort_recent_vs_oldest(self, api_client, sqlite_sessionmaker):
@@ -243,8 +253,8 @@ class TestPaginationAndSort:
         session.commit()
         session.close()
 
-        recent = api_client.get("/api/articles", params={"sort": "recent"}).json()
-        oldest = api_client.get("/api/articles", params={"sort": "oldest"}).json()
+        recent = api_client.get("/api/articles", params={"sort": "recent"}, headers=_auth_headers()).json()
+        oldest = api_client.get("/api/articles", params={"sort": "oldest"}, headers=_auth_headers()).json()
         assert recent["items"][0]["url"] == "https://diariolibre.com/new"
         assert oldest["items"][0]["url"] == "https://diariolibre.com/old"
 
@@ -263,6 +273,7 @@ class TestCombinedFilters:
         resp = api_client.get(
             "/api/articles",
             params={"source": ["diario_libre"], "sentiment": "POS"},
+            headers=_auth_headers(),
         )
         body = resp.json()
         assert body["total"] == 1
@@ -276,9 +287,10 @@ class TestFiltersEndpoint:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles/filters")
+        resp = api_client.get("/api/articles/filters", headers=_auth_headers())
         body = resp.json()
-        assert "diario_libre" in body["sources"]
+        # Los medios viajan como par slug/etiqueta (ver test_api_source_names.py).
+        assert {"value": "diario_libre", "label": "Diario Libre"} in body["sources"]
         assert "Política" in body["sections"]
         assert "POS" in body["sentiments"]
         assert "crisis_conflicto" in body["framing"]

@@ -8,8 +8,10 @@ import { softAuroraFor, SOFT_AURORA_OPACITY, type Theme } from "@/lib/aurora-con
 const NAV_ITEMS = [
   { label: "Analizar", tab: "/analyze" },
   { label: "Reportes", tab: "/reports" },
+  { label: "Nuevo reporte", tab: "/reports/new" },
   { label: "Entidades", tab: "/entities" },
   { label: "Siglas", tab: "/aliases" },
+  { label: "Documentalistas", tab: "/documentalists" },
   { label: "Ajustes", tab: "/settings" },
 ]
 

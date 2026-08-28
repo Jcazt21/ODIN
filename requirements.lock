@@ -1099,6 +1099,7 @@ lxml==6.1.1 \
     #   htmldate
     #   justext
     #   lxml-html-clean
+    #   python-docx
     #   trafilatura
 lxml-html-clean==0.4.5 \
     --hash=sha256:c76fcadd1e5bfb9b8bafc2200d51e4e78eb0dad67f56881c21dfb6484c7e7746 \
@@ -2053,6 +2054,10 @@ python-dateutil==2.9.0.post0 \
     #   dateparser
     #   htmldate
     #   pandas
+python-docx==1.2.0 \
+    --hash=sha256:3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7 \
+    --hash=sha256:7bc9d7b7d8a69c9c02ca09216118c86552704edc23bac179283f2e38f86220ce
+    # via -r requirements.txt
 python-dotenv==1.2.3 \
     --hash=sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9 \
     --hash=sha256:a20a594dabeaa385725aa239d5244871c143ecb356add8a20fcf23773a6c3a35
@@ -2646,6 +2651,7 @@ typing-extensions==4.16.0 \
     #   huggingface-hub
     #   pydantic
     #   pydantic-core
+    #   python-docx
     #   sqlalchemy
     #   torch
     #   typing-inspection

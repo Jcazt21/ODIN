@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Entrega un JWT si las credenciales coinciden con las del entorno.
+         * @description Entrega un JWT si las credenciales coinciden con una fila de `users`.
          */
         post: operations["login_api_auth_login_post"];
         delete?: never;
@@ -33,11 +33,38 @@ export interface paths {
         };
         /**
          * Me
-         * @description Valida el token guardado en el navegador al abrir la aplicación.
+         * @description Valida el token guardado en el navegador al abrir la aplicación, y
+         *     devuelve el rol para que la interfaz sepa qué mostrar.
          */
         get: operations["me_api_auth_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Reemplaza la contraseña y devuelve un token nuevo.
+         *
+         *     Emitir token nuevo no es opcional: el portón viaja como claim, así que el
+         *     token con el que se llega aquí seguiría cerrando todo lo demás.
+         *
+         *     No pide la contraseña actual porque quien llega con el portón encendido
+         *     acaba de probarla al entrar, y el PIN ya se consumió.
+         */
+        post: operations["change_password_api_auth_change_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -57,9 +84,10 @@ export interface paths {
          * Analyze
          * @description Encola el análisis de la URL (§3.1 de task.md): la descarga y el NLP
          *     corren en segundo plano en vez de bloquear el request hasta 60s. Si la
-         *     URL ya estaba guardada, devuelve `200` con el registro directamente (no
-         *     hay nada que encolar). Si es nueva, devuelve `202` + `job_id`; el cliente
-         *     consulta el resultado con GET /api/jobs/{job_id}.
+         *     URL ya estaba guardada —o se analizó hace poco, o ya hay un job suyo
+         *     corriendo— no se encola nada nuevo (ver `start_analyze_job`). Si es nueva,
+         *     devuelve `202` + `job_id`; el cliente consulta el resultado con
+         *     GET /api/jobs/{job_id}.
          */
         post: operations["analyze_api_analyze_post"];
         delete?: never;
@@ -78,6 +106,14 @@ export interface paths {
         /**
          * Get Job
          * @description Estado/resultado de un job de POST /api/analyze.
+         *
+         *     Devuelve el JSON armado a mano en vez de un `JobResponse`: el cliente
+         *     poletea esto cada 1.5s, y el resultado ya está guardado como JSON en la
+         *     fila. Construir el modelo solo para que FastAPI lo vuelva a serializar
+         *     significa parsear y re-serializar el artículo completo (cuerpo incluido)
+         *     en cada poll. `response_model` se mantiene arriba para que el OpenAPI —y
+         *     los tipos que el frontend genera desde él— sigan describiendo la
+         *     respuesta.
          */
         get: operations["get_job_api_jobs__job_id__get"];
         put?: never;
@@ -100,12 +136,21 @@ export interface paths {
          * @description Lista reportes guardados con filtros combinables. Devuelve resúmenes
          *     (sin cuerpo ni entidades detalladas); usa GET /api/articles/{id} para el
          *     reporte completo.
+         *
+         *     `locality` es el id de un lugar del catálogo e incluye su subárbol: filtrar
+         *     por la provincia Santiago trae también lo marcado en sus municipios.
+         *     `documentalist` es el id del documentalista que dejó guardado el reporte.
          */
         get: operations["list_articles_api_articles_get"];
         put?: never;
         /**
          * Save Article
-         * @description Persiste el resultado de /api/analyze, ya revisado/corregido.
+         * @description Persiste el resultado de /api/analyze, ya revisado/corregido, y registra
+         *     qué documentalista lo dejó guardado.
+         *
+         *     201 si dio de alta el reporte, 200 si la URL ya estaba guardada y devuelve
+         *     la existente. El formulario manual usa esa diferencia para avisar en vez de
+         *     dar por bueno un guardado que no ocurrió.
          */
         post: operations["save_article_api_articles_post"];
         delete?: never;
@@ -136,6 +181,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sources
+         * @description Medios disponibles para el formulario de captura, desde el registro de
+         *     scrapers. Ver `article_service.source_catalog` para por qué no reusa las
+         *     facetas del filtro.
+         */
+        get: operations["list_sources_api_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/articles/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Articles
+         * @description Devuelve un documento de Word con los reportes seleccionados.
+         *
+         *     Es el cierre del flujo que pidió el cliente: filtrar por documentalista, elegir
+         *     los reportes y bajarlos.
+         */
+        post: operations["export_articles_api_articles_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/articles/{article_id}": {
         parameters: {
             query?: never;
@@ -155,6 +245,8 @@ export interface paths {
          *     corregir `title`/`body`/`url` porque eso es lo que decía la fuente, no un
          *     juicio del sistema — si el scrape en sí está mal, hay que borrar y volver a
          *     analizar.
+         *
+         *     Rectificar reasigna la autoría a quien corrige.
          */
         put: operations["update_article_api_articles__article_id__put"];
         post?: never;
@@ -322,6 +414,135 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/localities/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Locality Tree
+         * @description Árbol completo país→municipio, para el selector en cascada.
+         */
+        get: operations["locality_tree_api_localities_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/localities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Localities
+         * @description Busca lugares por nombre (sin importar acentos), nivel o lugar padre.
+         */
+        get: operations["list_localities_api_localities_get"];
+        put?: never;
+        /**
+         * Create Locality
+         * @description Agrega un lugar al catálogo (p. ej. un municipio creado por ley).
+         */
+        post: operations["create_locality_api_localities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/localities/{locality_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Locality
+         * @description Renombra o desactiva un lugar del catálogo.
+         */
+        put: operations["update_locality_api_localities__locality_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/localities/frequency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Locality Frequency
+         * @description Noticias por lugar, agregadas al nivel pedido.
+         *
+         *     Con roll-up: una nota marcada en un municipio cuenta también para su
+         *     provincia, su región y el país.
+         */
+        get: operations["locality_frequency_api_localities_frequency_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/articles/{article_id}/localities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Article Localities */
+        get: operations["list_article_localities_api_articles__article_id__localities_get"];
+        /**
+         * Replace Article Localities
+         * @description Deja el artículo exactamente con los lugares enviados.
+         */
+        put: operations["replace_article_localities_api_articles__article_id__localities_put"];
+        /**
+         * Add Article Locality
+         * @description Vincula un lugar al artículo (el botón "Agregar" del formulario).
+         */
+        post: operations["add_article_locality_api_articles__article_id__localities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/articles/{article_id}/localities/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Article Locality */
+        delete: operations["delete_article_locality_api_articles__article_id__localities__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/crawl-runs": {
         parameters: {
             query?: never;
@@ -448,6 +669,92 @@ export interface paths {
          */
         get: operations["metrics_metrics_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documentalists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Documentalists
+         * @description Documentalistas registrados. Cualquier usuario autenticado puede verlos: son
+         *     los valores del filtro de reportes.
+         */
+        get: operations["list_documentalists_api_documentalists_get"];
+        put?: never;
+        /**
+         * Create Documentalist
+         * @description Da de alta a alguien con un PIN de primer acceso, devuelto una sola vez.
+         */
+        post: operations["create_documentalist_api_documentalists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documentalists/{documentalist_id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Pin
+         * @description Genera un PIN nuevo de primer acceso. Devuelve el PIN una sola vez.
+         */
+        post: operations["reset_pin_api_documentalists__documentalist_id__pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documentalists/kpi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Documentalist Kpi
+         * @description Trabajo por documentalista en el rango indicado. Solo admin: son datos de
+         *     evaluación, no de operación.
+         */
+        get: operations["documentalist_kpi_api_documentalists_kpi_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documentalists/{documentalist_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Documentalist
+         * @description Renombra, cambia el rol, resetea la contraseña o da de baja.
+         */
+        put: operations["update_documentalist_api_documentalists__documentalist_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -631,6 +938,11 @@ export interface components {
             id: number;
             /** Source */
             source: string;
+            /**
+             * Source Name
+             * @default
+             */
+            source_name: string;
             /** Url */
             url: string;
             /** Title */
@@ -691,6 +1003,10 @@ export interface components {
             analysis_schema_version: number | null;
             /** Analyzed At */
             analyzed_at: string | null;
+            /** Documentalist */
+            documentalist: string | null;
+            /** Analyzed On */
+            analyzed_on: string | null;
             /**
              * Entities
              * @default []
@@ -700,9 +1016,14 @@ export interface components {
         /** ArticleFiltersResponse */
         ArticleFiltersResponse: {
             /** Sources */
-            sources: string[];
+            sources: components["schemas"]["SourceOption"][];
             /** Sections */
             sections: string[];
+            /**
+             * Topics
+             * @default []
+             */
+            topics: string[];
             /** Sentiments */
             sentiments: string[];
             /** Framing */
@@ -713,6 +1034,11 @@ export interface components {
             lead_orientation: string[];
             /** Source Quality */
             source_quality: string[];
+            /**
+             * Documentalists
+             * @default []
+             */
+            documentalists: components["schemas"]["DocumentalistOption"][];
         };
         /** ArticleListResponse */
         ArticleListResponse: {
@@ -726,6 +1052,53 @@ export interface components {
             items: components["schemas"]["ArticleSummary"][];
         };
         /**
+         * ArticleLocalityPayload
+         * @description Alta de un vínculo artículo↔lugar.
+         *
+         *     `locality_id` a secas, sin país/región/provincia/municipio por separado: el
+         *     "Todas" del formulario del cliente solo indica hasta qué nivel bajó el
+         *     documentalista, y eso ya queda dicho por CUÁL nodo eligió. Guardar los
+         *     cuatro campos obligaría a que cada reporte filtrara centinelas.
+         */
+        ArticleLocalityPayload: {
+            /** Locality Id */
+            locality_id: number;
+            /**
+             * Kind
+             * @default HECHO
+             */
+            kind: string;
+            /**
+             * Origin
+             * @default MANUAL
+             */
+            origin: string;
+            /** Confidence */
+            confidence?: number | null;
+        };
+        /** ArticleLocalityResponse */
+        ArticleLocalityResponse: {
+            /** Id */
+            id: number;
+            /** Locality Id */
+            locality_id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+            /** Kind */
+            kind: string;
+            /** Origin */
+            origin: string;
+            /** Confidence */
+            confidence: number | null;
+            /**
+             * Breadcrumb
+             * @default []
+             */
+            breadcrumb: components["schemas"]["LocalityBreadcrumb"][];
+        };
+        /**
          * ArticleSummary
          * @description Fila de GET /api/articles: sin cuerpo ni entidades detalladas.
          */
@@ -734,6 +1107,11 @@ export interface components {
             id: number;
             /** Source */
             source: string;
+            /**
+             * Source Name
+             * @default
+             */
+            source_name: string;
             /** Url */
             url: string;
             /** Title */
@@ -769,6 +1147,10 @@ export interface components {
             blamed_actor: string | null;
             /** Credited Actor */
             credited_actor: string | null;
+            /** Documentalist */
+            documentalist: string | null;
+            /** Analyzed On */
+            analyzed_on: string | null;
             /**
              * Entity Count
              * @default 0
@@ -916,6 +1298,11 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** New Password */
+            new_password: string;
+        };
         /** CrawlRunResponse */
         CrawlRunResponse: {
             /** Id */
@@ -945,6 +1332,135 @@ export interface components {
             stats_by_source: string | null;
             /** Error */
             error: string | null;
+        };
+        /**
+         * DocumentalistCreated
+         * @description Respuesta del alta. Es la ÚNICA vez que el PIN viaja en claro: no se
+         *     guarda descifrable en ninguna parte, así que si se pierde hay que
+         *     regenerarlo.
+         */
+        DocumentalistCreated: {
+            /** Id */
+            id: number;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * First Name
+             * @default
+             */
+            first_name: string;
+            /**
+             * Last Name
+             * @default
+             */
+            last_name: string;
+            /** Role */
+            role: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Pin */
+            pin: string;
+        };
+        /**
+         * DocumentalistKpiRow
+         * @description Trabajo de un documentalista en el rango consultado.
+         *
+         *     Mide volumen, no calidad: la «tasa de corrección sobre lo que propuso el
+         *     modelo» que pide R20 necesita auditoría campo a campo, y hoy re-analizar
+         *     sobrescribe la fila del artículo sin dejar rastro.
+         */
+        DocumentalistKpiRow: {
+            /** Documentalist Id */
+            documentalist_id: number;
+            /** Display Name */
+            display_name: string;
+            /** Articles */
+            articles: number;
+            /** First On */
+            first_on: string | null;
+            /** Last On */
+            last_on: string | null;
+            /** Active Days */
+            active_days: number;
+        };
+        /**
+         * DocumentalistOption
+         * @description Un documentalista tal como lo consume el selector de filtros.
+         */
+        DocumentalistOption: {
+            /** Id */
+            id: number;
+            /** Display Name */
+            display_name: string;
+        };
+        /**
+         * DocumentalistPayload
+         * @description Alta de un usuario.
+         *
+         *     Sin contraseña: el servidor genera un PIN de 4 dígitos y la persona elige
+         *     su clave al entrar. Sin `username` tampoco: se deriva del nombre (inicial +
+         *     4 primeras del apellido), y ante un choque recibe un número.
+         */
+        DocumentalistPayload: {
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /**
+             * Role
+             * @default documentalista
+             */
+            role: string;
+        };
+        /**
+         * DocumentalistResponse
+         * @description Nunca incluye `password_hash`: exponerlo convertiría un listado de
+         *     lectura en un ataque offline contra las contraseñas.
+         */
+        DocumentalistResponse: {
+            /** Id */
+            id: number;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * First Name
+             * @default
+             */
+            first_name: string;
+            /**
+             * Last Name
+             * @default
+             */
+            last_name: string;
+            /** Role */
+            role: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** DocumentalistUpdatePayload */
+        DocumentalistUpdatePayload: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Password */
+            password?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
         };
         /** EntityAliasResponse */
         EntityAliasResponse: {
@@ -1035,6 +1551,14 @@ export interface components {
             /** Context */
             context?: string | null;
         };
+        /**
+         * ExportRequest
+         * @description Reportes a incluir en el documento, en el orden en que se envían.
+         */
+        ExportRequest: {
+            /** Article Ids */
+            article_ids: number[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1057,6 +1581,81 @@ export interface components {
             error?: string | null;
             result?: components["schemas"]["AnalyzeResult"] | null;
         };
+        /**
+         * LocalityBreadcrumb
+         * @description El camino del país hasta el nodo elegido.
+         *
+         *     Es lo que permite mostrar "República Dominicana › Cibao › Santiago ›
+         *     Tamboril" sin que el frontend tenga que recorrer el árbol hacia arriba.
+         */
+        LocalityBreadcrumb: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+        };
+        /**
+         * LocalityNode
+         * @description Nodo del árbol con sus hijos: lo que consume el selector en cascada del
+         *     frontend, que necesita el árbol entero de una vez para no pedir un fetch
+         *     por cada desplegable que el documentalista abre.
+         */
+        LocalityNode: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+            /** Parent Id */
+            parent_id: number | null;
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: string[];
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["LocalityNode"][];
+        };
+        /**
+         * LocalityPayload
+         * @description Alta de un lugar en el catálogo (municipio creado por ley, etc.).
+         */
+        LocalityPayload: {
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+            /** Parent Id */
+            parent_id?: number | null;
+        };
+        /** LocalityResponse */
+        LocalityResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Path */
+            path: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** LocalityUpdatePayload */
+        LocalityUpdatePayload: {
+            /** Name */
+            name?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Username */
@@ -1068,6 +1667,13 @@ export interface components {
         MeResponse: {
             /** Username */
             username: string;
+            /**
+             * Must Change Password
+             * @default false
+             */
+            must_change_password: boolean;
+            /** Role */
+            role?: string | null;
         };
         /** SaveArticleRequest */
         SaveArticleRequest: {
@@ -1128,6 +1734,11 @@ export interface components {
              * @default []
              */
             entities: components["schemas"]["EntityPayload"][];
+            /**
+             * Localities
+             * @default []
+             */
+            localities: components["schemas"]["ArticleLocalityPayload"][];
         };
         /** ScrapeJobAccepted */
         ScrapeJobAccepted: {
@@ -1196,6 +1807,20 @@ export interface components {
             detail: string;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /**
+         * SourceOption
+         * @description Un medio tal como lo consume el selector de filtros.
+         *
+         *     `value` es lo que se guarda y por lo que se filtra; `label` es solo para
+         *     pintar. Separarlos evita que renombrar un medio en pantalla invalide los
+         *     filtros guardados o los reportes ya escritos.
+         */
+        SourceOption: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -1286,6 +1911,39 @@ export interface operations {
             };
         };
     };
+    change_password_api_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     analyze_api_analyze_post: {
         parameters: {
             query?: never;
@@ -1371,6 +2029,8 @@ export interface operations {
                 source_quality?: string | null;
                 has_hard_data?: boolean | null;
                 entity?: string | null;
+                locality?: number | null;
+                documentalist?: number | null;
                 date_from?: string | null;
                 date_to?: string | null;
                 sort?: string;
@@ -1417,7 +2077,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1452,6 +2112,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArticleFiltersResponse"];
+                };
+            };
+        };
+    };
+    list_sources_api_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceOption"][];
+                };
+            };
+        };
+    };
+    export_articles_api_articles_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1880,6 +2593,305 @@ export interface operations {
             };
         };
     };
+    locality_tree_api_localities_tree_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalityNode"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_localities_api_localities_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                level?: string | null;
+                parent_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_locality_api_localities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalityPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_locality_api_localities__locality_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locality_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalityUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    locality_frequency_api_localities_frequency_get: {
+        parameters: {
+            query?: {
+                level?: string;
+                date_from?: string | null;
+                date_to?: string | null;
+                kind?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_article_localities_api_articles__article_id__localities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleLocalityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_article_localities_api_articles__article_id__localities_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticleLocalityPayload"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleLocalityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_article_locality_api_articles__article_id__localities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticleLocalityPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleLocalityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_article_locality_api_articles__article_id__localities__link_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+                link_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_crawl_runs_api_crawl_runs_get: {
         parameters: {
             query?: {
@@ -2073,6 +3085,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_documentalists_api_documentalists_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentalistResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_documentalist_api_documentalists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentalistPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentalistCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_pin_api_documentalists__documentalist_id__pin_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentalist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentalistCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    documentalist_kpi_api_documentalists_kpi_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentalistKpiRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_documentalist_api_documentalists__documentalist_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentalist_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentalistUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentalistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

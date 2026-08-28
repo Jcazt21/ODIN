@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query"
-import { OdinApiError } from "@/lib/odin-api"
+import { OdinApiError } from "@/lib/api-error"
 
 // No reintentar en errores de la API de Odin (4xx conocidos: sesión vencida,
 // validación, "no encontrado"): reintentar solo tiene sentido para fallos de

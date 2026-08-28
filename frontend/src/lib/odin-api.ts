@@ -1,3 +1,4 @@
+import { OdinApiError } from "@/lib/api-error"
 import { clearSession, getToken, notifyAuthExpired, setSession } from "@/lib/auth"
 import type { components } from "@/lib/api-types"
 
@@ -48,7 +49,11 @@ export type SaveArticlePayload = Omit<
   | "analyzer_version"
   | "analysis_schema_version"
   | "analyzed_at"
->
+> & {
+  /** Lugares de la noticia, para el alta manual. Viajan en el mismo cuerpo
+   *  para que artículo y vínculos entren o fallen juntos. */
+  localities?: components["schemas"]["ArticleLocalityPayload"][]
+}
 
 export interface ArticleUpdatePayload {
   main_topic?: string | null
@@ -92,6 +97,7 @@ export interface ArticleListParams {
   date_from?: string
   date_to?: string
   sort?: "recent" | "oldest"
+  documentalist?: number
   limit?: number
   offset?: number
 }
@@ -121,11 +127,23 @@ export interface CanonicalEntityListParams {
 
 export type CanonicalEntityUpdatePayload = components["schemas"]["CanonicalEntityUpdatePayload"]
 
-export class OdinApiError extends Error {}
+// Re-exportado para no romper a quien ya lo importa desde acá; la clase
+// vive en `api-error.ts` (ver el porqué allí).
+export { OdinApiError } from "@/lib/api-error"
 
 const BASE = ""
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await requestWithStatus<T>(path, init)).data
+}
+
+/** Como `request`, pero devuelve también el código de estado. Existe porque el
+ *  alta de reportes distingue 201 (se creó) de 200 (la URL ya estaba), y esa
+ *  diferencia no se puede leer del cuerpo. */
+async function requestWithStatus<T>(
+  path: string,
+  init?: RequestInit
+): Promise<{ data: T; status: number }> {
   const headers = new Headers(init?.headers)
   const token = getToken()
   if (token) headers.set("Authorization", `Bearer ${token}`)
@@ -145,8 +163,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => null)
     throw new OdinApiError(body?.detail ?? `Error ${res.status} en ${path}.`)
   }
-  if (res.status === 204) return undefined as unknown as T
-  return res.json()
+  if (res.status === 204) return { data: undefined as unknown as T, status: res.status }
+  return { data: await res.json(), status: res.status }
 }
 
 async function postJson<T>(path: string, payload: unknown): Promise<T> {
@@ -187,6 +205,24 @@ export async function login(username: string, password: string): Promise<LoginRe
     throw new OdinApiError(body?.detail ?? "No se pudo iniciar sesión.")
   }
   const data: LoginResponse = await res.json()
+  setSession(data.access_token, data.username)
+  return data
+}
+
+export const MIN_PASSWORD_LENGTH = 8
+
+/** Cambia la contraseña y **rota la sesión**.
+ *
+ *  El portón de cambio obligatorio viaja como claim del JWT, así que el token
+ *  con el que se llega aquí sigue cerrando todo lo demás: hay que reemplazarlo
+ *  por el que devuelve el servidor o la aplicación queda trabada con la
+ *  contraseña ya cambiada. */
+export async function changePassword(newPassword: string): Promise<LoginResponse> {
+  const data = await request<LoginResponse>("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_password: newPassword }),
+  })
   setSession(data.access_token, data.username)
   return data
 }
@@ -276,6 +312,36 @@ export async function analyzeUrl(
 
 export function saveArticle(payload: SaveArticlePayload): Promise<ArticleAnalysis> {
   return postJson("/api/articles", payload)
+}
+
+export type DocumentalistCreated = components["schemas"]["DocumentalistCreated"]
+
+/** Regenera el PIN de primer acceso. El PIN vuelve en claro una sola vez. */
+export function resetDocumentalistPin(id: number): Promise<DocumentalistCreated> {
+  return postJson(`/api/documentalists/${id}/pin`, {})
+}
+
+export type SourceOption = components["schemas"]["SourceOption"]
+
+/** Los medios del registro de scrapers, para el formulario de captura. Ver
+ *  `article_service.source_catalog`: no es lo mismo que `facets.sources`, que
+ *  solo trae medios con reportes ya guardados. */
+export function listSources(): Promise<SourceOption[]> {
+  return request("/api/sources")
+}
+
+/** Da de alta un reporte. `alreadyExisted` distingue el 200 —esa URL ya estaba
+ *  guardada y se devuelve la existente— del 201, para que el formulario avise
+ *  en vez de dar por bueno un guardado que no ocurrió. */
+export async function createArticle(
+  payload: SaveArticlePayload
+): Promise<{ article: ArticleAnalysis; alreadyExisted: boolean }> {
+  const { data, status } = await requestWithStatus<ArticleAnalysis>("/api/articles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  return { article: data, alreadyExisted: status === 200 }
 }
 
 // ── Reportes: listado y filtros ────────────────────────────────────────────
@@ -370,4 +436,140 @@ export function mergeCanonicalEntities(
   sourceId: number
 ): Promise<CanonicalEntity> {
   return postJson(`/api/canonical-entities/${targetId}/merge`, { source_id: sourceId })
+}
+
+// ── Lugar de la noticia ──────────────────────────────────────────────────────
+
+export type LocalityNode = components["schemas"]["LocalityNode"]
+export type Locality = components["schemas"]["LocalityResponse"]
+export type ArticleLocality = components["schemas"]["ArticleLocalityResponse"]
+export type ArticleLocalityPayload = components["schemas"]["ArticleLocalityPayload"]
+
+/** Niveles del árbol, de mayor a menor. El orden gobierna el selector en
+ *  cascada: cada desplegable se puebla con los hijos del nivel anterior. */
+export const LOCALITY_LEVELS = [
+  "PAIS",
+  "MACRORREGION",
+  "REGION",
+  "PROVINCIA",
+  "MUNICIPIO",
+] as const
+export type LocalityLevel = (typeof LOCALITY_LEVELS)[number]
+
+/** Etiquetas del formulario que el cliente ya conoce (ver la captura de su
+ *  sistema actual): País / Región / Provincia / Municipio. "Macrorregión" y
+ *  "Región" son ambas regiones para él — la primera es la agrupación que usa
+ *  hoy, la segunda el nivel oficial del Decreto 710-04. */
+export const LOCALITY_LEVEL_LABELS: Record<LocalityLevel, string> = {
+  PAIS: "País",
+  MACRORREGION: "Región",
+  REGION: "Subregión",
+  PROVINCIA: "Provincia",
+  MUNICIPIO: "Municipio",
+}
+
+export function getLocalityTree(): Promise<LocalityNode[]> {
+  return request<LocalityNode[]>("/api/localities/tree")
+}
+
+export function listLocalities(params: {
+  q?: string
+  level?: string
+  parent_id?: number
+} = {}): Promise<Locality[]> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return request<Locality[]>(`/api/localities${s ? `?${s}` : ""}`)
+}
+
+export function getArticleLocalities(articleId: number): Promise<ArticleLocality[]> {
+  return request<ArticleLocality[]>(`/api/articles/${articleId}/localities`)
+}
+
+export function addArticleLocality(
+  articleId: number,
+  payload: ArticleLocalityPayload
+): Promise<ArticleLocality> {
+  return postJson(`/api/articles/${articleId}/localities`, payload)
+}
+
+/** Deja el artículo exactamente con los lugares enviados. Es lo que usa el
+ *  formulario al guardar: el documentalista edita una lista y la manda
+ *  completa, en vez de que el frontend calcule altas y bajas. */
+export function replaceArticleLocalities(
+  articleId: number,
+  payload: ArticleLocalityPayload[]
+): Promise<ArticleLocality[]> {
+  return putJson(`/api/articles/${articleId}/localities`, payload)
+}
+
+export function deleteArticleLocality(articleId: number, linkId: number): Promise<void> {
+  return del(`/api/articles/${articleId}/localities/${linkId}`)
+}
+
+// ── Documentalistas y exportación ──────────────────────────────────────────────────
+
+export type Documentalist = components["schemas"]["DocumentalistResponse"]
+export type DocumentalistKpiRow = components["schemas"]["DocumentalistKpiRow"]
+export type DocumentalistPayload = components["schemas"]["DocumentalistPayload"]
+export type DocumentalistUpdatePayload = components["schemas"]["DocumentalistUpdatePayload"]
+
+export function listDocumentalists(): Promise<Documentalist[]> {
+  return request<Documentalist[]>("/api/documentalists")
+}
+
+export function getDocumentalistKpi(
+  params: { date_from?: string; date_to?: string } = {}
+): Promise<DocumentalistKpiRow[]> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return request<DocumentalistKpiRow[]>(`/api/documentalists/kpi${s ? `?${s}` : ""}`)
+}
+
+export function createDocumentalist(payload: DocumentalistPayload): Promise<Documentalist> {
+  return postJson("/api/documentalists", payload)
+}
+
+export function updateDocumentalist(id: number, payload: DocumentalistUpdatePayload): Promise<Documentalist> {
+  return putJson(`/api/documentalists/${id}`, payload)
+}
+
+/** Descarga el .docx de los reportes seleccionados.
+ *
+ *  No usa `request()` porque la respuesta es binaria, no JSON. La descarga se
+ *  dispara con un enlace temporal sobre un blob: es lo único que funciona igual
+ *  en todos los navegadores para un POST cuyo resultado es un archivo. */
+export async function exportArticles(articleIds: number[]): Promise<void> {
+  const headers = new Headers({ "Content-Type": "application/json" })
+  const token = getToken()
+  if (token) headers.set("Authorization", `Bearer ${token}`)
+
+  const res = await fetch("/api/articles/export", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ article_ids: articleIds }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new OdinApiError(body?.detail ?? "No se pudo exportar.")
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = "reportes-odin.docx"
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  // Liberar el objeto: sin esto el blob queda retenido hasta recargar.
+  URL.revokeObjectURL(url)
 }

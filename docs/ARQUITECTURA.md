@@ -16,7 +16,7 @@ resultado en una API y una UI para revisar/corregir antes de guardar.
 ```
 ┌──────────────┐        ┌────────────────────────┐        ┌──────────────────┐
 │   Usuario    │───────▶│   Frontend (React)     │───────▶│  API (FastAPI)    │
-│ (analista de │        │  odin.local / :3000    │        │  api/, :8000       │
+│ (documentalista de │        │  odin.local / :3000    │        │  api/, :8000       │
 │  prensa)     │◀───────│                        │◀───────│                    │
 └──────────────┘        └────────────────────────┘        └─────────┬─────────┘
                                                                       │
@@ -65,10 +65,14 @@ api/                    — capa HTTP (FastAPI)
     ├── entities.py       — PUT/DELETE /api/entities/{id}
     ├── aliases.py         — CRUD /api/aliases
     ├── canonical_entities.py — GET/PUT /api/canonical-entities, POST .../merge
+    ├── localities.py        — catálogo geográfico (/api/localities) y lugar de
+    │                          la noticia (/api/articles/{id}/localities)
     ├── scrape_jobs.py     — POST/GET /api/scrape-jobs, /api/crawl-runs
+    ├── users.py             — GET/POST /api/documentalists, PUT /api/documentalists/{id},
+    │                          GET /api/documentalists/kpi (solo admin)
     └── misc.py             — GET /api/health, GET /metrics
 
-auth.py                 — router /api/auth (login JWT, usuario único)
+auth.py                 — router /api/auth (login JWT contra la tabla `users`)
 
 services/                — lógica de negocio (los routers no hablan SQLAlchemy directo)
 ├── analyzer_registry.py  — instancia única del Analyzer activo del proceso
@@ -77,7 +81,14 @@ services/                — lógica de negocio (los routers no hablan SQLAlchem
 ├── entity_service.py        — rectificación/borrado de menciones puntuales
 ├── canonical_entity_service.py — fusión y edición de la dimensión de entidad
 ├── scrape_job_service.py     — arranque/cancelación de corridas masivas
-└── alias_service.py           — CRUD de siglas con invalidación de caché
+├── alias_service.py           — CRUD de siglas con invalidación de caché
+├── locality_service.py         — árbol geográfico, vínculo artículo↔lugar y
+│                                  frecuencia por lugar con roll-up
+├── user_service.py              — alta/edición del catálogo de documentalistas
+├── documentalist_kpi_service.py        — resumen de trabajo por documentalista, agrupado
+│                                    por `articles.analyzed_on`
+└── export_service.py              — exportación de reportes seleccionados a
+                                      un documento de Word (.docx)
 
 analysis/                — Analyzer como Protocol (base.py) + 5 implementaciones
 ├── base.py               — Protocol Analyzer, AnalysisResult, EntityResult, ANALYSIS_SCHEMA_VERSION
@@ -100,10 +111,16 @@ scrape_jobs.py            — puente API↔pipeline.run() para corridas masivas 
 main.py                    — CLI (python main.py --source X --analyzer local|gemini|groq|hybrid)
 
 db/
-├── models.py             — 7 tablas (ver DATA_DICTIONARY.md)
+├── models.py             — 11 tablas (ver DATA_DICTIONARY.md)
 ├── session.py              — engine, init_db() (solo create_all; DDL real va por Alembic)
 ├── canonical_entities.py    — get_or_create/merge de la dimensión de entidad
-└── aliases.py                 — resolución y caché de siglas
+├── aliases.py                 — resolución y caché de siglas
+├── localities.py               — carga de la semilla geográfica y resolución
+│                                  de nombres y alias de lugar
+├── users.py                     — seed_operator() (primer admin desde
+│                                   ODIN_AUTH_*) y CRUD de la tabla `users`
+└── seeds/localities_rd.json     — catálogo baseline: 32 provincias (31 + DN),
+                                    158 municipios, 10 regiones (Decreto 710-04)
 
 alembic/                 — migraciones versionadas (baseline 2026-08-03)
 url_guard.py              — anti-SSRF: allowlist + bloqueo de IP privada + límites
@@ -180,9 +197,12 @@ Resumen; detalle en `task.md` §5 y [LEGAL.md](LEGAL.md).
 - **Anti-SSRF** (`url_guard.py`): allowlist de dominios + bloqueo de IP no
   pública revalidado en cada redirección + límites de tamaño/puerto/esquema.
   Es la única salida de red de la API hacia URLs de usuario.
-- **Auth**: JWT (`auth.py`), usuario único, en todos los endpoints de
-  escritura y en `/api/analyze`. Las lecturas (`GET /api/articles`, etc.)
-  quedan abiertas por decisión documentada en el README.
+- **Auth**: JWT (`auth.py`), login contra la tabla `users` (roles `admin` /
+  `documentalista`), en todos los endpoints de escritura y en `/api/analyze`.
+  `GET /api/documentalists/kpi` además exige `require_admin`: el rol solo decide qué
+  dibuja el frontend, quien autoriza de verdad es el backend. Las lecturas
+  (`GET /api/articles`, etc.) quedan abiertas por decisión documentada en el
+  README.
 - **CORS**: orígenes explícitos vía `ODIN_CORS_ORIGINS`, sin `*`.
 
 ## 6. Observabilidad
@@ -197,7 +217,7 @@ Resumen; detalle en `task.md` §5 y [LEGAL.md](LEGAL.md).
 ## 7. Frontend
 
 `frontend/src/pages/` (una página por área: analizar, reportes, entidades,
-aliases, scrape, login) sobre `frontend/src/components/` y
+aliases, documentalistas, scrape, login) sobre `frontend/src/components/` y
 `frontend/src/lib/` — `odin-api.ts` (fetch wrapper), `queries/` (TanStack
 Query por recurso), `api-types.ts` **generado desde el OpenAPI real**
 (`scripts/generate_openapi.py`) en vez de mantenido a mano, lo que elimina la

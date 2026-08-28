@@ -9,7 +9,7 @@ generan los tipos TS del frontend a partir de ellos (tarea 25 de task.md).
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +29,21 @@ class EntityPayload(BaseModel):
     sentiment_score: float | None = None
     context: str | None = None
     extraction_confidence: float = 1.0
+
+
+class ArticleLocalityPayload(BaseModel):
+    """Alta de un vínculo artículo↔lugar.
+
+    `locality_id` a secas, sin país/región/provincia/municipio por separado: el
+    "Todas" del formulario del cliente solo indica hasta qué nivel bajó el
+    documentalista, y eso ya queda dicho por CUÁL nodo eligió. Guardar los
+    cuatro campos obligaría a que cada reporte filtrara centinelas.
+    """
+
+    locality_id: int
+    kind: str = "HECHO"
+    origin: str = "MANUAL"
+    confidence: float | None = None
 
 
 class SaveArticleRequest(BaseModel):
@@ -59,6 +74,10 @@ class SaveArticleRequest(BaseModel):
     overall_sentiment_reason: str | None = None
     content_flags: str | None = None
     entities: list[EntityPayload] = []
+    # Lugares de la noticia, para el alta manual. Van en el mismo cuerpo y no
+    # en una segunda llamada para que artículo y vínculos entren o fallen
+    # juntos. Default vacío: el flujo de /api/analyze no manda el campo.
+    localities: list[ArticleLocalityPayload] = []
 
 
 # ── Schemas de siglas ─────────────────────────────────────────────────────────
@@ -171,6 +190,10 @@ class ArticleDetail(_ResponseModel):
 
     id: int
     source: str
+    # Nombre legible del medio, derivado del slug de arriba (`odin.scrapers.
+    # source_name`). Va aquí y no se resuelve en el frontend para que el
+    # detalle no dependa de haber cargado antes las facetas.
+    source_name: str = ""
     url: str
     title: str
     authors: str | None = None
@@ -203,6 +226,12 @@ class ArticleDetail(_ResponseModel):
     analyzer_version: str | None = None
     analysis_schema_version: int | None = None
     analyzed_at: datetime | None = None
+    # Nombre para mostrar del documentalista que dejó guardado el reporte. `None` en
+    # lo que entró por el rastreo masivo o antes de que existiera la columna.
+    documentalist: str | None = None
+    # Fecha del análisis, sin hora. No confundir con `published_at` (cuándo lo
+    # publicó el medio): una nota de la semana pasada puede analizarse hoy.
+    analyzed_on: date | None = None
     entities: list[EntityMention] = []
 
 
@@ -277,6 +306,10 @@ class ArticleSummary(_ResponseModel):
 
     id: int
     source: str
+    # Nombre legible del medio, derivado del slug de arriba (`odin.scrapers.
+    # source_name`). Va aquí y no se resuelve en el frontend para que el
+    # detalle no dependa de haber cargado antes las facetas.
+    source_name: str = ""
     url: str
     title: str
     section: str | None = None
@@ -293,6 +326,12 @@ class ArticleSummary(_ResponseModel):
     dominant_actor: str | None = None
     blamed_actor: str | None = None
     credited_actor: str | None = None
+    # Nombre para mostrar del documentalista que dejó guardado el reporte. `None` en
+    # lo que entró por el rastreo masivo o antes de que existiera la columna.
+    documentalist: str | None = None
+    # Fecha del análisis, sin hora. No confundir con `published_at` (cuándo lo
+    # publicó el medio): una nota de la semana pasada puede analizarse hoy.
+    analyzed_on: date | None = None
     entity_count: int = 0
 
 
@@ -303,14 +342,36 @@ class ArticleListResponse(BaseModel):
     items: list[ArticleSummary]
 
 
+class SourceOption(_ResponseModel):
+    """Un medio tal como lo consume el selector de filtros.
+
+    `value` es lo que se guarda y por lo que se filtra; `label` es solo para
+    pintar. Separarlos evita que renombrar un medio en pantalla invalide los
+    filtros guardados o los reportes ya escritos."""
+
+    value: str
+    label: str
+
+
+class DocumentalistOption(_ResponseModel):
+    """Un documentalista tal como lo consume el selector de filtros."""
+
+    id: int
+    display_name: str
+
+
 class ArticleFiltersResponse(BaseModel):
-    sources: list[str]
+    sources: list[SourceOption]
     sections: list[str]
+    # Temas ya usados, para sugerir en el formulario manual mientras no
+    # exista el catálogo administrable (R4). Texto libre, no enumeración.
+    topics: list[str] = []
     sentiments: list[str]
     framing: list[str]
     headline_intent: list[str]
     lead_orientation: list[str]
     source_quality: list[str]
+    documentalists: list[DocumentalistOption] = []
 
 
 class EntityAliasResponse(_ResponseModel):
@@ -451,3 +512,147 @@ class ScrapeJobResponse(BaseModel):
     progress: dict[str, ScrapeSourceProgress]
     crawl_run: CrawlRunResponse | None = None
     error: str | None = None
+
+
+# --- Lugar de la noticia -----------------------------------------------------
+# Valores permitidos, espejo de los del modelo (db/models.py). Se repiten aquí
+# porque la capa HTTP valida antes de tocar la BD: un `kind` inválido debe dar
+# 422 en el borde, no un IntegrityError a mitad del guardado.
+LOCALITY_LEVEL_VALUES = ("PAIS", "MACRORREGION", "REGION", "PROVINCIA", "MUNICIPIO")
+LOCALITY_KIND_VALUES = ("HECHO", "MENCIONADO")
+LOCALITY_ORIGIN_VALUES = ("MANUAL", "AUTO")
+
+
+class LocalityResponse(_ResponseModel):
+    id: int
+    name: str
+    level: str
+    parent_id: int | None = None
+    path: str
+    is_active: bool
+
+
+class LocalityNode(_ResponseModel):
+    """Nodo del árbol con sus hijos: lo que consume el selector en cascada del
+    frontend, que necesita el árbol entero de una vez para no pedir un fetch
+    por cada desplegable que el documentalista abre."""
+
+    id: int
+    name: str
+    level: str
+    parent_id: int | None = None
+    # Los alias viajan con el árbol para que el buscador del frontend pueda
+    # filtrar en memoria mientras se teclea: sin ellos, escribir "Navarrete"
+    # no encontraría Villa Bisonó sin ir al servidor en cada pulsación.
+    aliases: list[str] = []
+    children: list[LocalityNode] = []
+
+
+class LocalityBreadcrumb(_ResponseModel):
+    """El camino del país hasta el nodo elegido.
+
+    Es lo que permite mostrar "República Dominicana › Cibao › Santiago ›
+    Tamboril" sin que el frontend tenga que recorrer el árbol hacia arriba.
+    """
+
+    id: int
+    name: str
+    level: str
+
+
+class ArticleLocalityResponse(_ResponseModel):
+    id: int
+    locality_id: int
+    name: str
+    level: str
+    kind: str
+    origin: str
+    confidence: float | None = None
+    # Camino completo hasta el nodo, del país hacia abajo, incluyéndolo.
+    breadcrumb: list[LocalityBreadcrumb] = []
+
+
+class LocalityPayload(BaseModel):
+    """Alta de un lugar en el catálogo (municipio creado por ley, etc.)."""
+
+    name: str
+    level: str
+    parent_id: int | None = None
+
+
+class LocalityUpdatePayload(BaseModel):
+    name: str | None = None
+    is_active: bool | None = None
+
+
+# --- Documentalistas ---------------------------------------------------------------
+# Espejo de USER_ROLES en db/models.py. Se repite porque la capa HTTP valida en
+# el borde: un rol inválido debe dar 422, no un dato inconsistente en la tabla.
+DOCUMENTALIST_ROLE_VALUES = ("admin", "documentalista")
+
+
+class DocumentalistResponse(_ResponseModel):
+    """Nunca incluye `password_hash`: exponerlo convertiría un listado de
+    lectura en un ataque offline contra las contraseñas."""
+
+    id: int
+    username: str
+    display_name: str
+    first_name: str = ""
+    last_name: str = ""
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class DocumentalistPayload(BaseModel):
+    """Alta de un usuario.
+
+    Sin contraseña: el servidor genera un PIN de 4 dígitos y la persona elige
+    su clave al entrar. Sin `username` tampoco: se deriva del nombre (inicial +
+    4 primeras del apellido), y ante un choque recibe un número.
+    """
+
+    first_name: str
+    last_name: str
+    role: str = "documentalista"
+
+
+class DocumentalistCreated(DocumentalistResponse):
+    """Respuesta del alta. Es la ÚNICA vez que el PIN viaja en claro: no se
+    guarda descifrable en ninguna parte, así que si se pierde hay que
+    regenerarlo."""
+
+    pin: str
+
+
+class DocumentalistUpdatePayload(BaseModel):
+    display_name: str | None = None
+    password: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+
+
+class ExportRequest(BaseModel):
+    """Reportes a incluir en el documento, en el orden en que se envían."""
+
+    article_ids: list[int]
+
+
+class DocumentalistKpiRow(_ResponseModel):
+    """Trabajo de un documentalista en el rango consultado.
+
+    Mide volumen, no calidad: la «tasa de corrección sobre lo que propuso el
+    modelo» que pide R20 necesita auditoría campo a campo, y hoy re-analizar
+    sobrescribe la fila del artículo sin dejar rastro.
+    """
+
+    documentalist_id: int
+    display_name: str
+    articles: int
+    # Fechas sin hora, como `articles.analyzed_on`.
+    first_on: date | None = None
+    last_on: date | None = None
+    # Días DISTINTOS con al menos un reporte: tres reportes en un día son un día
+    # de trabajo, no tres.
+    active_days: int

@@ -103,8 +103,8 @@ export function FilterBar({
         <Select value={filters.source ?? ""} onChange={(e) => onChange({ source: e.target.value || undefined })}>
           <option value="">Todas las fuentes</option>
           {facets?.sources.map((s) => (
-            <option key={s} value={s}>
-              {s}
+            <option key={s.value} value={s.value}>
+              {s.label}
             </option>
           ))}
         </Select>
@@ -168,6 +168,25 @@ export function FilterBar({
           <option value="recent">Más recientes</option>
           <option value="oldest">Más antiguos</option>
         </Select>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11.5px]" style={{ color: "var(--faint)" }}>
+            Documentalista
+          </span>
+          <Select
+            aria-label="Documentalista"
+            value={filters.documentalist === undefined ? "" : String(filters.documentalist)}
+            onChange={(e) =>
+              onChange({ documentalist: e.target.value ? Number(e.target.value) : undefined })
+            }
+          >
+            <option value="">Todos</option>
+            {(facets?.documentalists ?? []).map((a) => (
+              <option key={a.id} value={String(a.id)}>
+                {a.display_name}
+              </option>
+            ))}
+          </Select>
+        </label>
       </div>
     </div>
   )
