@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { filterLocalities, type LocalityEntry } from "@/lib/localities"
@@ -38,7 +39,43 @@ export function LocalityCombobox({
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fieldRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  /** Coordenadas de viewport del campo, para colocar el desplegable.
+   *
+   *  Hace falta porque la lista se renderiza en un portal sobre `document.body`
+   *  y ya no puede posicionarse relativa al campo con CSS. El portal, a su vez,
+   *  es la única salida: las tarjetas del proyecto usan `backdrop-filter`, que
+   *  crea un contexto de apilamiento, y dentro de él ningún z-index alcanza
+   *  para pasar por encima de la tarjeta siguiente.
+   */
+  const measure = useCallback(() => {
+    const el = fieldRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setPos({ top: r.bottom + 4, left: r.left, width: r.width })
+  }, [])
+
+  // useLayoutEffect y no useEffect: mide antes de pintar, para que la lista no
+  // aparezca un fotograma en la esquina superior izquierda.
+  useLayoutEffect(() => {
+    if (open) measure()
+  }, [open, measure])
+
+  // Reposicionar mientras está abierto. `capture` para enterarse también del
+  // scroll de contenedores internos, no solo del de la ventana.
+  useEffect(() => {
+    if (!open) return
+    const onMove = () => measure()
+    window.addEventListener("scroll", onMove, { passive: true, capture: true })
+    window.addEventListener("resize", onMove, { passive: true })
+    return () => {
+      window.removeEventListener("scroll", onMove, { capture: true })
+      window.removeEventListener("resize", onMove)
+    }
+  }, [open, measure])
 
   const results = useMemo(() => filterLocalities(entries, query), [entries, query])
 
@@ -98,7 +135,7 @@ export function LocalityCombobox({
         >
           {label}
         </span>
-        <div className="relative">
+        <div className="relative" ref={fieldRef}>
           <Input
             ref={inputRef}
             aria-label={label}
@@ -144,16 +181,24 @@ export function LocalityCombobox({
         </div>
       </label>
 
-      {open && (
-        <ul
+      {open &&
+        pos &&
+        createPortal(
+          <ul
           role="listbox"
           aria-label={`Opciones de ${label}`}
           onMouseDown={() => clearTimeout(blurTimer.current)}
-          className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-auto rounded-[7px] border py-1"
+          className="fixed z-50 max-h-72 overflow-auto rounded-[7px] border py-1 shadow-lg"
           style={{
-            background: "var(--surface-1)",
+            // Token real y OPACO. Antes decía `--surface-1`, que no existe: un
+            // var() sin definir no pinta nada y el desplegable quedaba
+            // transparente, dejando ver el contenido de atrás.
+            background: "var(--surface-3)",
             borderColor: "var(--border)",
             boxShadow: "var(--shadow)",
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
           }}
         >
           <li>
@@ -193,8 +238,9 @@ export function LocalityCombobox({
               </button>
             </li>
           ))}
-        </ul>
-      )}
+          </ul>,
+          document.body
+        )}
     </div>
   )
 }

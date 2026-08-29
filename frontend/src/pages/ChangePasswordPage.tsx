@@ -97,7 +97,7 @@ export function ChangePasswordPage({ onDone }: { onDone: () => void }) {
         </div>
 
         {(localError || serverError) && (
-          <p className="mt-3 text-[12px]" style={{ color: "var(--danger)" }} role="alert">
+          <p className="mt-3 text-[12px]" style={{ color: "var(--neg)" }} role="alert">
             {localError ?? serverError}
           </p>
         )}

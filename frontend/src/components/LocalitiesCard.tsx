@@ -50,7 +50,10 @@ export function LocalitiesCard({
 
   return (
     <div
-      className="odin-glass overflow-hidden rounded-xl border px-6 py-5"
+      // Sin overflow-hidden: recortaba el desplegable del selector de
+              // lugares, que se posiciona absoluto y se sale de la tarjeta.
+              // Nada adentro necesita recorte por el radio.
+              className="odin-glass rounded-xl border px-6 py-5"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <div className="mb-3 flex items-baseline gap-2">

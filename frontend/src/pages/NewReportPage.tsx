@@ -132,7 +132,7 @@ export function NewReportPage() {
       )}
 
       {errorMessage && (
-        <p className="text-[13px]" style={{ color: "var(--danger)" }} role="alert">
+        <p className="text-[13px]" style={{ color: "var(--neg)" }} role="alert">
           {errorMessage}
         </p>
       )}
@@ -263,7 +263,7 @@ function Labeled({
       </label>
       {children(id)}
       {missing && (
-        <span className="text-[11.5px]" style={{ color: "var(--danger)" }}>
+        <span className="text-[11.5px]" style={{ color: "var(--neg)" }}>
           Falta {label.toLowerCase()}.
         </span>
       )}

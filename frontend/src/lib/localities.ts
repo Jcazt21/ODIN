@@ -92,12 +92,28 @@ export function filterLocalities(
   if (!q) return entries.slice(0, limit)
 
   const starts: LocalityEntry[] = []
-  const contains: LocalityEntry[] = []
+  const wordStarts: LocalityEntry[] = []
   for (const entry of entries) {
     if (entry.haystack.some((h) => h.startsWith(q))) starts.push(entry)
-    else if (entry.haystack.some((h) => h.includes(q))) contains.push(entry)
+    else if (entry.haystack.some((h) => startsAWord(h, q))) wordStarts.push(entry)
   }
-  return [...starts, ...contains].slice(0, limit)
+  return [...starts, ...wordStarts].slice(0, limit)
+}
+
+/** ¿`query` arranca alguna palabra de `text`?
+ *
+ *  Se exige inicio de palabra y no coincidencia en cualquier posición: con
+ *  `includes`, teclear "Al" devolvía "Pepillo Salcedo" —cae dentro de
+ *  "sALcedo"— y la búsqueda parecía traer cosas al azar. "Sal" sí lo encuentra.
+ *
+ *  Se busca la frase completa en vez de palabra por palabra para que "santa
+ *  cruz" siga encontrando "Las Matas de Santa Cruz".
+ */
+function startsAWord(text: string, query: string): boolean {
+  for (let i = text.indexOf(query); i !== -1; i = text.indexOf(query, i + 1)) {
+    if (i === 0 || text[i - 1] === " " || text[i - 1] === "-") return true
+  }
+  return false
 }
 
 /** Las opciones de un campo: todas las localidades de ese nivel, acotadas al

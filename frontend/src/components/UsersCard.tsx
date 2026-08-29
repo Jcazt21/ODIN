@@ -152,7 +152,7 @@ export function UsersCard() {
       </form>
 
       {error && (
-        <p className="mb-3 text-[12px]" style={{ color: "var(--danger)" }} role="alert">
+        <p className="mb-3 text-[12px]" style={{ color: "var(--neg)" }} role="alert">
           {error}
         </p>
       )}
