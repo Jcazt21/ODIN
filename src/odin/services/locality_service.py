@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
+from odin.analysis.base import PlaceResult
 from odin.analysis.text_norm import norm_key
 from odin.api import deps
 from odin.api.deps import log
@@ -23,7 +24,9 @@ from odin.api.schemas import (
     LocalityPayload,
     LocalityResponse,
     LocalityUpdatePayload,
+    SuggestedLocality,
 )
+from odin.db import localities as locality_store
 from odin.db.models import Article, ArticleLocality, Locality, LocalityAlias
 
 
@@ -256,6 +259,50 @@ def _validate_link_payload(payload: ArticleLocalityPayload) -> None:
             status_code=422,
             detail=f"Origen inválido: '{payload.origin}'. Válidos: {', '.join(LOCALITY_ORIGIN_VALUES)}.",
         )
+
+
+def suggest_from_places(
+    session, places: list[PlaceResult], *, limit: int = 5
+) -> list[SuggestedLocality]:
+    """Resuelve los candidatos del analizador contra el catálogo vivo.
+
+    Descarta en silencio lo que no resuelve: los sectores y distritos
+    municipales no están en el catálogo, y sugerir un lugar que no existe le
+    daría trabajo extra al documentalista en vez de ahorrárselo.
+
+    `locality_store.resolve` es exacto + alias A PROPÓSITO. Nada de
+    coincidencia difusa: "Hato Nuevo" está a UNA edición de "Hato Mayor", que
+    es una provincia real a 100 km — un match difuso mandaría la noticia a la
+    otra punta del país con confianza alta.
+    """
+    by_node: dict[int, SuggestedLocality] = {}
+    # De mayor a menor confianza: si dos candidatos caen en el mismo nodo
+    # ("Haina" y "Bajos de Haina"), el primero en llegar es el más confiable
+    # y es el que se queda.
+    for place in sorted(places, key=lambda p: -p.confidence):
+        node = locality_store.resolve(session, place.name)
+        if node is None or node.id in by_node:
+            continue
+        by_node[node.id] = SuggestedLocality(
+            locality_id=node.id,
+            name=node.name,
+            level=node.level,
+            kind=place.kind,
+            confidence=place.confidence,
+            matched_text=place.name,
+        )
+        if len(by_node) >= limit:
+            break
+
+    if not by_node:
+        return []
+
+    nodes = session.scalars(select(Locality).where(Locality.id.in_(by_node.keys()))).all()
+    crumbs = _breadcrumbs_for(session, list(nodes))
+    for node_id, suggestion in by_node.items():
+        suggestion.breadcrumb = crumbs.get(node_id, [])
+
+    return sorted(by_node.values(), key=lambda s: -s.confidence)
 
 
 def validate_link_payloads(

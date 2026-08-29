@@ -17,7 +17,6 @@ vi.mock("@/lib/odin-api", async () => {
     listDocumentalists: vi.fn(),
     createDocumentalist: vi.fn(),
     resetDocumentalistPin: vi.fn(),
-    getLocalityTree: vi.fn(),
     getMe: vi.fn(),
   }
 })
@@ -35,7 +34,6 @@ describe("SettingsPage — alta de usuarios", () => {
   beforeEach(() => {
     localStorage.clear()
     vi.mocked(odinApi.listDocumentalists).mockResolvedValue([] as never)
-    vi.mocked(odinApi.getLocalityTree).mockResolvedValue([] as never)
     vi.mocked(odinApi.getMe).mockResolvedValue({
       username: "jazar",
       role: "admin",

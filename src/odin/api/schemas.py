@@ -299,6 +299,12 @@ class AnalyzeResult(_ResponseModel):
     analysis_schema_version: int | None = None
     analyzed_at: datetime | None = None
     entities: list[AnalyzePreviewEntity] = []
+    # Lugares propuestos por el analizador. Vacío cuando el analizador no los
+    # produce (los LLM no) o cuando ninguno resolvió contra el catálogo.
+    # Referencia adelantada: `SuggestedLocality` necesita `LocalityBreadcrumb`,
+    # que se define más abajo con el resto de los schemas de lugares. El
+    # `model_rebuild()` al final del módulo la resuelve.
+    suggested_localities: list[SuggestedLocality] = []
 
 
 class ArticleSummary(_ResponseModel):
@@ -400,6 +406,9 @@ class CanonicalEntityArticleMention(_ResponseModel):
     title: str
     url: str
     source: str
+    # Nombre legible del medio. Va acá para que el desglose de sentimiento por
+    # medio no tenga que pedir el catálogo aparte solo para traducir el slug.
+    source_name: str = ""
     published_at: datetime | None = None
     sentiment_toward: str | None = None
     sentiment_score: float | None = None
@@ -570,6 +579,33 @@ class ArticleLocalityResponse(_ResponseModel):
     confidence: float | None = None
     # Camino completo hasta el nodo, del país hacia abajo, incluyéndolo.
     breadcrumb: list[LocalityBreadcrumb] = []
+
+
+class SuggestedLocality(_ResponseModel):
+    """Lugar propuesto por el analizador, todavía sin guardar.
+
+    Viaja en la vista previa de /api/analyze para que el formulario llegue
+    precargado. NO se persiste nada acá: si el documentalista lo deja en la
+    lista, vuelve como `ArticleLocalityPayload` con origin="AUTO" y esta misma
+    confianza; si lo quita, no queda rastro. Ese es el punto de proponer en
+    vez de escribir — `origin="AUTO"` significa "la máquina lo propuso y una
+    persona lo dejó pasar", que es un dato auditable.
+    """
+
+    locality_id: int
+    name: str
+    level: str
+    breadcrumb: list[LocalityBreadcrumb] = []
+    kind: str = "HECHO"
+    origin: str = "AUTO"
+    confidence: float
+    # Texto del artículo que disparó la sugerencia ("Haina" para "Bajos de
+    # Haina"): sin esto el documentalista no puede juzgar un match raro.
+    matched_text: str
+
+
+# `AnalyzeResult.suggested_localities` la nombra por adelantado (ver allá).
+AnalyzeResult.model_rebuild()
 
 
 class LocalityPayload(BaseModel):

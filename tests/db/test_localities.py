@@ -39,6 +39,43 @@ class TestSeed:
         assert second == 0, "la segunda corrida no debe insertar nada"
         assert _count(db_session, "MUNICIPIO") == 158
 
+    def test_reseed_agrega_alias_nuevos_a_nodos_existentes(self, db_session):
+        """Un alias agregado al JSON tiene que llegar a una base ya sembrada.
+
+        Antes se perdía: `seed_localities` salteaba el nodo existente entero,
+        así que el alias solo existía en bases creadas desde cero.
+        """
+        seed = {
+            "pais": {"nombre": "República Dominicana"},
+            "macrorregiones": [
+                {
+                    "nombre": "Sur",
+                    "regiones": [
+                        {
+                            "nombre": "Valdesia",
+                            "provincias": [
+                                {
+                                    "nombre": "San Cristóbal",
+                                    "municipios": [{"nombre": "Bajos de Haina"}],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        loc_store.seed_localities(db_session, seed=seed)
+        assert loc_store.resolve(db_session, "Haina") is None
+
+        seed["macrorregiones"][0]["regiones"][0]["provincias"][0]["municipios"][0][
+            "alias"
+        ] = ["Haina"]
+        inserted = loc_store.seed_localities(db_session, seed=seed)
+
+        assert inserted == 0  # no se insertó ningún nodo, solo el alias
+        node = loc_store.resolve(db_session, "Haina")
+        assert node is not None and node.name == "Bajos de Haina"
+
     def test_national_district_has_no_municipalities(self, db_session):
         """El DN no es provincia ni se divide en municipios: modelarlo con uno
         propio inflaría el conteo nacional a 159."""

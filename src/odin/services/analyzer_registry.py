@@ -80,6 +80,29 @@ else:
     log.info("ODIN_ANALYZER=local — LocalAnalyzer (spaCy + pysentimiento), sin costo")
     analyzer = LocalAnalyzer()
 
+# Extractor de lugares, independiente del motor activo. Los topónimos salen
+# del NER de spaCy: reconocer "San Juan" como lugar no exige entender el
+# artículo, así que no tiene por qué depender de quién lo leyó. Los motores
+# LLM devuelven `AnalysisResult.places` vacío, y sin esto la detección
+# automática solo funcionaría con ODIN_ANALYZER=local.
+_place_extractor: LocalAnalyzer | None = None
+
+
+def place_extractor() -> LocalAnalyzer:
+    """`LocalAnalyzer` compartido, solo para extraer lugares.
+
+    Reusa el motor activo cuando YA es local —cargar spaCy dos veces en el
+    mismo proceso serían ~500 MB de más— y si no, crea uno perezosamente: el
+    modelo se carga recién en la primera llamada, no al importar el módulo.
+    """
+    global _place_extractor
+    if isinstance(analyzer, LocalAnalyzer):
+        return analyzer
+    if _place_extractor is None:
+        _place_extractor = LocalAnalyzer()
+    return _place_extractor
+
+
 if settings.gemini_arbiter:
     if ANALYZER_READS_WHOLE_ARTICLE:
         log.warning(

@@ -124,6 +124,19 @@ export function LocalityPicker({
                   mencionado
                 </span>
               )}
+              {item.origin === "AUTO" && (
+                <span
+                  className="rounded-full border px-1.5 py-0.5 text-[10.5px]"
+                  style={{
+                    background: "var(--surface-2)",
+                    borderColor: "var(--border)",
+                    color: "var(--faint)",
+                  }}
+                  title="Propuesto por el analizador. Quitalo si no corresponde."
+                >
+                  sugerido
+                </span>
+              )}
               {!disabled && (
                 <button
                   type="button"

@@ -16,6 +16,9 @@ export type EntityAnalysis = components["schemas"]["EntityMention"]
 // pasa en un artículo ya persistido (ver api/schemas.py, AnalyzeResult).
 export type AnalyzePreviewEntity = components["schemas"]["AnalyzePreviewEntity"]
 export type AnalyzeResult = components["schemas"]["AnalyzeResult"]
+// Lugar propuesto por el analizador dentro de la vista previa: todavía no es
+// un vínculo guardado, por eso no es `ArticleLocality`.
+export type SuggestedLocality = components["schemas"]["SuggestedLocality"]
 
 // Enumeraciones fijas del análisis (ver SENTIMENT_VALUES/FRAMING_VALUES/... en
 // api.py): el schema las declara como `string` porque los campos ORM son

@@ -140,6 +140,10 @@ export interface paths {
          *     `locality` es el id de un lugar del catálogo e incluye su subárbol: filtrar
          *     por la provincia Santiago trae también lo marcado en sus municipios.
          *     `documentalist` es el id del documentalista que dejó guardado el reporte.
+         *
+         *     `sort` es la columna (`published_at`, `source`, `analyzed_on`) y `order`
+         *     la dirección (`asc`/`desc`). "recent" y "oldest" siguen aceptándose como
+         *     alias del contrato anterior, donde `sort` mezclaba ambas cosas.
          */
         get: operations["list_articles_api_articles_get"];
         put?: never;
@@ -923,6 +927,11 @@ export interface components {
              * @default []
              */
             entities: components["schemas"]["AnalyzePreviewEntity"][];
+            /**
+             * Suggested Localities
+             * @default []
+             */
+            suggested_localities: components["schemas"]["SuggestedLocality"][];
         };
         /**
          * ArticleDetail
@@ -1199,6 +1208,11 @@ export interface components {
             url: string;
             /** Source */
             source: string;
+            /**
+             * Source Name
+             * @default
+             */
+            source_name: string;
             /** Published At */
             published_at: string | null;
             /** Sentiment Toward */
@@ -1822,6 +1836,44 @@ export interface components {
             /** Label */
             label: string;
         };
+        /**
+         * SuggestedLocality
+         * @description Lugar propuesto por el analizador, todavía sin guardar.
+         *
+         *     Viaja en la vista previa de /api/analyze para que el formulario llegue
+         *     precargado. NO se persiste nada acá: si el documentalista lo deja en la
+         *     lista, vuelve como `ArticleLocalityPayload` con origin="AUTO" y esta misma
+         *     confianza; si lo quita, no queda rastro. Ese es el punto de proponer en
+         *     vez de escribir — `origin="AUTO"` significa "la máquina lo propuso y una
+         *     persona lo dejó pasar", que es un dato auditable.
+         */
+        SuggestedLocality: {
+            /** Locality Id */
+            locality_id: number;
+            /** Name */
+            name: string;
+            /** Level */
+            level: string;
+            /**
+             * Breadcrumb
+             * @default []
+             */
+            breadcrumb: components["schemas"]["LocalityBreadcrumb"][];
+            /**
+             * Kind
+             * @default HECHO
+             */
+            kind: string;
+            /**
+             * Origin
+             * @default AUTO
+             */
+            origin: string;
+            /** Confidence */
+            confidence: number;
+            /** Matched Text */
+            matched_text: string;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2033,7 +2085,8 @@ export interface operations {
                 documentalist?: number | null;
                 date_from?: string | null;
                 date_to?: string | null;
-                sort?: string;
+                sort?: string | null;
+                order?: string | null;
                 limit?: number;
                 offset?: number;
             };

@@ -43,7 +43,9 @@ include = ["odin*"]
 # del contenedor, que instala el paquete — y la siembra falla al arrancar con un
 # FileNotFoundError que solo se ve en los logs.
 [tool.setuptools.package-data]
-odin = ["db/seeds/*.json"]
+# La plantilla .docx viaja por el mismo motivo que los seeds: sin declararla,
+# la exportación a Word funciona en dev y revienta dentro del contenedor.
+odin = ["db/seeds/*.json", "exports/*.docx"]
 
 # ── ruff ──────────────────────────────────────────────────────────────────────
 [tool.ruff]

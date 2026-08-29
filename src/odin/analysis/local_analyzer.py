@@ -49,9 +49,10 @@ import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
-from odin.analysis.base import AnalysisResult, EntityResult
+from odin.analysis.base import AnalysisResult, EntityResult, PlaceResult
 from odin.analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
 from odin.analysis.sentiment_lexicon import apply_label_boost as _apply_label_boost
 from odin.analysis.sentiment_lexicon import apply_negation_dampening as _apply_negation_dampening
@@ -146,6 +147,35 @@ _DOMINICAN_PROVINCES = {
     "san pedro de macoris", "sanchez ramirez", "santiago",
     "santiago rodriguez", "santo domingo", "valverde",
 }
+# Sustantivos que encabezan un accidente geográfico o una vía: spaCy los mete
+# DENTRO del span LOC ("río Haina", "avenida Duarte"), así que basta mirar la
+# primera palabra. Es el mismo criterio que _VENUE_WORDS usa para descartar
+# personas que dan nombre a un lugar, aplicado en la otra dirección: acá lo
+# que se descarta es el lugar mismo, porque un río no es una localidad.
+_GEO_FEATURE_HEADS = {
+    "rio", "arroyo", "canada", "canal", "presa", "lago", "laguna", "bahia",
+    "playa", "loma", "cerro", "pico", "sierra", "cordillera", "valle",
+    "puente", "avenida", "calle", "carretera", "autopista", "malecon",
+    "parque", "plaza", "aeropuerto", "puerto",
+}
+# Conjunciones que spaCy no corta: devuelve "Hato Nuevo y Quita Sueño" como un
+# solo span LOC. Se parte cuando ambas mitades siguen pareciendo nombres
+# propios (empiezan en mayúscula), no cuando el "y" es parte del nombre.
+_PLACE_CONJUNCTIONS = (" y ", " e ")
+# Palabras con las que la prensa antepone el TIPO de unidad al nombre
+# ("la provincia San Juan", "el municipio de Bajos de Haina"). spaCy las mete
+# dentro del span, y sin quitarlas el mismo lugar cuenta como dos candidatos y
+# la forma larga no resuelve —el nodo del catálogo se llama "San Juan" a
+# secas—. Ojo con "villa": es prefijo administrativo en otros países, pero acá
+# es parte del nombre de varios municipios (Villa González, Villa Altagracia),
+# así que NO va en esta lista.
+# Conectores que pueden quedar entre la unidad administrativa y el nombre
+# ("el municipio DE Pedro Brand", "la provincia DE La Vega").
+_ADMIN_LINK_TOKENS = {"de", "del", "la", "el", "los", "las"}
+_ADMIN_PREFIXES = (
+    "provincia", "municipio", "region", "región", "distrito municipal",
+    "distrito", "sector", "barrio", "paraje", "seccion", "sección",
+)
 # tipos de entidad de spaCy que nos interesan -> tipo canónico
 _WANTED_ENT = {"PER": "PERSON", "PERSON": "PERSON", "ORG": "ORG"}
 # partículas que no rompen un nombre propio ("Policía del Distrito Nacional")
@@ -312,6 +342,127 @@ def _has_nickname_splice(name: str) -> bool:
         if name[: m.start()].strip() and name[m.end() :].strip():
             return True
     return False
+
+
+# Vocabulario de unidad administrativa ya normalizado (sin acentos), para no
+# pagarlo en cada token que se mira hacia atrás.
+_ADMIN_PREFIXES_NORM = {_strip_accents(w).lower() for w in _ADMIN_PREFIXES}
+
+
+@lru_cache(maxsize=1)
+def _seed_place_keys() -> frozenset[str]:
+    """Nombres y alias del catálogo geográfico, normalizados.
+
+    Se leen de la semilla versionada (`db/seeds/localities_rd.json`), NO de la
+    tabla: este módulo no habla con la base —resolver contra el catálogo vivo
+    es trabajo de `services/locality_service`—. Acá solo hace falta saber si un
+    nombre PUEDE ser un lugar dominicano, y para eso la semilla basta; ya se
+    hace lo mismo con `_SEED_ALIASES` y con `_DOMINICAN_PROVINCES`.
+
+    Sirve para lo que el etiquetado de spaCy no resuelve: "Pedro Brand" sale
+    como PERSON porque "Pedro" es nombre de pila, y sin esta lista un municipio
+    entero quedaría invisible para la detección de lugar.
+    """
+    from odin.db.localities import load_seed
+
+    keys: set[str] = set()
+
+    def add(node: dict) -> None:
+        keys.add(_norm_key(node["nombre"]))
+        for alias in node.get("alias", []):
+            keys.add(_norm_key(alias))
+
+    seed = load_seed()
+    add(seed["pais"])
+    for macro in seed["macrorregiones"]:
+        add(macro)
+        for region in macro["regiones"]:
+            add(region)
+            for prov in region.get("provincias", []):
+                add(prov)
+                for muni in prov.get("municipios", []):
+                    add(muni)
+    return frozenset(keys)
+
+
+def _preceded_by_admin_unit(ent) -> bool:
+    """¿Al span lo antecede "municipio de", "provincia de", "sector"...?
+
+    Es la señal que permite recuperar un lugar que spaCy etiquetó como PERSON
+    —"Pedro Brand" lo es porque "Pedro" es nombre de pila— sin dar por lugar a
+    cualquier nombre propio. A una persona nadie la presenta como "el
+    municipio de": el cargo ("el alcalde Ramón Pascual Gómez") y la vía ("la
+    autopista Duarte") usan otras palabras y no pasan este filtro.
+    """
+    doc = ent.doc
+    i = ent.start - 1
+    # Saltar los conectores; el límite evita cruzar media oración buscando.
+    for _ in range(3):
+        if i < 0:
+            return False
+        token = _strip_accents(doc[i].text).lower()
+        if token in _ADMIN_PREFIXES_NORM:
+            return True
+        if token not in _ADMIN_LINK_TOKENS:
+            return False
+        i -= 1
+    return False
+
+
+def _strip_admin_prefix(name: str) -> str:
+    """"provincia San Juan" -> "San Juan"; "Villa González" queda intacto.
+
+    Solo recorta si queda algo detrás: "provincia" a secas no es un lugar con
+    nombre, y devolver "" lo convertiría en un candidato vacío.
+    """
+    lowered = _strip_accents(name).lower()
+    for prefix in _ADMIN_PREFIXES:
+        head = _strip_accents(prefix).lower()
+        if not lowered.startswith(head + " "):
+            continue
+        rest = name[len(head):].strip()
+        # "municipio DE Bajos de Haina": el enlace tampoco es parte del nombre.
+        for link in ("de ", "del "):
+            if _strip_accents(rest).lower().startswith(link):
+                rest = rest[len(link):].strip()
+                break
+        if rest:
+            return rest
+    return name
+
+
+def _split_place_span(text: str) -> list[str]:
+    """"Hato Nuevo y Quita Sueño" -> ["Hato Nuevo", "Quita Sueño"].
+
+    Solo parte cuando las DOS mitades siguen empezando en mayúscula: así
+    "Santa Cruz de El Seibo" o "Las Yayas de Viajama" quedan enteras, y el
+    "y" que une dos topónimos sí corta.
+    """
+    clean = " ".join(text.split()).strip(" ,.;:()")
+    for conj in _PLACE_CONJUNCTIONS:
+        if conj not in clean:
+            continue
+        left, _, right = clean.partition(conj)
+        left, right = left.strip(), right.strip()
+        if left[:1].isupper() and right[:1].isupper():
+            return _split_place_span(left) + _split_place_span(right)
+    return [clean] if clean else []
+
+
+def _place_role(in_title: bool, count: int) -> tuple[str, float]:
+    """Papel y confianza de un lugar según dónde y cuánto aparece.
+
+    Escala conservadora a propósito: equivocarse hacia MENCIONADO le cuesta al
+    documentalista un clic para corregir; equivocarse hacia HECHO mete un dato
+    falso en el mapa de cobertura, que es justo lo que el reporte mide.
+    """
+    if in_title and count >= 2:
+        return "HECHO", 0.9
+    if in_title:
+        return "HECHO", 0.75
+    if count >= 3:
+        return "HECHO", 0.6
+    return "MENCIONADO", 0.4
 
 
 def _best_display_name(display: Counter[str]) -> str:
@@ -576,6 +727,22 @@ class LocalAnalyzer:
         keywords = self._keywords(doc)
         return self._main_topic(doc, keywords), keywords
 
+    def extract_places(self, title: str, body: str) -> list[PlaceResult]:
+        """Solo los lugares, sin entidades, tema ni sentimiento.
+
+        Espeja `analyze_topics`, para el caso simétrico: quien combina este
+        analizador con un motor LLM y solo quiere de acá lo que el LLM no da.
+        Los lugares salen del NER de spaCy —reconocer "San Juan" como topónimo
+        no exige entender el artículo—, así que se extraen igual sin importar
+        quién lo haya leído. Sin este camino, la detección automática solo
+        funcionaba con ODIN_ANALYZER=local.
+
+        NO toca pysentimiento: era ~60% del tiempo de `analyze()` y acá el
+        resultado se tiraría entero.
+        """
+        text = f"{title}.\n\n{body}".strip()
+        return self._places(self.nlp(text))
+
     def _analyze_doc(self, doc) -> AnalysisResult:
         sentences = _Sentences.from_doc(doc)
 
@@ -592,12 +759,16 @@ class LocalAnalyzer:
         # --- entidades + opinión hacia cada una ---
         entities = self._entities(doc, probas_by_index, sentences)
 
+        # --- lugares candidatos (mismas entidades del doc, otra etiqueta) ---
+        places = self._places(doc)
+
         return AnalysisResult(
             main_topic=main_topic,
             topic_keywords=keywords,
             overall_sentiment=overall_label,
             sentiment_score=overall_score,
             entities=entities,
+            places=places,
         )
 
     # ---- helpers ----------------------------------------------------------------
@@ -663,6 +834,109 @@ class LocalAnalyzer:
                 if lemma not in _STOP_ENTITY_TOKENS:
                     counts[lemma] += 1
         return [w for w, _ in counts.most_common(top_k)]
+
+    def _places(self, doc) -> list[PlaceResult]:
+        """Lugares candidatos a partir de las entidades LOC de spaCy.
+
+        No resuelve contra el catálogo —eso necesita una sesión y vive en
+        `services/locality_service.suggest_from_places`—. Acá solo se limpia
+        el ruido de segmentación y se estima cuán probable es que el lugar
+        sea DONDE OCURRIÓ el hecho y no uno más de los nombrados al pasar.
+
+        Las tres reglas de limpieza salen de medir la salida real del modelo
+        sobre el corpus (ver tests/analysis/test_local_places.py).
+        """
+        # El titular es todo lo anterior a la primera línea en blanco: así lo
+        # arma `analyze()` (f"{title}.\n\n{body}").
+        title_end = doc.text.find("\n\n")
+        if title_end < 0:
+            title_end = 0
+
+        # Dos pasadas. La primera decide QUÉ nombres son lugares; la segunda
+        # los cuenta. Hace falta separarlas porque la señal que rescata un
+        # lugar mal etiquetado suele aparecer en UNA sola mención ("el
+        # municipio de Pedro Brand") mientras el nombre se repite sin ella
+        # ("Residentes de Pedro Brand"): contando solo la mención con señal, el
+        # titular no pesaría y el lugar caería a MENCIONADO.
+        candidatos: list[tuple] = []   # (nkey, texto, es_lugar, en_titular)
+        confirmados: set[str] = set()
+
+        for ent in doc.ents:
+            if ent.label_ not in ("LOC", "PER", "MISC"):
+                continue
+            # Un salto de línea dentro del span significa que spaCy pegó el
+            # final de un párrafo con el principio del siguiente
+            # ("río Haina\nResidentes"). Mismo criterio que en `_entities`.
+            if "\n" in ent.text:
+                continue
+            # Una vía o un edificio que lleva el nombre de un lugar no ES ese
+            # lugar: "a la autopista Duarte" no es la provincia Duarte. Los dos
+            # guardas ya existen para el mismo problema en `_entities`.
+            #
+            # Solo para spans que NO son LOC: cuando spaCy ya dijo "esto es un
+            # lugar", la palabra de vía que lo antecede suele relacionarlo, no
+            # bautizarlo — el titular del artículo 68 es "Puente ENTRE Hato
+            # Nuevo y Quita Sueño", y ahí el puente no se llama como ellos, los
+            # une. El guarda hace falta para los rescatados por nombre, que es
+            # donde "autopista Duarte" entraría.
+            # "el municipio de X" manda sobre los dos guardas: es adyacente e
+            # inequívoco, mientras que ellos son heurísticas sobre una ventana
+            # de 10 tokens o el árbol de dependencias, que cruzan de cláusula.
+            # En el artículo 71 la mención decisiva ("...residencial Flor de
+            # Loto, ubicado en el municipio de Pedro Brand") cuelga de
+            # "residencial", y sin esta precedencia se perdía justo la que
+            # confirma el lugar.
+            es_unidad_admin = _preceded_by_admin_unit(ent)
+            if (
+                not es_unidad_admin
+                and ent.label_ != "LOC"
+                and (_preceded_by_venue_noun(ent) or _is_named_after_place(ent))
+            ):
+                continue
+            for chunk in _split_place_span(ent.text):
+                chunk = _strip_admin_prefix(chunk)
+                nkey = _norm_key(chunk)
+                if len(chunk) < 3 or nkey in _STOP_ENTITY_TOKENS:
+                    continue
+                if nkey.split(" ", 1)[0] in _GEO_FEATURE_HEADS:
+                    continue
+                # Un span que NO es LOC solo cuenta como lugar si algo lo
+                # respalda: o el catálogo lo conoce, o el texto lo presenta
+                # como unidad administrativa. Sin esto, cada nombre propio del
+                # artículo entraría como candidato.
+                es_lugar = (
+                    ent.label_ == "LOC" or es_unidad_admin or nkey in _seed_place_keys()
+                )
+                candidatos.append((nkey, chunk, es_lugar, ent.start_char < title_end))
+                if es_lugar:
+                    confirmados.add(nkey)
+
+        groups: dict[str, dict] = {}
+        for nkey, chunk, _es_lugar, en_titular in candidatos:
+            if nkey not in confirmados:
+                continue
+            g = groups.setdefault(
+                nkey, {"display": Counter(), "count": 0, "in_title": False}
+            )
+            g["display"][chunk] += 1
+            g["count"] += 1
+            if en_titular:
+                g["in_title"] = True
+
+        places: list[PlaceResult] = []
+        for g in groups.values():
+            kind, confidence = _place_role(g["in_title"], g["count"])
+            places.append(
+                PlaceResult(
+                    name=_best_display_name(g["display"]),
+                    mentions_count=g["count"],
+                    in_title=g["in_title"],
+                    kind=kind,
+                    confidence=confidence,
+                )
+            )
+        places.sort(key=lambda p: (-p.confidence, -p.mentions_count, p.name))
+        return places
 
     def _main_topic(self, doc, keywords: list[str]) -> str | None:
         """Tema principal: prefiere una frase nominal frecuente que incluya la

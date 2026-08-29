@@ -294,3 +294,94 @@ class TestFiltersEndpoint:
         assert "Política" in body["sections"]
         assert "POS" in body["sentiments"]
         assert "crisis_conflicto" in body["framing"]
+
+
+class TestFiltrosQueMultiplicanFilas:
+    """`entity` y `locality` unen tablas con varias filas por artículo.
+
+    Se resolvía con SELECT DISTINCT, y eso rompía en PostgreSQL: el ORDER BY
+    del listado incluye la expresión `published_at IS NULL` (nulos al final),
+    que bajo DISTINCT tiene que estar en la lista de selección o el motor
+    aborta con InvalidColumnReference. SQLite no aplica esa regla, así que el
+    error solo se veía en producción — de ahí que estas pruebas miren el SQL
+    que se emite de verdad, y no solo el resultado.
+    """
+
+    def _select_de_articulos(self, sessionmaker, api_client, params):
+        """SQL emitido por GET /api/articles con estos filtros."""
+        from sqlalchemy import event
+
+        engine = sessionmaker.kw["bind"]
+        capturado: list[str] = []
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def _grabar(conn, cursor, statement, parameters, context, executemany):
+            capturado.append(statement)
+
+        try:
+            resp = api_client.get("/api/articles", params=params, headers=_auth_headers())
+        finally:
+            event.remove(engine, "before_cursor_execute", _grabar)
+
+        assert resp.status_code == 200, resp.text
+        return resp.json(), [s for s in capturado if "FROM articles" in s]
+
+    def test_el_filtro_por_lugar_no_usa_select_distinct(self, api_client, sqlite_sessionmaker):
+        _, sqls = self._select_de_articulos(sqlite_sessionmaker, api_client, {"locality": 1})
+
+        assert sqls, "no se emitió ninguna consulta sobre articles"
+        assert not any("DISTINCT" in s.upper() for s in sqls)
+
+    def test_el_filtro_por_entidad_no_usa_select_distinct(self, api_client, sqlite_sessionmaker):
+        _, sqls = self._select_de_articulos(
+            sqlite_sessionmaker, api_client, {"entity": "Abinader"}
+        )
+
+        assert sqls, "no se emitió ninguna consulta sobre articles"
+        assert not any("DISTINCT" in s.upper() for s in sqls)
+
+    def test_articulo_con_dos_lugares_no_se_duplica(self, api_client, sqlite_sessionmaker):
+        """Es lo que el DISTINCT protegía: sin él, el EXISTS tiene que bastar."""
+        from odin.db.localities import resolve, seed_localities
+        from odin.db.models import ArticleLocality
+
+        session = sqlite_sessionmaker()
+        seed_localities(session)
+        santiago = resolve(session, "Santiago", level="PROVINCIA")
+        tamboril = resolve(session, "Tamboril")
+
+        art = _make_article(url="https://diariolibre.com/dos-lugares")
+        art.localities.append(ArticleLocality(locality_id=santiago.id, kind="HECHO"))
+        art.localities.append(ArticleLocality(locality_id=tamboril.id, kind="MENCIONADO"))
+        session.add(art)
+        session.commit()
+        santiago_id = santiago.id
+        session.close()
+
+        resp = api_client.get(
+            "/api/articles", params={"locality": santiago_id}, headers=_auth_headers()
+        )
+        body = resp.json()
+
+        assert resp.status_code == 200
+        assert body["total"] == 1
+        assert len(body["items"]) == 1
+
+    def test_articulo_con_dos_entidades_que_matchean_no_se_duplica(
+        self, api_client, sqlite_sessionmaker
+    ):
+        session = sqlite_sessionmaker()
+        art = _make_article(url="https://diariolibre.com/dos-entidades")
+        art.entities.append(Entity(name="Partido Rojo", type="ORG", mentions_count=1))
+        art.entities.append(Entity(name="Partido Azul", type="ORG", mentions_count=1))
+        session.add(art)
+        session.commit()
+        session.close()
+
+        resp = api_client.get(
+            "/api/articles", params={"entity": "Partido"}, headers=_auth_headers()
+        )
+        body = resp.json()
+
+        assert body["total"] == 1
+        assert len(body["items"]) == 1

@@ -6,6 +6,8 @@ import { useConfirm } from "@/lib/dialog"
 import { ENTITY_TYPE_LABELS } from "@/lib/labels"
 import { computeSentimentAggregate } from "@/lib/sentiment-aggregate"
 import { SentimentCompositionBar } from "@/components/SentimentCompositionBar"
+import { SourceSentimentBreakdown } from "@/components/SourceSentimentBreakdown"
+import { groupArticlesBySource } from "@/lib/sentiment-by-source"
 import {
   useCanonicalEntities,
   useCanonicalEntity,
@@ -285,23 +287,43 @@ function CanonicalEntityRow({
               {(() => {
                 const aggregate = computeSentimentAggregate(detail.articles)
                 return aggregate ? (
-                  <div className="mb-3">
+                  <div className="mb-3 flex flex-col gap-3">
                     <SentimentCompositionBar aggregate={aggregate} />
+                    {/* El mismo dato partido por periódico: quién habla bien y
+                        quién habla mal de este actor (R3). */}
+                    <SourceSentimentBreakdown articles={detail.articles} />
                   </div>
                 ) : null
               })()}
-              <ul className="space-y-1 text-xs">
-                {detail.articles.map((a) => (
-                  <li key={a.article_id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1">
-                    <Link to={`/reports/${a.article_id}`} className="truncate hover:underline">
-                      {a.title}
-                    </Link>
-                    <span className="shrink-0" style={{ color: "var(--muted-foreground)" }}>
-                      {formatDate(a.published_at)} · {a.mentions_count} menc.
-                    </span>
-                  </li>
+              {/* Agrupados por medio y en el MISMO orden que "Trato por medio",
+                  para poder bajar del porcentaje de un medio directo a sus notas. */}
+              <div className="flex flex-col gap-3">
+                {groupArticlesBySource(detail.articles).map(({ source, sourceName, articles }) => (
+                  <div key={source} className="flex flex-col gap-1">
+                    <div className="flex items-baseline gap-2 px-2">
+                      <h5 className="text-[11.5px] font-semibold">{sourceName}</h5>
+                      <span className="font-mono text-[10.5px]" style={{ color: "var(--faint)" }}>
+                        {articles.length} {articles.length === 1 ? "artículo" : "artículos"}
+                      </span>
+                    </div>
+                    <ul className="space-y-1 text-xs">
+                      {articles.map((a) => (
+                        <li
+                          key={a.article_id}
+                          className="flex items-center justify-between gap-2 rounded-md px-2 py-1"
+                        >
+                          <Link to={`/reports/${a.article_id}`} className="truncate hover:underline">
+                            {a.title}
+                          </Link>
+                          <span className="shrink-0" style={{ color: "var(--muted-foreground)" }}>
+                            {formatDate(a.published_at)} · {a.mentions_count} menc.
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </>
           )}
         </div>

@@ -41,7 +41,6 @@ from odin.db.models import Article, ArticleLocality, CanonicalEntity, Entity, Lo
 from odin.scrapers import SCRAPERS, source_name
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import analyzer
-from odin.services.locality_service import validate_link_payloads
 
 _ACTOR_FIELDS = {
     "dominant_actor": "dominant_actor_id",
@@ -128,8 +127,19 @@ def _apply_article_filters(
             )
         )
     if entity:
-        stmt = stmt.join(Entity, Entity.article_id == Article.id).where(
-            accent_insensitive_contains(Entity.name, entity)
+        # EXISTS y no JOIN: un artículo con dos entidades que matchean saldría
+        # dos veces, y taparlo con SELECT DISTINCT rompe en PostgreSQL —el
+        # ORDER BY del listado incluye la expresión `published_at IS NULL`, que
+        # bajo DISTINCT tiene que estar en la lista de selección—. El EXISTS no
+        # multiplica filas, así que no hace falta deduplicar nada.
+        conditions.append(
+            select(1)
+            .select_from(Entity)
+            .where(
+                Entity.article_id == Article.id,
+                accent_insensitive_contains(Entity.name, entity),
+            )
+            .exists()
         )
     if documentalist is not None:
         conditions.append(Article.documentalist_id == documentalist)
@@ -140,10 +150,17 @@ def _apply_article_filters(
         # comparar prefijos — sin CTE recursivo, que además no se escribe igual
         # en los tres motores objetivo (PostgreSQL, SQLite y SQL Server).
         target_path = select(Locality.path).where(Locality.id == locality).scalar_subquery()
-        stmt = (
-            stmt.join(ArticleLocality, ArticleLocality.article_id == Article.id)
+        # EXISTS por el mismo motivo que en `entity`: una nota marcada a la vez
+        # en Santiago y en Tamboril matchea dos veces al filtrar por Santiago.
+        conditions.append(
+            select(1)
+            .select_from(ArticleLocality)
             .join(Locality, Locality.id == ArticleLocality.locality_id)
-            .where(Locality.path.like(target_path + "%"))
+            .where(
+                ArticleLocality.article_id == Article.id,
+                Locality.path.like(target_path + "%"),
+            )
+            .exists()
         )
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -302,10 +319,6 @@ def list_articles(
             locality=locality,
             documentalist=documentalist,
         )
-        if entity or locality is not None:
-            # El join a menciones/lugares multiplica filas por artículo.
-            base = base.distinct()
-
         total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
 
         order_clauses = _order_by(sort, order)
@@ -509,6 +522,12 @@ def save_article(
 
         # Antes que nada, porque un lugar inválido tiene que abortar el alta
         # entera y no dejar un reporte sin los lugares que se le indicaron.
+        # Import diferido: `locality_service` importa `odin.api.deps`, que
+        # inicializa el paquete `odin.api` y con él todos los routers —uno de
+        # los cuales vuelve acá—. A nivel de módulo eso es un ciclo que solo
+        # se nota si `locality_service` es lo primero que se importa.
+        from odin.services.locality_service import validate_link_payloads
+
         locality_links = validate_link_payloads(session, list(req.localities))
 
         # Canonicaliza también al guardar: cubre ediciones manuales del

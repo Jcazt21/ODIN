@@ -102,6 +102,31 @@ def _flatten(seed: dict) -> list[dict]:
     return nodes
 
 
+def _sync_aliases(session: Session, locality: Locality, aliases: list[str]) -> int:
+    """Agrega los alias del JSON que le falten a este nodo. Devuelve cuántos.
+
+    Solo agrega: no borra los que un admin haya creado desde la UI, y no toca
+    el nombre del nodo (un municipio renombrado a mano no se revierte —ver el
+    docstring de `seed_localities`).
+    """
+    existing = set(
+        session.scalars(
+            select(LocalityAlias.alias_key).where(
+                LocalityAlias.locality_id == locality.id
+            )
+        ).all()
+    )
+    added = 0
+    for alias in aliases:
+        akey = norm_key(alias)
+        if akey == locality.norm_key or akey in existing:
+            continue  # un alias idéntico al nombre no aporta nada
+        session.add(LocalityAlias(locality_id=locality.id, alias=alias, alias_key=akey))
+        existing.add(akey)
+        added += 1
+    return added
+
+
 def seed_localities(session: Session, *, seed: dict | None = None) -> int:
     """Carga el catálogo si falta, y devuelve cuántos nodos insertó.
 
@@ -109,6 +134,11 @@ def seed_localities(session: Session, *, seed: dict | None = None) -> int:
     saltan sin tocarse. Eso permite llamarla en cada arranque sin duplicar, y
     —más importante— que un municipio renombrado a mano desde la UI no se
     revierta solo la próxima vez que corra la semilla.
+
+    Los ALIAS sí se sincronizan aunque el nodo ya exista: son aditivos y no
+    pisan nada editado a mano. Si no, un alias nuevo en el JSON solo llegaría
+    a las bases creadas desde cero, y en las que ya están en producción
+    —justo donde hace falta— no aparecería nunca.
     """
     seed = seed or load_seed()
     inserted = 0
@@ -128,6 +158,7 @@ def seed_localities(session: Session, *, seed: dict | None = None) -> int:
         if existing:
             ids[node["key"]] = existing.id
             paths[node["key"]] = existing.path
+            _sync_aliases(session, existing, node["aliases"])
             continue
 
         row = Locality(
@@ -151,11 +182,7 @@ def seed_localities(session: Session, *, seed: dict | None = None) -> int:
         paths[node["key"]] = row.path
         inserted += 1
 
-        for alias in node["aliases"]:
-            akey = norm_key(alias)
-            if akey == nkey:
-                continue  # un alias idéntico al nombre no aporta nada
-            session.add(LocalityAlias(locality_id=row.id, alias=alias, alias_key=akey))
+        _sync_aliases(session, row, node["aliases"])
 
     session.commit()
     return inserted

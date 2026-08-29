@@ -13,7 +13,8 @@ from typing import Protocol
 # se agregue, quite o cambie de significado un campo del análisis, para poder
 # distinguir en la BD qué filas usan qué forma del esquema y decidir un
 # backfill selectivo en vez de re-analizar todo el corpus a ciegas.
-ANALYSIS_SCHEMA_VERSION = 2
+# v3: agrega `places` (lugares candidatos extraídos de las entidades LOC).
+ANALYSIS_SCHEMA_VERSION = 3
 
 
 @dataclass
@@ -33,12 +34,33 @@ class EntityResult:
 
 
 @dataclass
+class PlaceResult:
+    """Un lugar candidato, TAL COMO APARECIÓ EN EL TEXTO.
+
+    Deliberadamente sin `locality_id`: el analizador no habla con la base. El
+    catálogo vive en una tabla administrable (`db/localities.py`) y resolver
+    contra ella es trabajo del servicio, no del extractor. Así `LocalAnalyzer`
+    sigue siendo puro y testeable sin sesión.
+    """
+
+    name: str                    # texto limpio: "Bajos de Haina", "Quita Sueño"
+    mentions_count: int = 1
+    in_title: bool = False       # apareció en el titular
+    kind: str = "MENCIONADO"     # "HECHO" | "MENCIONADO" — ver LOCALITY_KINDS
+    confidence: float = 0.4      # 0..1, alimenta ArticleLocality.confidence
+
+
+@dataclass
 class AnalysisResult:
     main_topic: str | None = None
     topic_keywords: list[str] = field(default_factory=list)
     overall_sentiment: str | None = None  # "POS" | "NEG" | "NEU"
     sentiment_score: float | None = None
     entities: list[EntityResult] = field(default_factory=list)
+    # Lugares candidatos. Solo LocalAnalyzer los produce hoy: salen de las
+    # entidades LOC de spaCy, que ya se calculan en la misma pasada. Los
+    # analizadores LLM los dejan vacíos.
+    places: list[PlaceResult] = field(default_factory=list)
 
     # --- Análisis de encuadre (solo lo producen los analizadores LLM
     # —GroqAnalyzer/GeminiAnalyzer—; LocalAnalyzer los deja en None: exigen

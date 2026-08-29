@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
 import { LocalityPicker } from "@/components/LocalityPicker"
-import type { PickedLocality } from "@/lib/localities"
+import { suggestedToPicked, type PickedLocality } from "@/lib/localities"
 import { AnalyzeProgress } from "@/components/AnalyzeProgress"
 import { EntitiesCard } from "@/components/EntitiesCard"
 import { ActionButtons } from "@/components/ActionButtons"
@@ -64,7 +64,11 @@ export function AnalyzePage() {
     try {
       const data = await analyzeMutation.mutateAsync(url.trim())
       setResult(data)
-      if (!data.already_saved) setDraft(toDraft(data))
+      if (!data.already_saved) {
+        setDraft(toDraft(data))
+        // Precarga: el documentalista confirma o quita, no arranca de cero.
+        setLocalities(suggestedToPicked(data.suggested_localities ?? []))
+      }
     } catch {
       // el error queda en analyzeMutation.error, mostrado abajo
     } finally {
@@ -81,8 +85,10 @@ export function AnalyzePage() {
         localities: localities.map((l) => ({
           locality_id: l.locality_id,
           kind: l.kind,
-          origin: "MANUAL",
-          confidence: null,
+          // Lo que agrega una persona en el selector llega sin `origin` y cae
+          // en MANUAL; lo que sobrevive de las sugerencias conserva AUTO.
+          origin: l.origin ?? "MANUAL",
+          confidence: l.origin === "AUTO" ? (l.confidence ?? null) : null,
         })),
       })
       setResult(saved)

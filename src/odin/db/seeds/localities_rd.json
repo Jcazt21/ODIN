@@ -353,7 +353,8 @@
                   "nombre": "San Cristóbal"
                 },
                 {
-                  "nombre": "Bajos de Haina"
+                  "nombre": "Bajos de Haina",
+                  "alias": ["Haina"]
                 },
                 {
                   "nombre": "Cambita Garabitos"

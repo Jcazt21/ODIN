@@ -1,4 +1,4 @@
-import type { ArticleLocality, LocalityNode } from "@/lib/odin-api"
+import type { ArticleLocality, LocalityNode, SuggestedLocality } from "@/lib/odin-api"
 
 /** Lo que el selector necesita para mostrar una localidad ya elegida. */
 export interface PickedLocality {
@@ -8,6 +8,11 @@ export interface PickedLocality {
   label: string
   /** Id del vínculo ya persistido, si lo hay. */
   linkId?: number
+  /** "MANUAL" (lo eligió una persona) | "AUTO" (lo propuso el analizador y
+   *  la persona lo dejó pasar). Se decide acá y viaja tal cual al POST. */
+  origin?: string
+  /** Confianza de la detección automática. Siempre null si origin es MANUAL. */
+  confidence?: number | null
 }
 
 /** Convierte lo que devuelve la API en lo que consume el selector. */
@@ -17,6 +22,20 @@ export function toPicked(links: ArticleLocality[]): PickedLocality[] {
     kind: link.kind,
     label: (link.breadcrumb ?? []).map((c) => c.name).join(" › ") || link.name,
     linkId: link.id,
+  }))
+}
+
+/** Sugerencias del analizador -> lo que consume el selector.
+ *  Espeja `toPicked`, pero arrastra origin/confidence: si se pierden acá, el
+ *  vínculo se guarda como MANUAL y deja de distinguirse lo que propuso la
+ *  máquina de lo que escribió una persona. */
+export function suggestedToPicked(suggestions: SuggestedLocality[]): PickedLocality[] {
+  return suggestions.map((s) => ({
+    locality_id: s.locality_id,
+    kind: s.kind,
+    label: (s.breadcrumb ?? []).map((c) => c.name).join(" › ") || s.name,
+    origin: s.origin,
+    confidence: s.confidence,
   }))
 }
 

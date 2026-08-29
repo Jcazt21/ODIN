@@ -19,6 +19,7 @@ from odin.api.schemas import (
     CanonicalEntityUpdatePayload,
 )
 from odin.db.models import Article, CanonicalEntity, Entity
+from odin.scrapers import source_name
 from odin.services.article_service import accent_insensitive_contains
 
 
@@ -120,6 +121,7 @@ def get_canonical_entity(entity_id: int) -> CanonicalEntityDetailResponse:
                     title=article.title,
                     url=article.url,
                     source=article.source,
+                    source_name=source_name(article.source),
                     published_at=article.published_at,
                     sentiment_toward=mention.sentiment_toward,
                     sentiment_score=mention.sentiment_score,
