@@ -136,7 +136,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
           </td>
           <td className="px-2 py-2.5">
             <span
-              className="rounded-[5px] border px-1.5 py-0.5 text-[10.5px]"
+              className="inline-block rounded-[5px] border px-1.5 py-0.5 text-[10.5px]"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
             >
               {alias.type}

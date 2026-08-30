@@ -7,11 +7,14 @@ import { LoginPage } from "@/pages/LoginPage"
 import { AnalyzePage } from "@/pages/AnalyzePage"
 import { ReportsPage } from "@/pages/ReportsPage"
 import { ReportDetailPage } from "@/pages/ReportDetailPage"
+import { NewReportPage } from "@/pages/NewReportPage"
+import { ChangePasswordPage } from "@/pages/ChangePasswordPage"
 import { EntitiesPage } from "@/pages/EntitiesPage"
 import { AliasesPage } from "@/pages/AliasesPage"
+import { DocumentalistsPage } from "@/pages/DocumentalistsPage"
 import { SettingsPage } from "@/pages/SettingsPage"
 import { useMe } from "@/lib/queries/auth"
-import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername } from "@/lib/auth"
+import { AUTH_EXPIRED_EVENT, clearSession, getToken, getUsername, setRole } from "@/lib/auth"
 
 type Theme = "light" | "dark"
 const THEME_KEY = "odin.theme"
@@ -63,8 +66,14 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (meQuery.data) setUsername(meQuery.data.username)
-    else if (meQuery.isError) setUsername(null) // el 401 ya limpió el token
+    if (meQuery.data) {
+      setUsername(meQuery.data.username)
+      // El rol solo decide qué se dibuja en esta pestaña; quien autoriza de
+      // verdad es require_admin en el backend.
+      setRole(meQuery.data.role ?? null)
+    } else if (meQuery.isError) {
+      setUsername(null) // el 401 ya limpió el token (y el rol, vía clearSession)
+    }
   }, [meQuery.data, meQuery.isError])
 
   function handleLogout() {
@@ -76,6 +85,15 @@ function App() {
 
   if (checking) {
     return <div className="min-h-screen" style={{ background: "var(--bg)" }} />
+  }
+
+  // Entró con el PIN de primer acceso: nada más se dibuja hasta que elija su
+  // contraseña. No es solo cortesía de interfaz — con el portón encendido el
+  // backend responde 403 a todo lo demás, así que cualquier otra pantalla
+  // estaría rota. Al terminar se refresca `me` para que el portón se apague
+  // con el token nuevo que dejó `changePassword`.
+  if (meQuery.data?.must_change_password) {
+    return <ChangePasswordPage onDone={() => meQuery.refetch()} />
   }
 
   return (
@@ -95,9 +113,12 @@ function App() {
           >
             <Route path="/analyze" element={<AnalyzePage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            {/* Antes de "/reports/:id": si no, "new" se leería como un id. */}
+            <Route path="/reports/new" element={<NewReportPage />} />
             <Route path="/reports/:id" element={<ReportDetailPage />} />
             <Route path="/entities" element={<EntitiesPage />} />
             <Route path="/aliases" element={<AliasesPage />} />
+            <Route path="/documentalists" element={<DocumentalistsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/" element={<Navigate to="/analyze" replace />} />
           </Route>

@@ -27,6 +27,7 @@ import requests
 import trafilatura
 
 from odin.core.config import settings
+from odin.scrapers.authors import strip_outlet
 
 log = logging.getLogger("odin.scraper")
 
@@ -195,6 +196,12 @@ class BaseScraper:
     feeds: list[str] = []
     #: lista de sitemaps de noticias (estándar o Google News) a rastrear
     sitemaps: list[str] = []
+    #: dominios propios del medio, para reconocerlo a partir de una URL
+    #: suelta. Solo hace falta declararlos cuando no se pueden deducir de
+    #: `feeds`/`sitemaps` — p. ej. un scraper que arma las URLs desde la
+    #: portada. `source_from_url` los usa; el test de cobertura en
+    #: tests/scrapers/test_source_from_url.py avisa si falta alguno.
+    domains: list[str] = []
 
     def __init__(self) -> None:
         self.session = requests.Session()
@@ -292,7 +299,9 @@ class BaseScraper:
         if not body or not title:
             return None
 
-        authors = meta.get("author") or None
+        # El medio se lista a sí mismo como autor en varios sitios; ver
+        # `strip_outlet_from_authors`.
+        authors = strip_outlet(meta.get("author") or None, {self.name, self.source})
         section = None
         cats = meta.get("categories")
         if cats:

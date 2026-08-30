@@ -8,8 +8,11 @@ import { softAuroraFor, SOFT_AURORA_OPACITY, type Theme } from "@/lib/aurora-con
 const NAV_ITEMS = [
   { label: "Analizar", tab: "/analyze" },
   { label: "Reportes", tab: "/reports" },
+  // Oculto temporalmente: la pantalla de "Nuevo reporte" sigue en pulido.
+  // La ruta /reports/new sigue registrada en App.tsx.
   { label: "Entidades", tab: "/entities" },
   { label: "Siglas", tab: "/aliases" },
+  { label: "Documentalistas", tab: "/documentalists" },
   { label: "Ajustes", tab: "/settings" },
 ]
 

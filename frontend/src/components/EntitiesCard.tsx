@@ -74,7 +74,7 @@ export function EntitiesCard({
                   {isLowConfidence(ent) && (
                     <span
                       title="Confianza de extracción baja — revisar"
-                      className="rounded-[5px] border px-1.5 py-0.5 text-[10.5px] font-semibold"
+                      className="inline-block rounded-[5px] border px-1.5 py-0.5 text-[10.5px] font-semibold"
                       style={{ background: "var(--warn-soft)", borderColor: "var(--warn)", color: "var(--warn)" }}
                     >
                       revisar

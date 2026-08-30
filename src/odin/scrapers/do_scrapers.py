@@ -84,6 +84,7 @@ class AcentoScraper(BaseScraper):
 
     source = "acento"
     name = "Acento"
+    domains = ["acento.com.do"]
 
     def discover_urls(self, limit: int | None = None) -> list[str]:
         html = self.fetch("https://acento.com.do/")

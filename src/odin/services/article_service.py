@@ -32,10 +32,13 @@ from odin.api.schemas import (
     ArticleFiltersResponse,
     ArticleListResponse,
     ArticleSummary,
+    DocumentalistOption,
     EntityMention,
     SaveArticleRequest,
+    SourceOption,
 )
-from odin.db.models import Article, CanonicalEntity, Entity
+from odin.db.models import Article, ArticleLocality, CanonicalEntity, Entity, Locality, User
+from odin.scrapers import SCRAPERS, source_name
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import analyzer
 
@@ -44,6 +47,21 @@ _ACTOR_FIELDS = {
     "blamed_actor": "blamed_actor_id",
     "credited_actor": "credited_actor_id",
 }
+
+
+def _documentalist_id_for(session, username: str | None) -> int | None:
+    """Traduce el usuario del token a un id de `users`.
+
+    Devuelve `None` si no hay usuario o si ya no existe (un JWT válido de
+    alguien dado de baja): perder la atribución es aceptable, tumbar el guardado
+    del documentalista no.
+    """
+    if not username:
+        return None
+    import odin.db.users as user_store
+
+    user = user_store.get_by_username(session, username)
+    return user.id if user else None
 
 
 def accent_insensitive_contains(column, value: str) -> ColumnElement[bool]:
@@ -73,6 +91,8 @@ def _apply_article_filters(
     date_to: str | None,
     q: str | None,
     entity: str | None,
+    locality: int | None = None,
+    documentalist: int | None = None,
 ):
     conditions: list[ColumnElement[bool]] = []
     if source:
@@ -107,18 +127,94 @@ def _apply_article_filters(
             )
         )
     if entity:
-        stmt = stmt.join(Entity, Entity.article_id == Article.id).where(
-            accent_insensitive_contains(Entity.name, entity)
+        # EXISTS y no JOIN: un artículo con dos entidades que matchean saldría
+        # dos veces, y taparlo con SELECT DISTINCT rompe en PostgreSQL —el
+        # ORDER BY del listado incluye la expresión `published_at IS NULL`, que
+        # bajo DISTINCT tiene que estar en la lista de selección—. El EXISTS no
+        # multiplica filas, así que no hace falta deduplicar nada.
+        conditions.append(
+            select(1)
+            .select_from(Entity)
+            .where(
+                Entity.article_id == Article.id,
+                accent_insensitive_contains(Entity.name, entity),
+            )
+            .exists()
+        )
+    if documentalist is not None:
+        conditions.append(Article.documentalist_id == documentalist)
+    if locality is not None:
+        # Filtrar por un lugar incluye lo que cuelga de él: pedir "Santiago"
+        # trae también las notas marcadas en Tamboril. La relación
+        # ancestro/descendiente ya está materializada en `path`, así que basta
+        # comparar prefijos — sin CTE recursivo, que además no se escribe igual
+        # en los tres motores objetivo (PostgreSQL, SQLite y SQL Server).
+        target_path = select(Locality.path).where(Locality.id == locality).scalar_subquery()
+        # EXISTS por el mismo motivo que en `entity`: una nota marcada a la vez
+        # en Santiago y en Tamboril matchea dos veces al filtrar por Santiago.
+        conditions.append(
+            select(1)
+            .select_from(ArticleLocality)
+            .join(Locality, Locality.id == ArticleLocality.locality_id)
+            .where(
+                ArticleLocality.article_id == Article.id,
+                Locality.path.like(target_path + "%"),
+            )
+            .exists()
         )
     if conditions:
         stmt = stmt.where(and_(*conditions))
     return stmt
 
 
+# Columnas por las que se puede ordenar el listado. Lista blanca explícita y no
+# un getattr(Article, sort): eso dejaría ordenar por cualquier columna de la
+# tabla, `password_hash` de un futuro join incluido, con el nombre viajando
+# desde el query string.
+SORTABLE_COLUMNS = {
+    "published_at": Article.published_at,
+    "source": Article.source,
+    "analyzed_on": Article.analyzed_on,
+}
+
+# Alias del contrato anterior, donde `sort` mezclaba campo y dirección. Se
+# mantienen para no romper enlaces guardados.
+_SORT_ALIASES = {
+    "recent": ("published_at", "desc"),
+    "oldest": ("published_at", "asc"),
+}
+
+
+def _order_by(sort: str | None, order: str | None):
+    """Cláusula ORDER BY a partir del campo y la dirección pedidos."""
+    field, direction = _SORT_ALIASES.get(sort or "", (sort or "published_at", order or "desc"))
+    if order and sort not in _SORT_ALIASES:
+        direction = order
+
+    column = SORTABLE_COLUMNS.get(field)
+    if column is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No se puede ordenar por '{field}'. Válidos: {', '.join(SORTABLE_COLUMNS)}.",
+        )
+    if direction not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=422, detail=f"Dirección inválida: '{direction}'. Válidas: asc, desc."
+        )
+
+    clause = column.asc() if direction == "asc" else column.desc()
+    # Los nulos siempre al final: `analyzed_on` está vacío en lo que nadie
+    # trabajó, y en descendente esos vacíos coparían la primera pantalla.
+    # Segundo criterio por id para que el orden sea estable entre páginas
+    # cuando varias filas empatan.
+    return [column.is_(None).asc(), clause, Article.id.desc()]
+
+
 def serialize_summary(article: Article) -> ArticleSummary:
     return ArticleSummary(
         id=article.id,
         source=article.source,
+        source_name=source_name(article.source),
         url=article.url,
         title=article.title,
         section=article.section,
@@ -135,6 +231,8 @@ def serialize_summary(article: Article) -> ArticleSummary:
         dominant_actor=article.dominant_actor.name if article.dominant_actor else None,
         blamed_actor=article.blamed_actor.name if article.blamed_actor else None,
         credited_actor=article.credited_actor.name if article.credited_actor else None,
+        documentalist=article.documentalist.display_name if article.documentalist else None,
+        analyzed_on=article.analyzed_on,
         entity_count=len(article.entities),
     )
 
@@ -143,6 +241,7 @@ def serialize_article(article: Article) -> ArticleDetail:
     return ArticleDetail(
         id=article.id,
         source=article.source,
+        source_name=source_name(article.source),
         url=article.url,
         title=article.title,
         authors=article.authors,
@@ -173,6 +272,8 @@ def serialize_article(article: Article) -> ArticleDetail:
         analyzer_version=article.analyzer_version,
         analysis_schema_version=article.analysis_schema_version,
         analyzed_at=article.analyzed_at,
+        documentalist=article.documentalist.display_name if article.documentalist else None,
+        analyzed_on=article.analyzed_on,
         entities=[EntityMention.model_validate(e) for e in article.entities],
     )
 
@@ -188,9 +289,12 @@ def list_articles(
     source_quality: str | None,
     has_hard_data: bool | None,
     entity: str | None,
+    locality: int | None,
+    documentalist: int | None,
     date_from: str | None,
     date_to: str | None,
-    sort: str,
+    sort: str | None,
+    order: str | None,
     limit: int,
     offset: int,
 ) -> ArticleListResponse:
@@ -212,24 +316,25 @@ def list_articles(
             date_to=date_to,
             q=q,
             entity=entity,
+            locality=locality,
+            documentalist=documentalist,
         )
-        if entity:
-            base = base.distinct()
-
         total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
 
-        order_col = Article.published_at.asc() if sort == "oldest" else Article.published_at.desc()
+        order_clauses = _order_by(sort, order)
         # selectinload: una query con IN(...) por relación para toda la página,
-        # en vez de lazy-load por artículo (N+1) al pedir `len(article.entities)`
-        # y `article.dominant_actor.name` (+blamed/credited) en serialize_summary.
+        # en vez de lazy-load por artículo (N+1) al pedir `len(article.entities)`,
+        # `article.dominant_actor.name` (+blamed/credited) y `article.documentalist.
+        # display_name` en serialize_summary.
         rows = session.scalars(
             base.options(
                 selectinload(Article.entities),
                 selectinload(Article.dominant_actor),
                 selectinload(Article.blamed_actor),
                 selectinload(Article.credited_actor),
+                selectinload(Article.documentalist),
             )
-            .order_by(order_col, Article.id.desc())
+            .order_by(*order_clauses)
             .limit(limit)
             .offset(offset)
         ).all()
@@ -244,13 +349,40 @@ def list_articles(
         session.close()
 
 
+def source_catalog() -> list[SourceOption]:
+    """Todos los medios del registro de scrapers, con su nombre legible.
+
+    No sale de `DISTINCT articles.source` como las facetas del filtro: esas
+    listan lo ya guardado, y el formulario de captura necesita poder dar de
+    alta el PRIMER reporte de un medio, que por definición todavía no aparece
+    ahí.
+    """
+    return sorted(
+        (SourceOption(value=slug, label=source_name(slug)) for slug in SCRAPERS),
+        key=lambda o: o.label,
+    )
+
+
 def article_filters() -> ArticleFiltersResponse:
     session = deps.get_session()
     try:
-        sources = [
-            s
-            for s in session.scalars(select(Article.source).distinct().order_by(Article.source)).all()
-            if s
+        # Se ordenan por etiqueta, no por slug: el desplegable lo lee una
+        # persona, y "El Día" antes que "El Nacional" solo es evidente con el
+        # nombre puesto.
+        sources = sorted(
+            (
+                SourceOption(value=s, label=source_name(s))
+                for s in session.scalars(select(Article.source).distinct()).all()
+                if s
+            ),
+            key=lambda o: o.label,
+        )
+        topics = [
+            t
+            for t in session.scalars(
+                select(Article.main_topic).distinct().order_by(Article.main_topic)
+            ).all()
+            if t
         ]
         sections = [
             s
@@ -259,14 +391,25 @@ def article_filters() -> ArticleFiltersResponse:
             ).all()
             if s
         ]
+        documentalists = [
+            DocumentalistOption(id=u.id, display_name=u.display_name)
+            for u in session.scalars(
+                select(User)
+                .join(Article, Article.documentalist_id == User.id)
+                .distinct()
+                .order_by(User.display_name)
+            ).all()
+        ]
         return ArticleFiltersResponse(
             sources=sources,
+            topics=topics,
             sections=sections,
             sentiments=list(SENTIMENT_VALUES),
             framing=list(FRAMING_VALUES),
             headline_intent=list(HEADLINE_INTENT_VALUES),
             lead_orientation=list(LEAD_ORIENTATION_VALUES),
             source_quality=list(SOURCE_QUALITY_VALUES),
+            documentalists=documentalists,
         )
     finally:
         session.close()
@@ -300,7 +443,7 @@ def _resolve_actor_field(article: Article, name: str | None) -> int | None:
     return None
 
 
-def update_article(article_id: int, payload) -> ArticleDetail:
+def update_article(article_id: int, payload, documentalist_username: str | None = None) -> ArticleDetail:
     """Rectifica el análisis de un artículo ya guardado (§8.2): tema, encuadre,
     sentimiento, actores señalados... Solo toca los campos enviados. No permite
     corregir `title`/`body`/`url` porque eso es lo que decía la fuente, no un
@@ -317,6 +460,12 @@ def update_article(article_id: int, payload) -> ArticleDetail:
                 setattr(article, _ACTOR_FIELDS[field], _resolve_actor_field(article, value))
             else:
                 setattr(article, field, value)
+        # La rectificación reasigna la autoría: el KPI mide quién dejó el dato
+        # como está, no quién lo tocó primero.
+        rectifier = _documentalist_id_for(session, documentalist_username)
+        if rectifier is not None:
+            article.documentalist_id = rectifier
+            article.analyzed_on = datetime.now(UTC).date()
         session.commit()
         return serialize_article(article)
     except HTTPException:
@@ -350,8 +499,16 @@ def delete_article(article_id: int) -> None:
         session.close()
 
 
-def save_article(req: SaveArticleRequest) -> ArticleDetail:
-    """Persiste el resultado de /api/analyze, ya revisado/corregido."""
+def save_article(
+    req: SaveArticleRequest, documentalist_username: str | None = None
+) -> tuple[ArticleDetail, bool]:
+    """Persiste el resultado de /api/analyze, ya revisado/corregido.
+
+    Devuelve el reporte y si hubo alta. El segundo valor existe para el
+    formulario manual: ante una URL ya cargada esta función devuelve la
+    existente, y sin esa señal el documentalista vería "guardado" tras
+    llenar diez campos que no se guardaron en ninguna parte.
+    """
     url = req.url.strip()
 
     session = deps.get_session()
@@ -361,7 +518,17 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
         # en cada guardado.
         existing = session.scalar(select(Article).where(Article.url == url))
         if existing:
-            return serialize_article(existing)
+            return serialize_article(existing), False
+
+        # Antes que nada, porque un lugar inválido tiene que abortar el alta
+        # entera y no dejar un reporte sin los lugares que se le indicaron.
+        # Import diferido: `locality_service` importa `odin.api.deps`, que
+        # inicializa el paquete `odin.api` y con él todos los routers —uno de
+        # los cuales vuelve acá—. A nivel de módulo eso es un ciclo que solo
+        # se nota si `locality_service` es lo primero que se importa.
+        from odin.services.locality_service import validate_link_payloads
+
+        locality_links = validate_link_payloads(session, list(req.localities))
 
         # Canonicaliza también al guardar: cubre ediciones manuales del
         # frontend y unifica contra lo ya conocido en la BD.
@@ -395,6 +562,8 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
             analyzer_version=analyzer.version,
             analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
             analyzed_at=datetime.now(UTC),
+            documentalist_id=_documentalist_id_for(session, documentalist_username),
+            analyzed_on=datetime.now(UTC).date(),
         )
         canonical_by_name: dict[str, CanonicalEntity] = {}
         for e in entities:
@@ -422,11 +591,22 @@ def save_article(req: SaveArticleRequest) -> ArticleDetail:
             match_actor_name(req.credited_actor, entities), canonical_by_name
         )
         session.add(article)
+        session.flush()  # necesita el id del artículo para los vínculos
+        session.add_all([
+            ArticleLocality(
+                article_id=article.id,
+                locality_id=link.locality_id,
+                kind=link.kind,
+                origin=link.origin,
+                confidence=link.confidence,
+            )
+            for link in locality_links
+        ])
         session.commit()
         # Los PERSON nuevos deben poder resolver un apellido suelto en el
         # siguiente análisis (ver known_person_fullname_map).
         invalidate_person_map()
-        return serialize_article(article)
+        return serialize_article(article), True
     except HTTPException:
         raise
     except Exception:

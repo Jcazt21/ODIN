@@ -33,14 +33,42 @@ from odin.core.observability import (
 )
 from odin.core.url_guard import UrlNotAllowed
 from odin.db.models import AnalyzeJob, Article
+from odin.scrapers import source_from_url, strip_outlet_from_authors
 from odin.scrapers.base import _parse_date
-from odin.services.analyzer_registry import ANALYZER_READS_WHOLE_ARTICLE, analyzer
+from odin.services.analyzer_registry import (
+    ANALYZER_READS_WHOLE_ARTICLE,
+    analyzer,
+    place_extractor,
+)
 
 # Pasos del pipeline de run_analyze_job, en orden — el frontend los muestra
 # como progreso durante el polling de GET /api/jobs/{id} (status="running").
 ANALYZE_STAGES = ("fetching", "analyzing", "canonicalizing")
 
 _thread_state = threading.local()
+
+
+def resolve_source(url: str, extracted_sitename: str | None) -> str:
+    """Medio de una nota analizada por URL.
+
+    Orden deliberado: primero el dominio contra el registro de scrapers, que da
+    la MISMA clave que usa el rastreo masivo (`listin_diario`), y solo si no lo
+    reconocemos se cae al nombre que haya extraído trafilatura.
+
+    Importa el orden: antes mandaba el `sitename` extraído, y como es una
+    heurística sobre el HTML, una nota de un medio que sí rastreamos podía
+    quedar guardada con un texto libre distinto del slug — dos entradas para el
+    mismo medio en el filtro. Y sin `sitename`, con "manual", que ni siquiera
+    es un medio.
+
+    "manual" sigue siendo el último recurso: dice honestamente que no se pudo
+    determinar, en vez de inventar una clave que aparecería en los filtros como
+    si fuera un medio conocido.
+    """
+    known = source_from_url(url)
+    if known:
+        return known
+    return (extracted_sitename or "").strip() or "manual"
 
 
 def _http_session() -> requests.Session:
@@ -201,18 +229,33 @@ def run_analyze_job(job_id: str) -> None:
             job.stage = "analyzing"
             session.commit()
             result = analyze_safely(extracted["title"], extracted["body"])
+            # Los motores LLM no devuelven lugares (los topónimos salen del NER
+            # de spaCy, no de leer el artículo), así que se extraen aparte.
+            # `place_extractor()` reusa el motor activo si ya es local.
+            if not result.places:
+                result.places = place_extractor().extract_places(
+                    extracted["title"], extracted["body"]
+                )
             arbitrate_ambiguous_persons(result)
 
             job.stage = "canonicalizing"
             session.commit()
             canonicalize_result(result)
 
+            resolved_source = resolve_source(url, extracted.get("sitename"))
+            # Import diferido, igual que en `article_service.save_article`:
+            # `locality_service` importa `odin.api.deps`, que inicializa el
+            # paquete `odin.api` con todos sus routers —y uno de ellos vuelve
+            # acá—. A nivel de módulo eso es un ciclo.
+            from odin.services.locality_service import suggest_from_places
+
             detail = AnalyzeResult(
                 already_saved=False,
-                source=extracted.get("sitename") or "manual",
+                source=resolved_source,
                 url=url,
                 title=extracted["title"],
-                authors=extracted["authors"],
+                # El medio se lista a sí mismo como autor en varios sitios.
+                authors=strip_outlet_from_authors(extracted["authors"], resolved_source),
                 section=extracted["section"],
                 published_at=extracted["published_at"],
                 body=extracted["body"],
@@ -241,6 +284,9 @@ def run_analyze_job(job_id: str) -> None:
                 analysis_schema_version=ANALYSIS_SCHEMA_VERSION,
                 analyzed_at=datetime.now(UTC),
                 entities=[AnalyzePreviewEntity.model_validate(e) for e in result.entities],
+                # Se resuelven acá y no en el analizador: el catálogo es una
+                # tabla administrable y `result.places` son strings crudos.
+                suggested_localities=suggest_from_places(session, result.places),
             )
             job.status = "done"
             job.result_json = detail.model_dump_json()

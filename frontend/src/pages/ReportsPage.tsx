@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { X } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { FilterBar, type HardDataFilter } from "@/components/reports/FilterBar"
 import { ReportsTable, Pagination } from "@/components/reports/ReportsTable"
 import { useArticleFilterOptions, useArticles } from "@/lib/queries/articles"
+import { useExportArticles } from "@/lib/queries/documentalists"
 import { OdinApiError, type ArticleListParams } from "@/lib/odin-api"
 
 const PAGE_SIZE = 12
-const EMPTY_FILTERS: ArticleListParams = { sort: "recent" }
+// El orden se maneja desde las cabeceras de la tabla, no desde la barra de
+// filtros: dos controles para lo mismo se contradicen en cuanto uno cambia.
+const EMPTY_FILTERS: ArticleListParams = { sort: "published_at", order: "desc" }
 
 /** Debounce solo de los campos de texto libre (q, entity): clicks en selects,
  *  fechas, orden o paginación deben reflejarse de inmediato — antes heredaban
@@ -32,8 +36,16 @@ export function ReportsPage() {
   const [filters, setFilters] = useState<ArticleListParams>(EMPTY_FILTERS)
   const [hardData, setHardData] = useState<HardDataFilter>("")
   const [page, setPage] = useState(0)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const exportMutation = useExportArticles()
 
   const debouncedFilters = useDebouncedTextFilters(filters)
+
+  // Limpiar la selección cuando cambian los filtros: evita exportar reportes
+  // que ya no están a la vista.
+  useEffect(() => {
+    setSelectedIds([])
+  }, [filters])
 
   const { data: facets } = useArticleFilterOptions()
   const { data, isLoading, isFetching, error } = useArticles({
@@ -108,13 +120,48 @@ export function ReportsPage() {
           )}
         </div>
       ) : (
-        <ReportsTable
-          items={items}
-          loading={loading}
-          onOpen={(id) => navigate(`/reports/${id}`)}
-          sortDir={filters.sort ?? "recent"}
-          onToggleSort={() => updateFilters({ sort: filters.sort === "oldest" ? "recent" : "oldest" })}
-        />
+        <>
+          {selectedIds.length > 0 && (
+            <div
+              className="mb-2 flex items-center gap-3 rounded-[7px] border px-3 py-2"
+              style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+            >
+              <span className="text-[12.5px]">
+                {selectedIds.length} {selectedIds.length === 1 ? "reporte" : "reportes"} seleccionados
+              </span>
+              <Button
+                type="button"
+                onClick={() => exportMutation.mutate(selectedIds)}
+                disabled={exportMutation.isPending}
+              >
+                {exportMutation.isPending ? "Exportando…" : "Exportar a Word"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="text-[12px] underline-offset-2 hover:underline"
+                style={{ color: "var(--faint)" }}
+              >
+                Limpiar selección
+              </button>
+              {exportMutation.error && (
+                <span role="alert" className="text-[12px]" style={{ color: "var(--neg)" }}>
+                  No se pudo exportar.
+                </span>
+              )}
+            </div>
+          )}
+          <ReportsTable
+            articles={items}
+            loading={loading}
+            onOpen={(id) => navigate(`/reports/${id}`)}
+            sort={filters.sort ?? "published_at"}
+            order={filters.order ?? "desc"}
+            onSort={(sort, order) => updateFilters({ sort, order })}
+            selectedIds={selectedIds}
+            onSelectionChange={setSelectedIds}
+          />
+        </>
       )}
 
       <Pagination

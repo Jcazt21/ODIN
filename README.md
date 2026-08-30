@@ -9,6 +9,9 @@ resultado y decides si se guarda en la base de datos.
 - **Sentimiento global**: `POS` / `NEG` / `NEU` (bueno / malo / neutro)
 - **Figuras públicas y empresas** mencionadas
 - **Opinión hacia cada figura/empresa**: si hablan bien, mal o neutro de ella
+- **Quién y cuándo lo revisó**: cada reporte queda atribuido al documentalista que
+  lo guardó y a la fecha en que lo trabajó, y se puede seleccionar un grupo de
+  reportes y exportarlos a un documento de Word (`.docx`)
 
 > **No hay nada automático.** Odin no sale a buscar noticias por su cuenta, no
 > corre solo y no consulta feeds ni sitemaps en el flujo normal: procesa
@@ -375,8 +378,13 @@ odin --limit 10                        # máx. 10 artículos por fuente
 
 ## Acceso a la aplicación web
 
-La interfaz pide usuario y contraseña. **No hay registro**: es una herramienta
-interna con un único operador, definido por variables de entorno.
+La interfaz pide usuario y contraseña. El login valida contra la tabla
+`users` de la base de datos (columnas en
+[DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md#users)), no contra las variables
+de entorno: cada persona entra con su propio usuario, y los reportes que
+guarda quedan atribuidos a ella. **No hay autorregistro**: un administrador
+da de alta a cada documentalista desde la pantalla de Documentalistas (rol `admin` o
+`documentalista`).
 
 ```bash
 python scripts/hash_password.py    # pide la clave y devuelve la línea del .env
@@ -386,20 +394,26 @@ En `.env`:
 
 | Variable | Para qué |
 |---|---|
-| `ODIN_AUTH_USER` | Usuario (por defecto `admin`) |
+| `ODIN_AUTH_USER` | Usuario del primer administrador (por defecto `admin`), sembrado en `users` al arrancar si la tabla está vacía |
 | `ODIN_AUTH_PASSWORD_HASH` | Hash PBKDF2 que genera el script de arriba |
 | `ODIN_AUTH_PASSWORD` | Alternativa en claro, **solo desarrollo** |
 | `ODIN_JWT_SECRET` | Firma de los tokens. Sin ella, las sesiones mueren al reiniciar |
 | `ODIN_JWT_TTL_HOURS` | Vigencia de la sesión (por defecto 12) |
 | `ODIN_CORS_ORIGINS` | Orígenes permitidos, separados por coma |
 
+Las `ODIN_AUTH_*` **solo siembran a ese primer administrador**: una vez que la
+tabla `users` tiene al menos una fila, dejan de leerse en cada arranque —
+cambiar la contraseña de ese usuario o dar de alta al resto se hace desde la
+aplicación, no editando el `.env`.
+
 El login devuelve un JWT que el frontend guarda y manda en `Authorization:
 Bearer`. **Exigen token**: `POST /api/analyze`, `POST /api/articles` y todas las
-escrituras de siglas (`POST`/`PUT`/`DELETE /api/aliases`). Las lecturas
-(`GET /api/articles`, `/api/aliases`, `/api/health`) siguen abiertas.
+escrituras de siglas (`POST`/`PUT`/`DELETE /api/aliases`). `GET
+/api/documentalists/kpi` además exige rol `admin`. Las lecturas (`GET
+/api/articles`, `/api/aliases`, `/api/health`) siguen abiertas.
 
-Si no configuras ninguna contraseña, el login rechaza todo: el sistema queda
-cerrado, no abierto.
+Si no configuras ninguna contraseña y la tabla `users` está vacía, el login
+rechaza todo: el sistema queda cerrado, no abierto.
 
 ---
 

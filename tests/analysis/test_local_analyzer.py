@@ -16,8 +16,11 @@ pytest.importorskip("spacy")
 
 from odin.analysis.local_analyzer import (
     LocalAnalyzer,
+    _aggregate_document,
+    _aggregate_entity,
     _best_display_name,
     _extraction_confidence,
+    _is_institution_head,
     _is_named_after_place,
     _norm_key,
     _preceded_by_venue_noun,
@@ -112,6 +115,66 @@ class TestBestDisplayName:
         assert _best_display_name(display) == "Jean-Claude Pérez-Gómez"
 
 
+# distribuciones de referencia para las dos agregaciones. No salen de ninguna
+# frase real: son formas de distribución (tibia-neutra / claramente polar) que
+# reproducen el patrón medido en el golden set.
+_WEAK_NEU = {"POS": 0.30, "NEG": 0.20, "NEU": 0.50}
+_STRONG_POS = {"POS": 0.80, "NEG": 0.05, "NEU": 0.15}
+_STRONG_NEG = {"POS": 0.05, "NEG": 0.80, "NEU": 0.15}
+
+
+class TestAggregateDocument:
+    """`_aggregate_document` descuenta la tasa base por clase para que un
+    artículo no colapse a NEU solo por acumular frases tibias — el mecanismo
+    real detrás del 59.5% de accuracy medido (ver su docstring)."""
+
+    def test_polar_signal_survives_a_majority_of_weak_neutral_sentences(self):
+        probas = [_WEAK_NEU] * 8 + [_STRONG_POS] * 2
+        # la media plana da NEU aquí (0.43 NEU vs. 0.40 POS): es exactamente el
+        # caso que la agregación vieja perdía
+        assert _aggregate_document(probas)[0] == "POS"
+
+    def test_genuinely_neutral_article_stays_neutral(self):
+        assert _aggregate_document([{"POS": 0.15, "NEG": 0.15, "NEU": 0.70}] * 6)[0] == "NEU"
+
+    def test_score_is_the_raw_mean_of_the_winning_label(self):
+        label, score = _aggregate_document([_WEAK_NEU] * 8 + [_STRONG_POS] * 2)
+        assert label == "POS"
+        assert score == 0.4  # (8*0.30 + 2*0.80) / 10, sin tocar por el prior
+
+    def test_unscored_sentences_are_ignored(self):
+        assert _aggregate_document([None, _STRONG_NEG, None])[0] == "NEG"
+
+    def test_empty_input_is_neutral(self):
+        assert _aggregate_document([]) == ("NEU", 0.0)
+
+
+class TestAggregateEntity:
+    """`_aggregate_entity` exige corroboración antes de atribuir una etiqueta
+    polar a una entidad: el fallo medido es sobre-emisión (48 de 73 etiquetas
+    polares caían sobre entidades cuyo gold era NEU), no error de signo."""
+
+    def test_a_single_polar_sentence_is_not_enough(self):
+        assert _aggregate_entity([_STRONG_NEG])[0] == "NEU"
+
+    def test_two_agreeing_polar_sentences_assign_the_label(self):
+        assert _aggregate_entity([_STRONG_NEG, _STRONG_NEG])[0] == "NEG"
+
+    def test_polar_sentences_that_disagree_fall_back_to_neutral(self):
+        # la media da POS (0.45 vs. 0.375 NEG), pero solo UNA frase la respalda
+        mid_neg = {"POS": 0.10, "NEG": 0.70, "NEU": 0.20}
+        assert _aggregate_entity([_STRONG_POS, mid_neg])[0] == "NEU"
+
+    def test_neutral_needs_no_corroboration(self):
+        assert _aggregate_entity([{"POS": 0.20, "NEG": 0.20, "NEU": 0.60}])[0] == "NEU"
+
+    def test_does_not_apply_the_document_prior_correction(self):
+        # una sola frase tibia hacia NEU: `_aggregate_document` la sacaría de
+        # NEU por el descuento de prior, `_aggregate_entity` NO debe hacerlo
+        assert _aggregate_document([_WEAK_NEU])[0] == "POS"
+        assert _aggregate_entity([_WEAK_NEU])[0] == "NEU"
+
+
 class TestVenueHeuristics:
     def test_homenaje_a_pattern_is_caught_by_linear_window(self, nlp):
         # No hace falta un heurístico nuevo para "homenaje a"/"en honor a":
@@ -175,6 +238,41 @@ class TestGenericStateOrgFilter:
             nlp, "La Fuerza del Pueblo presentó sus críticas y propuestas frente al Estado."
         )
         assert "Estado" not in orgs
+
+
+class TestInstitutionHeadPromotion:
+    """spaCy etiqueta "Gobierno" como LOC en la mayoría de los casos (medido:
+    25 LOC vs. 2 ORG), y por eso quitarlo de `_GENERIC_STATE_ORGS` en
+    2026-08-14 no bastó — ese filtro solo actúa sobre spans ya marcados ORG.
+    Era el falso negativo individual más grande de ORG (11 de 48)."""
+
+    @staticmethod
+    def _org_names(nlp, text: str) -> set[str]:
+        doc = nlp(text)
+        sentences = _Sentences.from_doc(doc)
+        probas_by_index = [None for _ in sentences.texts]
+        entities = LocalAnalyzer()._entities(doc, probas_by_index, sentences)
+        return {e.name for e in entities if e.type == "ORG"}
+
+    def test_bare_gobierno_is_promoted_to_org(self, nlp):
+        orgs = self._org_names(
+            nlp, "El Gobierno anunció un nuevo programa de subsidios para el sector agrícola."
+        )
+        assert "Gobierno" in orgs
+
+    def test_gobierno_with_complement_is_promoted(self, nlp):
+        orgs = self._org_names(
+            nlp, "El Gobierno de Venezuela respondió a las declaraciones del canciller."
+        )
+        assert any(o.startswith("Gobierno") for o in orgs)
+
+    def test_head_matching_is_anchored_to_whole_words(self):
+        # "gobernabilidad" empieza con "gob" pero NO es la cabeza "gobierno":
+        # el prefijo debe exigir límite de palabra, no coincidencia parcial
+        assert _is_institution_head("gobierno")
+        assert _is_institution_head("gobierno de venezuela")
+        assert not _is_institution_head("gobernabilidad democratica")
+        assert not _is_institution_head("gobiernos locales")
 
 
 class TestSeedAliasResolution:

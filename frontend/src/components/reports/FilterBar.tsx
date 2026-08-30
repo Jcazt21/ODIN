@@ -1,5 +1,9 @@
 import { RotateCcw, Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
+import { useMemo } from "react"
+import { LocalityCombobox } from "@/components/LocalityCombobox"
+import { useLocalityTree } from "@/lib/queries/localities"
+import { indexTree } from "@/lib/localities"
 import { FRAMING_LABELS, HEADLINE_LABELS, LEAD_LABELS, SENTIMENT_LABELS, SOURCE_LABELS } from "@/lib/labels"
 import type { ArticleFilterOptions, ArticleListParams } from "@/lib/odin-api"
 
@@ -53,6 +57,12 @@ export function FilterBar({
   total: number
   loaded: number
 }) {
+  // El árbol completo son ~204 nodos y se cachea sin vencimiento, así que
+  // aplanarlo acá no cuesta una petición por render.
+  const { data: tree } = useLocalityTree()
+  const { entries } = useMemo(() => indexTree(tree ?? []), [tree])
+  const selectedLocality = entries.find((e) => e.id === filters.locality)
+
   return (
     <div
       className="odin-glass rounded-xl border p-[18px]"
@@ -78,7 +88,13 @@ export function FilterBar({
         )}
       </div>
 
-      <div className="grid gap-[10px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))" }}>
+      {/* items-start: sin esto la grilla estira cada celda a la altura de la
+          fila, y las lupas y chevrones posicionados a top-1/2 de su
+          envoltorio caen por debajo del control de 32px. */}
+      <div
+        className="grid items-start gap-[10px]"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))" }}
+      >
         <div className="relative">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2" style={{ color: "var(--faint)" }} />
           <input
@@ -100,11 +116,20 @@ export function FilterBar({
           />
         </div>
 
+        <LocalityCombobox
+          label="Lugar"
+          hideLabel
+          entries={entries}
+          selected={selectedLocality}
+          onSelect={(entry) => onChange({ locality: entry?.id })}
+          placeholder="Todos los lugares"
+        />
+
         <Select value={filters.source ?? ""} onChange={(e) => onChange({ source: e.target.value || undefined })}>
           <option value="">Todas las fuentes</option>
           {facets?.sources.map((s) => (
-            <option key={s} value={s}>
-              {s}
+            <option key={s.value} value={s.value}>
+              {s.label}
             </option>
           ))}
         </Select>
@@ -164,11 +189,30 @@ export function FilterBar({
         </Select>
         <DateField label="Desde" value={filters.date_from ?? ""} onChange={(v) => onChange({ date_from: v || undefined })} />
         <DateField label="Hasta" value={filters.date_to ?? ""} onChange={(v) => onChange({ date_to: v || undefined })} />
-        <Select value={filters.sort ?? "recent"} onChange={(e) => onChange({ sort: e.target.value as "recent" | "oldest" })}>
-          <option value="recent">Más recientes</option>
-          <option value="oldest">Más antiguos</option>
+        <Select
+          aria-label="Documentalista"
+          value={filters.documentalist === undefined ? "" : String(filters.documentalist)}
+          onChange={(e) =>
+            onChange({ documentalist: e.target.value ? Number(e.target.value) : undefined })
+          }
+        >
+          <option value="">Todo documentalista</option>
+          {(facets?.documentalists ?? []).map((a) => (
+            <option key={a.id} value={String(a.id)}>
+              {a.display_name}
+            </option>
+          ))}
         </Select>
       </div>
+
+      {/* Fuera de la grilla y solo con el filtro puesto: el roll-up por
+          subárbol sorprende justo cuando hay un lugar elegido, y como texto
+          fijo ocupaba dos líneas que rompían la fila. */}
+      {selectedLocality && (
+        <p className="mt-2.5 text-[11.5px]" style={{ color: "var(--faint)" }}>
+          {selectedLocality.name} incluye lo marcado en sus municipios.
+        </p>
+      )}
     </div>
   )
 }

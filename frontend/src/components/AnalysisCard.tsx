@@ -15,6 +15,8 @@ export interface AnalysisCardFields {
   title: string
   url: string
   source: string
+  /** Nombre legible del medio; el backend lo deriva del slug. */
+  source_name?: string
   authors: string | null
   section: string | null
   published_at: string | null
@@ -103,7 +105,10 @@ export function AnalysisCard({
         <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 text-[12.5px]">
           <span>
             <span style={{ color: "var(--faint)" }}>Fuente </span>
-            <span style={{ color: "var(--muted-foreground)" }}>{value.source}</span>
+            {/* El nombre legible, no el slug: "Listín Diario" y no listin_diario. */}
+            <span style={{ color: "var(--muted-foreground)" }}>
+              {value.source_name || value.source}
+            </span>
           </span>
           {value.authors && (
             <span>
@@ -160,7 +165,7 @@ export function AnalysisCard({
               {keywords.map((kw) => (
                 <span
                   key={kw}
-                  className="rounded-[5px] border px-2 py-0.5 text-[11.5px]"
+                  className="inline-block rounded-[5px] border px-2 py-0.5 text-[11.5px] leading-[1.35]"
                   style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
                 >
                   {kw}

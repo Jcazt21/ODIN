@@ -50,6 +50,27 @@ qué se decidió así.
 - `sentiment_toward` puede ser `null` cuando no hay forma razonable de
   decidirlo a mano; esas entidades cuentan para precision/recall pero no
   para la accuracy de sentimiento.
+- El reporte da **dos** accuracies de `sentiment_toward`, y no son
+  intercambiables:
+  - la **condicional** (`sentiment_accuracy`), sobre las entidades que el
+    analizador logró emparejar. Su denominador se mueve cuando cambia la
+    extracción, así que **dos corridas con distinto recall de entidades no son
+    comparables con esta cifra sola** — es exactamente lo que hizo leer el
+    "59.9% → 59.5%" del 2026-08-14 como una regresión que nunca ocurrió (el
+    denominador pasó de 182 a 200 al emparejarse 18 ORGs nuevos).
+  - la **end-to-end** (`sentiment_accuracy_e2e`), que cuenta como fallo la
+    entidad etiquetada que ni siquiera se extrajo. Denominador estable = todas
+    las entidades con gold conocido, así que **es la que sirve para comparar
+    corridas**.
+  - además se reporta la **precisión de las etiquetas polares**
+    (`sentiment_polar_precision`): de los POS/NEG emitidos, cuántos coinciden
+    con el gold. NEU no afirma nada sobre nadie; los polares sí, y son los que
+    pueden ser un juicio falso sobre una persona nombrada
+    (`docs/planning/task.md` §8.2).
+- Al leer cualquiera de esas cifras, contrastarla contra el **benchmark
+  trivial**: responder siempre NEU acierta el 71.5% de las entidades
+  etiquetadas del golden set actual. Una accuracy que no le gane a ese piso no
+  demuestra que el analizador entienda nada.
 - `entities_exhaustive` (default `true`): dice si la lista de entidades del
   artículo está **completa**. Cuando es `false` (ver `odin-db-005`, un
   artículo-trivia con ~54 nombres de presidentes dominicanos, del cual solo

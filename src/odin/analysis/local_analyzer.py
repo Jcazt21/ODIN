@@ -14,6 +14,9 @@ Campos:
   - overall_sentiment: sentimiento agregado sobre TODAS las frases del artículo,
     reforzado por frase con el glosario político de
     `analysis/sentiment_lexicon.py` antes de agregar (ver `_predict_batch`).
+    La agregación NO es un promedio: descuenta la tasa base de cada clase
+    (ver `_aggregate_document`), porque promediar arrastra cualquier artículo
+    hacia el prior del modelo (~50% NEU por frase).
   - entities + sentiment_toward: por cada figura/empresa se agregan las frases
     donde se le menciona. Los nombres se normalizan y se fusionan alias
     ("Policía" -> "Policía Nacional"). Esas frases también se refuerzan con
@@ -22,20 +25,34 @@ Campos:
     frase por igual), este solo aplica sobre las frases ya asociadas a esa
     entidad puntual, y dentro de la frase solo a la mención que RECIBE la
     acción — la más cercana antes del patrón (ver `_relational_boosts`), para
-    no dejar mal parado también a quien acusa.
+    no dejar mal parado también a quien acusa. Antes de atribuir una etiqueta
+    POLAR se exige corroboración (ver `_aggregate_entity`).
+
+Las dos agregaciones son distintas A PROPÓSITO y tiran en direcciones opuestas:
+el artículo se agrega sobre decenas de frases (hay que des-diluir), la entidad
+sobre una o dos (hay que ser conservador). Usar la misma función para ambas era
+el defecto de raíz detrás del 59.5% de accuracy en ambas métricas.
 
 NOTA: `sentiment_toward` es una aproximación por frase (aspect-based sentiment
-sencillo). Para máxima precisión, sustituir por el analizador con LLM (misma
-interfaz Analyzer); ver analysis/gemini_analyzer.py.
+sencillo) y tiene un TECHO ESTRUCTURAL medido: un modelo de frase no puede
+decidir de QUIÉN es el sentimiento, así que toda entidad presente en una frase
+polar hereda su polaridad. Sobre el golden set, ni la mejor regla de gating le
+gana a responder siempre NEU. Para precisión real hace falta atribución por rol
+sintáctico o el analizador con LLM (misma interfaz Analyzer); ver
+analysis/gemini_analyzer.py y docs/PRECISION.md §4.
 """
 from __future__ import annotations
 
+import json
+import math
 import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 
-from odin.analysis.base import AnalysisResult, EntityResult
+from odin.analysis.base import AnalysisResult, EntityResult, PlaceResult
 from odin.analysis.sentiment_lexicon import apply_boost as _apply_sentiment_boost
 from odin.analysis.sentiment_lexicon import apply_label_boost as _apply_label_boost
 from odin.analysis.sentiment_lexicon import apply_negation_dampening as _apply_negation_dampening
@@ -49,10 +66,53 @@ from odin.db.seed_aliases import SEED_ALIASES as _SEED_ALIASES
 # _merge_aliases, umbrales de _extraction_confidence, el glosario de
 # analysis/sentiment_lexicon.py...), para poder distinguir en la BD qué filas
 # se analizaron con qué versión del código.
-_LOCAL_ANALYZER_VERSION = "7"
+_LOCAL_ANALYZER_VERSION = "8"
 
 _MAX_SENT_CHARS = 500        # límite por frase para el modelo de sentimiento
 _MAX_SENTENCES = 400         # tope de seguridad para artículos patológicos
+_MIN_PROB = 1e-9             # piso para no hacer log(0) en `_aggregate_document`
+# Cabezas institucionales que spaCy casi siempre etiqueta LOC, no ORG, porque
+# las trata como metonimia del país. Medido sobre el golden set: "Gobierno" sale
+# LOC 25 veces contra 2 como ORG — y era el falso negativo INDIVIDUAL más grande
+# de ORG (11 de 48). Quitarlo de `_GENERIC_STATE_ORGS` (2026-08-14) no alcanzó,
+# porque ese filtro solo actúa sobre spans que spaCy ya marcó ORG. Aquí se
+# promueve el span sin importar qué etiqueta le puso spaCy.
+#
+# Aplica a la cabeza exacta o seguida de complemento ("Gobierno de Venezuela",
+# "Gobierno dominicano"), que es como la prensa nombra al actor político.
+_INSTITUTION_HEADS = ("gobierno", "presidencia", "poder judicial", "ministerio publico")
+# frases de mención que deben COINCIDIR en una etiqueta polar para atribuírsela
+# a una entidad; con menos, `_aggregate_entity` responde NEU (ver su docstring)
+_MIN_ENTITY_POLAR_SENTENCES = 2
+
+# Tasa base de sentimiento por frase de pysentimiento sobre prensa dominicana.
+# `_aggregate_document` la descuenta para quitar el sesgo de clase del modelo
+# (ver su docstring). Se estima con `scripts/estimate_sentiment_prior.py` sobre
+# un corpus SIN etiquetar e independiente del golden set — así los 42 artículos
+# de tests/eval/golden_set.jsonl siguen siendo conjunto de prueba limpio.
+#
+# El fallback es el prior medido sobre el propio golden set (680 frases). Se usa
+# solo si falta el archivo: sirve para que el analizador funcione en una
+# instalación limpia, pero mezcla levemente train y test, así que la corrida de
+# evaluación oficial debe hacerse con el archivo generado.
+_SENTIMENT_PRIOR_PATH = Path(__file__).with_name("sentiment_prior.json")
+_FALLBACK_SENTIMENT_PRIOR = {"NEG": 0.2826, "NEU": 0.4967, "POS": 0.2207}
+
+
+def _load_sentiment_prior() -> dict[str, float]:
+    try:
+        raw = json.loads(_SENTIMENT_PRIOR_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return dict(_FALLBACK_SENTIMENT_PRIOR)
+    prior = {str(k): float(v) for k, v in (raw.get("prior") or {}).items()}
+    # un prior incompleto o con un cero haría explotar el log: preferimos el
+    # fallback conocido antes que un archivo a medio escribir
+    if set(prior) != {"POS", "NEG", "NEU"} or any(v <= 0 for v in prior.values()):
+        return dict(_FALLBACK_SENTIMENT_PRIOR)
+    return prior
+
+
+_SENTIMENT_PRIOR = _load_sentiment_prior()
 _STOP_ENTITY_TOKENS = {"foto", "video", "listín", "listin", "diario", "libre"}
 # palabras de estado/país genéricas: spaCy a veces las etiqueta como ORG
 # cuando aparecen solas y capitalizadas ("presidente... de la República"),
@@ -87,6 +147,35 @@ _DOMINICAN_PROVINCES = {
     "san pedro de macoris", "sanchez ramirez", "santiago",
     "santiago rodriguez", "santo domingo", "valverde",
 }
+# Sustantivos que encabezan un accidente geográfico o una vía: spaCy los mete
+# DENTRO del span LOC ("río Haina", "avenida Duarte"), así que basta mirar la
+# primera palabra. Es el mismo criterio que _VENUE_WORDS usa para descartar
+# personas que dan nombre a un lugar, aplicado en la otra dirección: acá lo
+# que se descarta es el lugar mismo, porque un río no es una localidad.
+_GEO_FEATURE_HEADS = {
+    "rio", "arroyo", "canada", "canal", "presa", "lago", "laguna", "bahia",
+    "playa", "loma", "cerro", "pico", "sierra", "cordillera", "valle",
+    "puente", "avenida", "calle", "carretera", "autopista", "malecon",
+    "parque", "plaza", "aeropuerto", "puerto",
+}
+# Conjunciones que spaCy no corta: devuelve "Hato Nuevo y Quita Sueño" como un
+# solo span LOC. Se parte cuando ambas mitades siguen pareciendo nombres
+# propios (empiezan en mayúscula), no cuando el "y" es parte del nombre.
+_PLACE_CONJUNCTIONS = (" y ", " e ")
+# Palabras con las que la prensa antepone el TIPO de unidad al nombre
+# ("la provincia San Juan", "el municipio de Bajos de Haina"). spaCy las mete
+# dentro del span, y sin quitarlas el mismo lugar cuenta como dos candidatos y
+# la forma larga no resuelve —el nodo del catálogo se llama "San Juan" a
+# secas—. Ojo con "villa": es prefijo administrativo en otros países, pero acá
+# es parte del nombre de varios municipios (Villa González, Villa Altagracia),
+# así que NO va en esta lista.
+# Conectores que pueden quedar entre la unidad administrativa y el nombre
+# ("el municipio DE Pedro Brand", "la provincia DE La Vega").
+_ADMIN_LINK_TOKENS = {"de", "del", "la", "el", "los", "las"}
+_ADMIN_PREFIXES = (
+    "provincia", "municipio", "region", "región", "distrito municipal",
+    "distrito", "sector", "barrio", "paraje", "seccion", "sección",
+)
 # tipos de entidad de spaCy que nos interesan -> tipo canónico
 _WANTED_ENT = {"PER": "PERSON", "PERSON": "PERSON", "ORG": "ORG"}
 # partículas que no rompen un nombre propio ("Policía del Distrito Nacional")
@@ -255,6 +344,127 @@ def _has_nickname_splice(name: str) -> bool:
     return False
 
 
+# Vocabulario de unidad administrativa ya normalizado (sin acentos), para no
+# pagarlo en cada token que se mira hacia atrás.
+_ADMIN_PREFIXES_NORM = {_strip_accents(w).lower() for w in _ADMIN_PREFIXES}
+
+
+@lru_cache(maxsize=1)
+def _seed_place_keys() -> frozenset[str]:
+    """Nombres y alias del catálogo geográfico, normalizados.
+
+    Se leen de la semilla versionada (`db/seeds/localities_rd.json`), NO de la
+    tabla: este módulo no habla con la base —resolver contra el catálogo vivo
+    es trabajo de `services/locality_service`—. Acá solo hace falta saber si un
+    nombre PUEDE ser un lugar dominicano, y para eso la semilla basta; ya se
+    hace lo mismo con `_SEED_ALIASES` y con `_DOMINICAN_PROVINCES`.
+
+    Sirve para lo que el etiquetado de spaCy no resuelve: "Pedro Brand" sale
+    como PERSON porque "Pedro" es nombre de pila, y sin esta lista un municipio
+    entero quedaría invisible para la detección de lugar.
+    """
+    from odin.db.localities import load_seed
+
+    keys: set[str] = set()
+
+    def add(node: dict) -> None:
+        keys.add(_norm_key(node["nombre"]))
+        for alias in node.get("alias", []):
+            keys.add(_norm_key(alias))
+
+    seed = load_seed()
+    add(seed["pais"])
+    for macro in seed["macrorregiones"]:
+        add(macro)
+        for region in macro["regiones"]:
+            add(region)
+            for prov in region.get("provincias", []):
+                add(prov)
+                for muni in prov.get("municipios", []):
+                    add(muni)
+    return frozenset(keys)
+
+
+def _preceded_by_admin_unit(ent) -> bool:
+    """¿Al span lo antecede "municipio de", "provincia de", "sector"...?
+
+    Es la señal que permite recuperar un lugar que spaCy etiquetó como PERSON
+    —"Pedro Brand" lo es porque "Pedro" es nombre de pila— sin dar por lugar a
+    cualquier nombre propio. A una persona nadie la presenta como "el
+    municipio de": el cargo ("el alcalde Ramón Pascual Gómez") y la vía ("la
+    autopista Duarte") usan otras palabras y no pasan este filtro.
+    """
+    doc = ent.doc
+    i = ent.start - 1
+    # Saltar los conectores; el límite evita cruzar media oración buscando.
+    for _ in range(3):
+        if i < 0:
+            return False
+        token = _strip_accents(doc[i].text).lower()
+        if token in _ADMIN_PREFIXES_NORM:
+            return True
+        if token not in _ADMIN_LINK_TOKENS:
+            return False
+        i -= 1
+    return False
+
+
+def _strip_admin_prefix(name: str) -> str:
+    """"provincia San Juan" -> "San Juan"; "Villa González" queda intacto.
+
+    Solo recorta si queda algo detrás: "provincia" a secas no es un lugar con
+    nombre, y devolver "" lo convertiría en un candidato vacío.
+    """
+    lowered = _strip_accents(name).lower()
+    for prefix in _ADMIN_PREFIXES:
+        head = _strip_accents(prefix).lower()
+        if not lowered.startswith(head + " "):
+            continue
+        rest = name[len(head):].strip()
+        # "municipio DE Bajos de Haina": el enlace tampoco es parte del nombre.
+        for link in ("de ", "del "):
+            if _strip_accents(rest).lower().startswith(link):
+                rest = rest[len(link):].strip()
+                break
+        if rest:
+            return rest
+    return name
+
+
+def _split_place_span(text: str) -> list[str]:
+    """"Hato Nuevo y Quita Sueño" -> ["Hato Nuevo", "Quita Sueño"].
+
+    Solo parte cuando las DOS mitades siguen empezando en mayúscula: así
+    "Santa Cruz de El Seibo" o "Las Yayas de Viajama" quedan enteras, y el
+    "y" que une dos topónimos sí corta.
+    """
+    clean = " ".join(text.split()).strip(" ,.;:()")
+    for conj in _PLACE_CONJUNCTIONS:
+        if conj not in clean:
+            continue
+        left, _, right = clean.partition(conj)
+        left, right = left.strip(), right.strip()
+        if left[:1].isupper() and right[:1].isupper():
+            return _split_place_span(left) + _split_place_span(right)
+    return [clean] if clean else []
+
+
+def _place_role(in_title: bool, count: int) -> tuple[str, float]:
+    """Papel y confianza de un lugar según dónde y cuánto aparece.
+
+    Escala conservadora a propósito: equivocarse hacia MENCIONADO le cuesta al
+    documentalista un clic para corregir; equivocarse hacia HECHO mete un dato
+    falso en el mapa de cobertura, que es justo lo que el reporte mide.
+    """
+    if in_title and count >= 2:
+        return "HECHO", 0.9
+    if in_title:
+        return "HECHO", 0.75
+    if count >= 3:
+        return "HECHO", 0.6
+    return "MENCIONADO", 0.4
+
+
 def _best_display_name(display: Counter[str]) -> str:
     """Elige la variante más COMPLETA como nombre a mostrar, no la más
     repetida: dentro de un mismo artículo una sigla puede aparecer más veces
@@ -321,8 +531,16 @@ class _Sentences:
         return ent.start_char - self.doc_starts[index]
 
 
-def _aggregate(probas_list: Sequence[dict | None]) -> tuple[str, float]:
-    """Agrega sentimiento sumando probabilidades de varias frases."""
+def _is_institution_head(nkey: str) -> bool:
+    """True si el nombre normalizado ES una cabeza institucional de
+    `_INSTITUTION_HEADS` o empieza por ella ("Gobierno de Venezuela"). Ver el
+    comentario junto a la constante para por qué hace falta."""
+    return any(nkey == head or nkey.startswith(f"{head} ") for head in _INSTITUTION_HEADS)
+
+
+def _mean_probas(probas_list: Sequence[dict | None]) -> tuple[dict[str, float], int]:
+    """Media de probabilidad por etiqueta, ignorando las frases sin puntuar.
+    Devuelve también cuántas frases entraron en la media."""
     totals: dict[str, float] = defaultdict(float)
     n = 0
     for probas in probas_list:
@@ -332,9 +550,107 @@ def _aggregate(probas_list: Sequence[dict | None]) -> tuple[str, float]:
             totals[label] += prob
         n += 1
     if n == 0:
+        return {}, 0
+    return {label: total / n for label, total in totals.items()}, n
+
+
+def _aggregate_document(probas_list: Sequence[dict | None]) -> tuple[str, float]:
+    """Sentimiento del ARTÍCULO completo.
+
+    Combina las frases como evidencia independiente (suma de log-probabilidades)
+    descontando la tasa base de cada clase, en vez de promediar probabilidades
+    a secas. La media plana converge al prior del modelo: pysentimiento está
+    entrenado en tuits y deja ~50% de masa NEU por frase, así que cuantas más
+    frases se promedien más NEU sale el artículo, diga lo que diga.
+
+    Ese era el mecanismo real detrás del 59.5% de accuracy — NO la "dilución en
+    artículos largos" que suponía el plan anterior: los artículos mal
+    clasificados eran de hecho MÁS CORTOS que los acertados (457 vs. 525
+    palabras de media). Medido contra tests/eval/golden_set.jsonl: el
+    analizador emitía POS solo 3 veces en 42 artículos cuando el gold trae 12,
+    y 14 de los 17 errores eran POS/NEG colapsando a NEU, con CERO confusiones
+    POS<->NEG (el modelo acierta el signo; no se atrevía a salir de NEU).
+
+    No hay ningún umbral que ajustar aquí: el prior se mide sobre un corpus
+    aparte (ver `_SENTIMENT_PRIOR`), no se tunea contra el golden set.
+    """
+    evidence: dict[str, float] = defaultdict(float)
+    raw: dict[str, float] = defaultdict(float)
+    n = 0
+    for probas in probas_list:
+        if not probas:
+            continue
+        for label, prob in probas.items():
+            evidence[label] += math.log(max(prob, _MIN_PROB)) - math.log(
+                _SENTIMENT_PRIOR.get(label, 1 / 3)
+            )
+            raw[label] += prob
+        n += 1
+    if n == 0:
         return "NEU", 0.0
-    label = max(totals, key=lambda k: totals[k])
-    return label, round(float(totals[label] / n), 4)
+    label = max(evidence, key=lambda k: evidence[k])
+    # el score sigue siendo la media de probabilidad CRUDA de la etiqueta
+    # ganadora, para que la cifra que ya está guardada en BD siga significando
+    # lo mismo que antes de este cambio
+    return label, round(float(raw[label] / n), 4)
+
+
+def _aggregate_entity(
+    probas_list: Sequence[dict | None],
+    relational_labels: Sequence[str | None] = (),
+) -> tuple[str, float]:
+    """Sentimiento HACIA una entidad, sobre las frases donde se la menciona.
+
+    Deliberadamente NO aplica la corrección de prior de `_aggregate_document`:
+    aquí la mediana es UNA sola frase de mención, así que no hay dilución que
+    deshacer, y aplicarle la misma corrección lo EMPEORA (medido: 59.5% ->
+    54.5%, porque el gold de `sentiment_toward` es 71.5% NEU).
+
+    El fallo medido es de sobre-emisión, no de signo: cuando el modelo emite
+    una etiqueta polar y el gold también es polar acierta el signo 24/25 = 96%,
+    pero emite 73 etiquetas polares cuando solo 57 entidades lo son, y 48 de
+    esas 73 caen sobre entidades cuyo gold es NEU. La causa es que la entidad
+    hereda el sentimiento de TODA la frase: en "X criticó la corrupción del
+    Gobierno" toda entidad presente recibe NEG, incluida la que solo está
+    mencionada de paso — un modelo de frase no puede decidir de QUIÉN es el
+    sentimiento.
+
+    Por eso solo se emite POS/NEG cuando hay CORROBORACIÓN, que puede venir por
+    dos vías:
+
+    1. al menos `_MIN_ENTITY_POLAR_SENTENCES` frases de mención coinciden en
+       esa etiqueta, o
+    2. el léxico RELACIONAL apuntó explícitamente a esta entidad en esa frase
+       ("acusado de", "reconocido por" — ver `_relational_boosts`). Eso ya es
+       evidencia de que la entidad RECIBE la acción, no de que solo comparta
+       frase con ella, así que una sola mención basta.
+
+    `relational_labels` viene alineada con `probas_list` (una entrada por frase
+    puntuada, `None` si el léxico relacional no dijo nada de esta entidad ahí).
+
+    Accuracy 59.5% -> 71.0% y precisión de las etiquetas polares 32.9% -> 46.7%
+    (los juicios polares falsos bajan de 48 a ~16), que es lo que importa
+    cuando recaen sobre personas nombradas (docs/planning/task.md §8.2,
+    exposición bajo Ley 172-13).
+
+    Nota honesta: 71.0% NO le gana a responder siempre NEU (71.5% sobre este
+    mismo conjunto). Se probaron 12 reglas de gating y ninguna lo supera — el
+    techo es estructural, no de umbral. Esta regla se queda porque mejora la
+    PRECISIÓN de lo que sí afirma (32.9% -> 46.7%) en vez de callar siempre.
+    """
+    mean, n = _mean_probas(probas_list)
+    if n == 0:
+        return "NEU", 0.0
+    label = max(mean, key=lambda k: mean[k])
+    if label != "NEU" and label not in relational_labels:
+        agreeing = sum(
+            1
+            for probas in probas_list
+            if probas and max(probas, key=lambda k: probas[k]) == label
+        )
+        if agreeing < _MIN_ENTITY_POLAR_SENTENCES:
+            label = "NEU"
+    return label, round(float(mean[label]), 4)
 
 
 class LocalAnalyzer:
@@ -411,6 +727,22 @@ class LocalAnalyzer:
         keywords = self._keywords(doc)
         return self._main_topic(doc, keywords), keywords
 
+    def extract_places(self, title: str, body: str) -> list[PlaceResult]:
+        """Solo los lugares, sin entidades, tema ni sentimiento.
+
+        Espeja `analyze_topics`, para el caso simétrico: quien combina este
+        analizador con un motor LLM y solo quiere de acá lo que el LLM no da.
+        Los lugares salen del NER de spaCy —reconocer "San Juan" como topónimo
+        no exige entender el artículo—, así que se extraen igual sin importar
+        quién lo haya leído. Sin este camino, la detección automática solo
+        funcionaba con ODIN_ANALYZER=local.
+
+        NO toca pysentimiento: era ~60% del tiempo de `analyze()` y acá el
+        resultado se tiraría entero.
+        """
+        text = f"{title}.\n\n{body}".strip()
+        return self._places(self.nlp(text))
+
     def _analyze_doc(self, doc) -> AnalysisResult:
         sentences = _Sentences.from_doc(doc)
 
@@ -418,7 +750,7 @@ class LocalAnalyzer:
         probas_by_index = self._sentiment_per_sentence(sentences.texts)
 
         # --- sentimiento global ---
-        overall_label, overall_score = _aggregate(probas_by_index)
+        overall_label, overall_score = _aggregate_document(probas_by_index)
 
         # --- tema principal + palabras clave ---
         keywords = self._keywords(doc)
@@ -427,12 +759,16 @@ class LocalAnalyzer:
         # --- entidades + opinión hacia cada una ---
         entities = self._entities(doc, probas_by_index, sentences)
 
+        # --- lugares candidatos (mismas entidades del doc, otra etiqueta) ---
+        places = self._places(doc)
+
         return AnalysisResult(
             main_topic=main_topic,
             topic_keywords=keywords,
             overall_sentiment=overall_label,
             sentiment_score=overall_score,
             entities=entities,
+            places=places,
         )
 
     # ---- helpers ----------------------------------------------------------------
@@ -499,6 +835,109 @@ class LocalAnalyzer:
                     counts[lemma] += 1
         return [w for w, _ in counts.most_common(top_k)]
 
+    def _places(self, doc) -> list[PlaceResult]:
+        """Lugares candidatos a partir de las entidades LOC de spaCy.
+
+        No resuelve contra el catálogo —eso necesita una sesión y vive en
+        `services/locality_service.suggest_from_places`—. Acá solo se limpia
+        el ruido de segmentación y se estima cuán probable es que el lugar
+        sea DONDE OCURRIÓ el hecho y no uno más de los nombrados al pasar.
+
+        Las tres reglas de limpieza salen de medir la salida real del modelo
+        sobre el corpus (ver tests/analysis/test_local_places.py).
+        """
+        # El titular es todo lo anterior a la primera línea en blanco: así lo
+        # arma `analyze()` (f"{title}.\n\n{body}").
+        title_end = doc.text.find("\n\n")
+        if title_end < 0:
+            title_end = 0
+
+        # Dos pasadas. La primera decide QUÉ nombres son lugares; la segunda
+        # los cuenta. Hace falta separarlas porque la señal que rescata un
+        # lugar mal etiquetado suele aparecer en UNA sola mención ("el
+        # municipio de Pedro Brand") mientras el nombre se repite sin ella
+        # ("Residentes de Pedro Brand"): contando solo la mención con señal, el
+        # titular no pesaría y el lugar caería a MENCIONADO.
+        candidatos: list[tuple] = []   # (nkey, texto, es_lugar, en_titular)
+        confirmados: set[str] = set()
+
+        for ent in doc.ents:
+            if ent.label_ not in ("LOC", "PER", "MISC"):
+                continue
+            # Un salto de línea dentro del span significa que spaCy pegó el
+            # final de un párrafo con el principio del siguiente
+            # ("río Haina\nResidentes"). Mismo criterio que en `_entities`.
+            if "\n" in ent.text:
+                continue
+            # Una vía o un edificio que lleva el nombre de un lugar no ES ese
+            # lugar: "a la autopista Duarte" no es la provincia Duarte. Los dos
+            # guardas ya existen para el mismo problema en `_entities`.
+            #
+            # Solo para spans que NO son LOC: cuando spaCy ya dijo "esto es un
+            # lugar", la palabra de vía que lo antecede suele relacionarlo, no
+            # bautizarlo — el titular del artículo 68 es "Puente ENTRE Hato
+            # Nuevo y Quita Sueño", y ahí el puente no se llama como ellos, los
+            # une. El guarda hace falta para los rescatados por nombre, que es
+            # donde "autopista Duarte" entraría.
+            # "el municipio de X" manda sobre los dos guardas: es adyacente e
+            # inequívoco, mientras que ellos son heurísticas sobre una ventana
+            # de 10 tokens o el árbol de dependencias, que cruzan de cláusula.
+            # En el artículo 71 la mención decisiva ("...residencial Flor de
+            # Loto, ubicado en el municipio de Pedro Brand") cuelga de
+            # "residencial", y sin esta precedencia se perdía justo la que
+            # confirma el lugar.
+            es_unidad_admin = _preceded_by_admin_unit(ent)
+            if (
+                not es_unidad_admin
+                and ent.label_ != "LOC"
+                and (_preceded_by_venue_noun(ent) or _is_named_after_place(ent))
+            ):
+                continue
+            for chunk in _split_place_span(ent.text):
+                chunk = _strip_admin_prefix(chunk)
+                nkey = _norm_key(chunk)
+                if len(chunk) < 3 or nkey in _STOP_ENTITY_TOKENS:
+                    continue
+                if nkey.split(" ", 1)[0] in _GEO_FEATURE_HEADS:
+                    continue
+                # Un span que NO es LOC solo cuenta como lugar si algo lo
+                # respalda: o el catálogo lo conoce, o el texto lo presenta
+                # como unidad administrativa. Sin esto, cada nombre propio del
+                # artículo entraría como candidato.
+                es_lugar = (
+                    ent.label_ == "LOC" or es_unidad_admin or nkey in _seed_place_keys()
+                )
+                candidatos.append((nkey, chunk, es_lugar, ent.start_char < title_end))
+                if es_lugar:
+                    confirmados.add(nkey)
+
+        groups: dict[str, dict] = {}
+        for nkey, chunk, _es_lugar, en_titular in candidatos:
+            if nkey not in confirmados:
+                continue
+            g = groups.setdefault(
+                nkey, {"display": Counter(), "count": 0, "in_title": False}
+            )
+            g["display"][chunk] += 1
+            g["count"] += 1
+            if en_titular:
+                g["in_title"] = True
+
+        places: list[PlaceResult] = []
+        for g in groups.values():
+            kind, confidence = _place_role(g["in_title"], g["count"])
+            places.append(
+                PlaceResult(
+                    name=_best_display_name(g["display"]),
+                    mentions_count=g["count"],
+                    in_title=g["in_title"],
+                    kind=kind,
+                    confidence=confidence,
+                )
+            )
+        places.sort(key=lambda p: (-p.confidence, -p.mentions_count, p.name))
+        return places
+
     def _main_topic(self, doc, keywords: list[str]) -> str | None:
         """Tema principal: prefiere una frase nominal frecuente que incluya la
         palabra clave top (p.ej. 'agua potable'); si no, la palabra clave top."""
@@ -529,7 +968,7 @@ class LocalAnalyzer:
                 # Checar ORG: todos los acrónimos silábicos del catálogo que
                 # necesitaban esta resolución (MINERD, SENASA, INTRANT, ITLA)
                 # son organizaciones. PERSON entries no necesitan este fallback.
-                if (nkey, "ORG") in _SEED_ALIAS_MAP:
+                if (nkey, "ORG") in _SEED_ALIAS_MAP or _is_institution_head(nkey):
                     etype = "ORG"
                 else:
                     continue
@@ -600,15 +1039,19 @@ class LocalAnalyzer:
             _nkey, etype = key
             display = _best_display_name(g["display"])
             sent_indices = sorted(g["mentions"])
+            scored_indices = [i for i in sent_indices if probas_by_index[i] is not None]
+            # qué dijo el léxico relacional sobre ESTA entidad en cada frase
+            # puntuada: `_aggregate_entity` lo trata como corroboración
+            # explícita (ver su docstring)
+            relational = [boosts.get((key, i)) for i in scored_indices]
             probas = [
                 _apply_label_boost(probas_by_index[i], boosts.get((key, i)))
-                for i in sent_indices
-                if probas_by_index[i] is not None
+                for i in scored_indices
             ]
             # Sin ninguna frase puntuada (p.ej. la entidad solo aparece más
             # allá de _MAX_SENTENCES) no hay opinión que reportar: None, no
             # un "NEU 0.0" indistinguible de un neutro de verdad.
-            label, score = _aggregate(probas) if probas else (None, None)
+            label, score = _aggregate_entity(probas, relational) if probas else (None, None)
             context = sentences.texts[sent_indices[0]] if sent_indices else None
             results.append(
                 EntityResult(

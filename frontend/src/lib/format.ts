@@ -27,6 +27,16 @@ export function formatDateFull(value: string | null | undefined): string {
   }
 }
 
+/** "2026-08-20" -> "20/08/2026". La API entrega una fecha sin hora
+ *  (`analyzed_on` es DATE), así que se parte el string en vez de construir un
+ *  `Date`: `new Date("2026-08-20")` se interpreta como UTC y en husos al oeste
+ *  muestra el día anterior. */
+export function formatDay(value: string | null | undefined): string {
+  if (!value) return "—"
+  const [year, month, day] = value.slice(0, 10).split("-")
+  return day && month && year ? `${day}/${month}/${year}` : "—"
+}
+
 export function isLowConfidence(entity: { extraction_confidence?: number | null }): boolean {
   return typeof entity.extraction_confidence === "number" && entity.extraction_confidence < 0.9
 }

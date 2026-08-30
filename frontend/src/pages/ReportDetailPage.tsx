@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { ChevronLeft, Pencil, Trash2 } from "lucide-react"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
 import { EntitiesCard } from "@/components/EntitiesCard"
+import { LocalitiesCard } from "@/components/LocalitiesCard"
 import { useConfirm } from "@/lib/dialog"
 import { useArticle, useUpdateArticle, useDeleteArticle } from "@/lib/queries/articles"
 import { OdinApiError, type ArticleAnalysis, type ArticleUpdatePayload } from "@/lib/odin-api"
@@ -199,6 +200,7 @@ export function ReportDetailPage() {
             editable={editing}
             onChange={(patch) => setEditForm((f) => (f ? { ...f, ...patch } : f))}
           />
+          <LocalitiesCard articleId={article.id as number} editable={editing} />
           <EntitiesCard entities={article.entities} editable={false} />
         </>
       )}

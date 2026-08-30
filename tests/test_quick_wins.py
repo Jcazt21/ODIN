@@ -27,6 +27,11 @@ def _make_article(**overrides) -> Article:
     return Article(**defaults)
 
 
+def _auth_headers():
+    token, _ = create_token("tester")
+    return {"Authorization": f"Bearer {token}"}
+
+
 # ── #5: comodines de ILIKE escapados ─────────────────────────────────────────
 
 
@@ -40,7 +45,7 @@ class TestLikeEscaping:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"q": "50%"})
+        resp = api_client.get("/api/articles", params={"q": "50%"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["url"] == "https://diariolibre.com/pct"
@@ -55,7 +60,7 @@ class TestLikeEscaping:
         session.commit()
         session.close()
 
-        resp = api_client.get("/api/articles", params={"entity": "foo_bar"})
+        resp = api_client.get("/api/articles", params={"entity": "foo_bar"}, headers=_auth_headers())
         body = resp.json()
         assert body["total"] == 1
         assert body["items"][0]["url"] == "https://diariolibre.com/us"
@@ -116,7 +121,7 @@ class TestNoNPlusOne:
 
         event.listen(engine, "before_cursor_execute", _record)
         try:
-            resp = api_client.get("/api/articles", params={"limit": 100})
+            resp = api_client.get("/api/articles", params={"limit": 100}, headers=_auth_headers())
         finally:
             event.remove(engine, "before_cursor_execute", _record)
 
@@ -153,7 +158,7 @@ class TestInitDbNotOnHotPath:
             },
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201  # alta de reporte
         assert calls == []
 
 

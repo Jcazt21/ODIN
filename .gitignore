@@ -25,6 +25,13 @@ backups/
 # --- Scratch local ---
 temp/
 
+# Carpetas de exportación sueltas que caen en docs/ al bajar/descomprimir la
+# plantilla (macOS numera los duplicados: "export 4"). Lo único de valor ahí
+# es el .docx, y ese ya está versionado en src/odin/exports/ como package-data
+# (pyproject: odin = [..., "exports/*.docx"]).
+docs/export/
+docs/export */
+
 # --- Frontend ---
 frontend/node_modules/
 frontend/dist/

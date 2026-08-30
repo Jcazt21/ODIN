@@ -20,10 +20,11 @@ Estructura:
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -33,7 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 
 def _utcnow() -> datetime:
@@ -78,6 +79,26 @@ class Article(Base):
     analysis_schema_version: Mapped[int | None] = mapped_column(Integer)  # versión de AnalysisResult
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # --- Autoría humana (≠ linaje del análisis) ---
+    # OJO: `analyzer_name`/`analyzed_at` de arriba dicen QUÉ MODELO produjo el
+    # análisis. Esto dice QUÉ PERSONA lo revisó y lo dejó guardado. Son datos
+    # distintos y ambos hacen falta: el primero explica un resultado, el segundo
+    # sostiene el KPI por documentalista que pidió el cliente.
+    #
+    # Nulo a propósito en dos casos: los artículos que entran por el rastreo
+    # masivo (no hay persona detrás) y los guardados antes de esta columna.
+    # SET NULL y no CASCADE: dar de baja a un documentalista jamás puede borrar
+    # reportes.
+    documentalist_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    # Fecha en que el documentalista lo trabajó: día, mes y año. `Date` y no
+    # `DateTime` a propósito — el cliente pidió la fecha sin hora, y guardarla
+    # como fecha lo deja dicho en el esquema, en vez de depender de que toda
+    # consulta y toda pantalla se acuerden de recortar la hora. Además hace
+    # trivial agrupar por día, que es la unidad del KPI.
+    analyzed_on: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
+
     # --- Análisis de encuadre (solo analizadores LLM: GeminiAnalyzer/GroqAnalyzer; NULL con LocalAnalyzer) ---
     framing: Mapped[str | None] = mapped_column(String(40))           # crisis_conflicto | logro_institucional | ...
     headline_intent: Mapped[str | None] = mapped_column(String(20))   # informativo | alarmista | sensacionalista
@@ -119,9 +140,14 @@ class Article(Base):
         back_populates="article",
         cascade="all, delete-orphan",
     )
+    localities: Mapped[list[ArticleLocality]] = relationship(
+        back_populates="article",
+        cascade="all, delete-orphan",
+    )
     dominant_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[dominant_actor_id])
     blamed_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[blamed_actor_id])
     credited_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[credited_actor_id])
+    documentalist: Mapped[User | None] = relationship(foreign_keys=[documentalist_id])
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Article {self.source}: {self.title[:40]!r}>"
@@ -402,3 +428,249 @@ class RuntimeSettings(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<RuntimeSettings analyzer_mode={self.analyzer_mode!r}>"
+
+
+# Niveles de la jerarquía geográfica, de mayor a menor. El orden importa:
+# `Locality.level_index` lo usa para saber qué nivel es más específico, y el
+# selector del frontend para saber qué desplegable puebla cada uno.
+LOCALITY_LEVELS = ("PAIS", "MACRORREGION", "REGION", "PROVINCIA", "MUNICIPIO")
+
+
+class Locality(Base):
+    """Un nodo del árbol geográfico: país, macrorregión, región de
+    planificación, provincia o municipio.
+
+    UNA tabla para los cinco niveles, no cinco tablas. Un `parent_id` a sí
+    misma basta para la jerarquía, y evita que agregar un nivel (un día
+    "distrito municipal", o un país extranjero para noticias de fuera)
+    signifique una tabla y una migración nuevas.
+
+    El catálogo sale de `db/seeds/localities_rd.json`: 31 provincias + el
+    Distrito Nacional y 158 municipios, agrupados en las 3 macrorregiones y
+    las 10 regiones de planificación del Decreto 710-04. No es inmutable —
+    los municipios se crean por ley (Baitoa en 2013, La Victoria y La Caleta
+    en 2024) —, por eso es una tabla administrable y no una constante en el
+    código.
+
+    ### Por qué `path` y no solo `parent_id`
+
+    La consulta que importa es "todo lo que cuelga del Cibao", y con solo
+    `parent_id` eso es un CTE recursivo. `path` guarda la ruta de ids
+    materializada ("/1/2/6/19/"), así que el mismo filtro es un
+    `LIKE '/1/2/%'`: una sola pasada, indexable, y con idéntico
+    comportamiento en los tres motores objetivo del proyecto (PostgreSQL,
+    SQLite y SQL Server), ninguno de los cuales comparte la sintaxis de CTE
+    recursivo del otro.
+
+    El precio es mantener `path` al mover un nodo. Es un precio barato: el
+    catálogo cambia por ley un par de veces por década, y las consultas
+    corren en cada carga de reporte.
+    """
+
+    __tablename__ = "localities"
+    __table_args__ = (
+        UniqueConstraint("parent_id", "norm_key", name="uq_locality_sibling_name"),
+        Index("ix_localities_path", "path"),
+        Index("ix_localities_level", "level"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    name: Mapped[str] = mapped_column(String(160), index=True)   # "Santiago de los Caballeros"
+    # Clave de comparación (`analysis/text_norm.norm_key`): sin acentos, en
+    # minúsculas. Es lo que hace que "Monte Cristi" y "montecristi" sean el
+    # mismo lugar al buscar, sin depender de la extensión `unaccent`.
+    norm_key: Mapped[str] = mapped_column(String(160), index=True)
+    level: Mapped[str] = mapped_column(String(20))               # ver LOCALITY_LEVELS
+
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("localities.id", ondelete="CASCADE"), index=True
+    )
+    # Ruta de ids con barras a ambos lados ("/1/2/6/19/"). Las barras no son
+    # decorativas: sin la final, LIKE '/1/2%' also matchearía el id 20.
+    path: Mapped[str] = mapped_column(String(255), default="")
+
+    # Desactivar sin borrar: un municipio que deja de serlo no debe llevarse
+    # por delante los artículos ya etiquetados con él.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    parent: Mapped[Locality | None] = relationship(
+        back_populates="children", remote_side=[id]
+    )
+    children: Mapped[list[Locality]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan"
+    )
+    aliases: Mapped[list[LocalityAlias]] = relationship(
+        back_populates="locality", cascade="all, delete-orphan"
+    )
+
+    @property
+    def level_index(self) -> int:
+        """Posición en LOCALITY_LEVELS; -1 si el nivel no es conocido."""
+        try:
+            return LOCALITY_LEVELS.index(self.level)
+        except ValueError:
+            return -1
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Locality {self.name} ({self.level})>"
+
+
+class LocalityAlias(Base):
+    """Otro nombre por el que la prensa se refiere a un lugar.
+
+    Hace falta más de lo que parece: la provincia Hermanas Mirabal se llamó
+    Salcedo hasta 2007 y los medios siguen usando el nombre viejo, Villa
+    Bisonó aparece casi siempre como "Navarrete", y el municipio cabecera
+    suele nombrarse por su provincia ("Higüey" por "Salvaleón de Higüey").
+    Sin esto, la detección automática de la fase siguiente falla en los
+    lugares más citados del país.
+    """
+
+    __tablename__ = "locality_aliases"
+    __table_args__ = (
+        UniqueConstraint("locality_id", "alias_key", name="uq_locality_alias"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    locality_id: Mapped[int] = mapped_column(
+        ForeignKey("localities.id", ondelete="CASCADE"), index=True
+    )
+    alias: Mapped[str] = mapped_column(String(160))                  # "Navarrete"
+    alias_key: Mapped[str] = mapped_column(String(160), index=True)  # "navarrete"
+
+    locality: Mapped[Locality] = relationship(back_populates="aliases")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<LocalityAlias {self.alias} -> {self.locality_id}>"
+
+
+# Qué papel juega el lugar en la noticia. Son preguntas distintas y mezclarlas
+# arruina las dos: "dónde pasó" es el dato que el cliente quiere mapear;
+# "dónde se nombró" es ruido para ese mapa, pero sirve para medir alcance.
+LOCALITY_KINDS = ("HECHO", "MENCIONADO")
+# Quién hizo el vínculo. `AUTO` todavía no lo escribe nadie — la detección
+# automática es la fase siguiente —, pero la columna existe desde ahora para
+# que esa fase no tenga que migrar datos ya guardados.
+LOCALITY_ORIGINS = ("MANUAL", "AUTO")
+
+
+class ArticleLocality(Base):
+    """Vínculo N:M entre un artículo y un lugar.
+
+    N:M y no una columna `location_id` en `articles` porque una noticia puede
+    ocurrir en varios lugares a la vez (el formulario del cliente tiene un
+    botón "Agregar" justamente para eso).
+
+    El nivel del nodo apuntado ES el alcance de la noticia: apuntar al país
+    significa "ámbito nacional", a una región significa "regional", a un
+    municipio significa "municipal". Por eso no hay cuatro columnas con
+    centinelas "Todas" — el "Todas" del formulario solo dice hasta dónde bajó
+    el documentalista, y eso queda registrado en qué nodo se eligió.
+    """
+
+    __tablename__ = "article_localities"
+    __table_args__ = (
+        UniqueConstraint("article_id", "locality_id", "kind", name="uq_article_locality"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    locality_id: Mapped[int] = mapped_column(
+        ForeignKey("localities.id", ondelete="CASCADE"), index=True
+    )
+
+    kind: Mapped[str] = mapped_column(String(20), default="HECHO")     # ver LOCALITY_KINDS
+    origin: Mapped[str] = mapped_column(String(20), default="MANUAL")  # ver LOCALITY_ORIGINS
+    # Confianza de la detección automática (0..1). NULL cuando lo puso una
+    # persona: un dato humano no tiene confianza estimada, tiene autoría.
+    confidence: Mapped[float | None] = mapped_column(Float)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    article: Mapped[Article] = relationship(back_populates="localities")
+    locality: Mapped[Locality] = relationship()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ArticleLocality article={self.article_id} locality={self.locality_id} {self.kind}>"
+
+
+# Roles del sistema. `documentalista` es quien captura y revisa reportes; `admin`
+# además administra el catálogo de documentalistas.
+USER_ROLES = ("admin", "documentalista")
+
+
+class User(Base):
+    """Una persona que usa Odin.
+
+    Hasta ahora la autenticación era un operador único contra credenciales del
+    entorno (ver `core/auth.py`). Esa forma hacía imposible el KPI que pide el
+    cliente: si todos entran con la misma credencial, todos los reportes se
+    atribuyen al mismo nombre y medir el trabajo por documentalista no significa nada.
+
+    El operador del `.env` no desaparece: al arrancar se siembra como primer
+    usuario con rol `admin` (`db/users.seed_operator`), así que quien hoy entra
+    sigue entrando igual.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("username_key", name="uq_user_username"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    username: Mapped[str] = mapped_column(String(80))          # "jperez", como se muestra
+    # Clave de comparación en minúsculas: quien teclea "JPerez" al entrar es la
+    # misma persona que "jperez", y el UNIQUE debe impedir ambas variantes.
+    # Se deriva sola de `username` vía el validador `_sync_username_key` de
+    # abajo, en cada alta Y en cada edición (un `default` de columna solo
+    # corre en el INSERT: renombrar a alguien más tarde habría dejado la
+    # clave vieja, y el login habría dejado de encontrarlo en silencio).
+    username_key: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(160))     # "Juan Pérez"
+    # Separados porque de ellos se deriva el `username` (inicial + 4 del
+    # apellido), y porque el apellido por su cuenta sirve para ordenar. Con
+    # solo `display_name` no habría forma fiable de recuperarlos: "Ana María De
+    # la Cruz" no se parte sola por espacios.
+    first_name: Mapped[str] = mapped_column(String(80), default="")
+    last_name: Mapped[str] = mapped_column(String(80), default="")
+    password_hash: Mapped[str] = mapped_column(String(255))    # formato de core/auth.py
+    role: Mapped[str] = mapped_column(String(20), default="documentalista")  # ver USER_ROLES
+
+    # Dar de baja sin borrar: los reportes que firmó siguen atribuidos a él.
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Credencial provisional: el alta genera un PIN de 4 dígitos y esta bandera
+    # obliga a reemplazarlo por una contraseña propia antes de usar el sistema.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Cuándo se consumió ese PIN. Con la bandera encendida y esto ya sellado, el
+    # login lo rechaza: es lo que hace que el PIN valga UNA vez. Cuatro dígitos
+    # son 10.000 combinaciones, y no sobrevivir al primer uso es justamente lo
+    # que las vuelve aceptables. Regenerar el PIN lo devuelve a NULL.
+    temp_password_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    @validates("username")
+    def _sync_username_key(self, _key: str, value: str) -> str:
+        """Mantiene `username_key` derivado de `username` en TODA escritura.
+
+        Un `default` de columna solo corre en el INSERT: renombrar a un usuario
+        más adelante dejaría la clave vieja y el login dejaría de encontrarlo,
+        sin ningún error visible. `@validates` cubre alta y edición por igual, y
+        deja un único punto donde se deriva la clave.
+        """
+        self.username_key = value.strip().lower()
+        return value
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<User {self.username} ({self.role})>"
