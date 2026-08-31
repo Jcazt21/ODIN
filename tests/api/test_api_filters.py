@@ -385,3 +385,97 @@ class TestFiltrosQueMultiplicanFilas:
 
         assert body["total"] == 1
         assert len(body["items"]) == 1
+
+
+class TestTopicFilter:
+    """`topic` filtra por `main_topic`, que hoy es texto libre (no hay catálogo
+    administrable todavía, R4). Por eso el filtro es "contiene" y no igualdad:
+    con 85% de los temas apareciendo en un solo artículo, la coincidencia
+    parcial es lo único que agrupa algo."""
+
+    def test_filters_by_topic(self, api_client, sqlite_sessionmaker):
+        session = sqlite_sessionmaker()
+        session.add_all([
+            _make_article(main_topic="policía nacional", url="https://diariolibre.com/a"),
+            _make_article(main_topic="banco central", url="https://diariolibre.com/b"),
+        ])
+        session.commit()
+        session.close()
+
+        resp = api_client.get(
+            "/api/articles", params={"topic": "policía nacional"}, headers=_auth_headers()
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["main_topic"] == "policía nacional"
+
+    def test_partial_topic_matches_every_variant(self, api_client, sqlite_sessionmaker):
+        """Escribir "policía" tiene que alcanzar sus variantes: es lo que
+        rescata algo de valor de un campo sin normalizar."""
+        session = sqlite_sessionmaker()
+        session.add_all([
+            _make_article(main_topic="policía nacional", url="https://diariolibre.com/a"),
+            _make_article(main_topic="policía municipal", url="https://diariolibre.com/b"),
+            _make_article(main_topic="banco central", url="https://diariolibre.com/c"),
+        ])
+        session.commit()
+        session.close()
+
+        resp = api_client.get("/api/articles", params={"topic": "policía"}, headers=_auth_headers())
+        assert resp.json()["total"] == 2
+
+    def test_topic_ignores_accents_and_case(self, api_client, sqlite_sessionmaker):
+        """Nadie escribe el acento en una caja de filtro."""
+        session = sqlite_sessionmaker()
+        session.add_all([
+            _make_article(main_topic="Policía Nacional", url="https://diariolibre.com/a"),
+            _make_article(main_topic="banco central", url="https://diariolibre.com/b"),
+        ])
+        session.commit()
+        session.close()
+
+        resp = api_client.get("/api/articles", params={"topic": "policia"}, headers=_auth_headers())
+        assert resp.json()["total"] == 1
+
+    def test_topic_does_not_match_the_title(self, api_client, sqlite_sessionmaker):
+        """El filtro dice "tema", no "buscar": el título ya lo cubre `q`. Si
+        mirara el título, filtrar por tema devolvería notas cuyo tema es otro."""
+        session = sqlite_sessionmaker()
+        session.add(
+            _make_article(
+                title="La policía allanó un colmado",
+                main_topic="operativo antidrogas",
+                url="https://diariolibre.com/a",
+            )
+        )
+        session.commit()
+        session.close()
+
+        resp = api_client.get("/api/articles", params={"topic": "policía"}, headers=_auth_headers())
+        assert resp.json()["total"] == 0
+
+    def test_topic_combines_with_another_filter(self, api_client, sqlite_sessionmaker):
+        session = sqlite_sessionmaker()
+        session.add_all([
+            _make_article(
+                main_topic="policía nacional", source="diario_libre", url="https://diariolibre.com/a"
+            ),
+            _make_article(
+                main_topic="policía nacional", source="listin_diario", url="https://listindiario.com/b"
+            ),
+            _make_article(
+                main_topic="banco central", source="listin_diario", url="https://listindiario.com/c"
+            ),
+        ])
+        session.commit()
+        session.close()
+
+        resp = api_client.get(
+            "/api/articles",
+            params={"topic": "policía", "source": ["listin_diario"]},
+            headers=_auth_headers(),
+        )
+        body = resp.json()
+        assert body["total"] == 1
+        assert body["items"][0]["source"] == "listin_diario"

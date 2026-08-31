@@ -2081,6 +2081,7 @@ export interface operations {
                 source_quality?: string | null;
                 has_hard_data?: boolean | null;
                 entity?: string | null;
+                topic?: string | null;
                 locality?: number | null;
                 documentalist?: number | null;
                 date_from?: string | null;

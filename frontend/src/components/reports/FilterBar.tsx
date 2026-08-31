@@ -1,6 +1,6 @@
 import { RotateCcw, Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
-import { useMemo } from "react"
+import { useId, useMemo } from "react"
 import { LocalityCombobox } from "@/components/LocalityCombobox"
 import { useLocalityTree } from "@/lib/queries/localities"
 import { indexTree } from "@/lib/localities"
@@ -59,6 +59,8 @@ export function FilterBar({
 }) {
   // El árbol completo son ~204 nodos y se cachea sin vencimiento, así que
   // aplanarlo acá no cuesta una petición por render.
+  const topicFieldId = useId()
+  const topicListId = `${topicFieldId}-list`
   const { data: tree } = useLocalityTree()
   const { entries } = useMemo(() => indexTree(tree ?? []), [tree])
   const selectedLocality = entries.find((e) => e.id === filters.locality)
@@ -114,6 +116,33 @@ export function FilterBar({
             className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           />
+        </div>
+
+        {/* Texto libre CON sugerencias, igual que el campo Tema del formulario
+            manual: `main_topic` no está normalizado mientras no exista el
+            catálogo administrable (R4), así que un desplegable cerrado dejaría
+            fuera cualquier variante que no esté en la lista. La etiqueta va
+            sr-only por lo mismo que en el filtro de lugar: si ocupara alto, la
+            fila de la grilla crecería y desalinearía los iconos. */}
+        <div className="relative">
+          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2" style={{ color: "var(--faint)" }} />
+          <label htmlFor={topicFieldId} className="sr-only">
+            Tema
+          </label>
+          <input
+            id={topicFieldId}
+            list={topicListId}
+            value={filters.topic ?? ""}
+            onChange={(e) => onChange({ topic: e.target.value || undefined })}
+            placeholder="Todos los temas"
+            className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+          />
+          <datalist id={topicListId}>
+            {(facets?.topics ?? []).map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
         </div>
 
         <LocalityCombobox
