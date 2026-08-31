@@ -31,3 +31,7 @@ sentry-sdk
 fastapi
 uvicorn
 PyJWT
+# La exportación de reportes (services/export_service.py) importa docx en el
+# tope del módulo, y odin.api carga ese router al importarse: sin esto, CI ni
+# siquiera colecta los tests de la API.
+python-docx

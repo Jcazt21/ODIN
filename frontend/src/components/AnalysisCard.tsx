@@ -17,6 +17,11 @@ export interface AnalysisCardFields {
   source: string
   /** Nombre legible del medio; el backend lo deriva del slug. */
   source_name?: string
+  /** Documentalista que dejó guardado el reporte. Opcional a propósito: la
+   *  vista previa de /api/analyze (AnalyzePage) todavía no tiene reporte
+   *  guardado, así que no manda el campo y la línea no se dibuja. En un
+   *  reporte guardado sí llega, y `null` significa rastreo automático. */
+  documentalist?: string | null
   authors: string | null
   section: string | null
   published_at: string | null
@@ -103,6 +108,16 @@ export function AnalysisCard({
           </a>
         </h1>
         <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 text-[12.5px]">
+          {value.documentalist !== undefined && (
+            <span>
+              <span style={{ color: "var(--faint)" }}>Documentalista </span>
+              {/* Mismo fallback que la columna de la tabla de reportes: sin
+                  documentalista es que lo trajo el rastreo, no que falte el dato. */}
+              <span style={{ color: "var(--muted-foreground)" }}>
+                {value.documentalist ?? "Automático"}
+              </span>
+            </span>
+          )}
           <span>
             <span style={{ color: "var(--faint)" }}>Fuente </span>
             {/* El nombre legible, no el slug: "Listín Diario" y no listin_diario. */}

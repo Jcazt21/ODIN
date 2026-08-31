@@ -20,9 +20,9 @@ def _normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _declared() -> set[str]:
+def _declared(filename: str = "requirements.txt") -> set[str]:
     names = set()
-    for raw in (ROOT / "requirements.txt").read_text().splitlines():
+    for raw in (ROOT / filename).read_text().splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
