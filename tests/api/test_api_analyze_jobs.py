@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from odin.analysis.base import AnalysisResult
 from odin.core.auth import create_token
@@ -80,6 +81,15 @@ class TestAnalyzeNewUrlEnqueuesJob:
             },
         )
         monkeypatch.setattr(analyze_service, "analyze_safely", lambda title, body: _fake_analysis_result())
+        # El análisis no devuelve lugares, así que el job cae al extractor de
+        # topónimos, que carga spaCy de verdad. Sin este doble el job muere con
+        # ModuleNotFoundError donde spaCy no está instalado —el CI, justamente—
+        # y en local pasa desapercibido porque ahí sí está.
+        monkeypatch.setattr(
+            analyze_service,
+            "place_extractor",
+            lambda: SimpleNamespace(extract_places=lambda title, body: []),
+        )
         monkeypatch.setattr(analyze_service, "arbitrate_ambiguous_persons", lambda result: None)
         monkeypatch.setattr(analyze_service, "canonicalize_result", lambda result: None)
 
@@ -207,6 +217,15 @@ class TestAnalyzeDoesNotRepeatWork:
             },
         )
         monkeypatch.setattr(analyze_service, "analyze_safely", _analyze)
+        # El análisis no devuelve lugares, así que el job cae al extractor de
+        # topónimos, que carga spaCy de verdad. Sin este doble el job muere con
+        # ModuleNotFoundError donde spaCy no está instalado —el CI, justamente—
+        # y en local pasa desapercibido porque ahí sí está.
+        monkeypatch.setattr(
+            analyze_service,
+            "place_extractor",
+            lambda: SimpleNamespace(extract_places=lambda title, body: []),
+        )
         monkeypatch.setattr(analyze_service, "arbitrate_ambiguous_persons", lambda result: None)
         monkeypatch.setattr(analyze_service, "canonicalize_result", lambda result: None)
         return calls
