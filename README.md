@@ -284,6 +284,7 @@ docs/
   LEGAL.md             ToS por medio, datos personales, retención
   PRECISION.md          metodología de evaluación y estado del golden set
   GUIA_DE_USO.md         guía paso a paso para el usuario final
+  EXPORT_DOCX.md          diseño del .docx de reportes (cuadro de ficha, estilos)
   docker.md               cómo funciona la dockerización (servicios, cache, comandos)
   adr/                     decisiones arquitectónicas (por qué se eligió cada cosa)
 ```
@@ -494,6 +495,7 @@ Este README es la puerta de entrada. El detalle técnico vive en `docs/`:
 | [docs/LEGAL.md](docs/LEGAL.md) | ToS por medio, datos personales (Ley 172-13/GDPR), retención |
 | [docs/PRECISION.md](docs/PRECISION.md) | Metodología de evaluación y estado real del golden set |
 | [docs/GUIA_DE_USO.md](docs/GUIA_DE_USO.md) | Guía paso a paso para el usuario final |
+| [docs/EXPORT_DOCX.md](docs/EXPORT_DOCX.md) | Diseño del .docx de reportes: cuadro de ficha, estilos, plantilla |
 | [docs/docker.md](docs/docker.md) | Dockerización: servicios, cache, comandos, troubleshooting |
 | [docs/adr/](docs/adr/) | Por qué se eligió cada decisión no obvia (ADRs) |
 
