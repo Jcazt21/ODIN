@@ -97,6 +97,10 @@ export interface ArticleListParams {
   source_quality?: string
   has_hard_data?: boolean
   entity?: string
+  /** Texto del tema. Coincidencia parcial contra `main_topic`, que es texto
+   *  libre mientras no exista el catálogo administrable (R4): escribir
+   *  "policía" alcanza "policía nacional" y "policía municipal". */
+  topic?: string
   /** Id de un lugar del catálogo. El backend incluye su subárbol: filtrar
    *  por una provincia trae también lo marcado en sus municipios. */
   locality?: number

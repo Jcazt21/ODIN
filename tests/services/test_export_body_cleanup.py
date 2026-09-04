@@ -5,7 +5,7 @@ titular repetido, a veces un sumario duplicado más abajo, y kickers de sección
 en medio del texto ("Alegada negligencia"). En pantalla molestan poco; en un
 documento que el cliente imprime y entrega, se leen como errores.
 
-Las reglas son las del README de la plantilla (docs/export 4/README-docx.md).
+Las reglas son las del README de la plantilla (docs/EXPORT_DOCX.md).
 """
 from __future__ import annotations
 
@@ -74,6 +74,37 @@ class TestDropsSectionKickers:
         assert clean_body(body, title="t", topic=None) == [
             "Primer párrafo.",
             "“El peso pudo más que el techo”, afirmó.",
+        ]
+
+
+class TestTypography:
+    """Lo que en pantalla pasa desapercibido y en papel se lee como descuido."""
+
+    def test_straight_quotes_become_typographic(self):
+        body = 'Bajo la consigna "queremos agua", los vecinos protestaron.'
+
+        assert clean_body(body, title="t", topic=None) == [
+            "Bajo la consigna “queremos agua”, los vecinos protestaron."
+        ]
+
+    def test_double_spaces_collapse(self):
+        body = "Los comunitarios  se  concentraron frente a la oficina."
+
+        assert clean_body(body, title="t", topic=None) == [
+            "Los comunitarios se concentraron frente a la oficina."
+        ]
+
+    def test_a_non_breaking_space_is_a_space(self):
+        """El scrape trae `&nbsp;` con más frecuencia de la que parece."""
+        assert clean_body("Uno  dos.", title="t", topic=None) == ["Uno dos."]
+
+    def test_an_unpaired_quote_does_not_flip_the_rest(self):
+        """Se mira el carácter anterior, no se alterna a ciegas: una comilla
+        suelta no puede dejar todas las siguientes al revés."""
+        body = 'Dijo que "el peso pudo más. Y añadió: "no hay agua".'
+
+        assert clean_body(body, title="t", topic=None) == [
+            "Dijo que “el peso pudo más. Y añadió: “no hay agua”."
         ]
 
 

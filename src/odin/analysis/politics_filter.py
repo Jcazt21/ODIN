@@ -110,19 +110,25 @@ def is_dominican_politics(article: ScrapedArticle) -> bool:
     inaugurada por la vicepresidenta, una boda con un funcionario invitado. Eso
     da falsos positivos con un solo `search()`.
 
-    Primer filtro: la sección de la URL. Si es notoriamente no-política
-    (farándula, deportes, moda...) se descarta sin mirar el texto — ahí el
-    namedrop es casi garantizado y nunca es el tema.
+    Señal fuerte primero: el término aparece en el TÍTULO — un titular no
+    menciona "PRM" o "Leonel Fernández" si la nota no es sobre eso. Esto se
+    evalúa ANTES de mirar la sección: una nota genuinamente política puede
+    aparecer mal categorizada bajo "entretenimiento" o "gente" (un funcionario
+    en un escándalo, una figura política cubierta como noticia de farándula),
+    y el titular ya lo delata sin necesidad de leer el cuerpo.
 
-    Si pasa eso, señal fuerte: el término aparece en el TÍTULO — un titular no
-    menciona "PRM" o "Leonel Fernández" si la nota no es sobre eso. Sin eso, se
-    exige corroboración: al menos 2 términos DISTINTOS en el cuerpo, no solo
-    una repetición del mismo namedrop.
+    Si el título no alcanza, ahí sí entra la sección de la URL: si es
+    notoriamente no-política (farándula, deportes, moda...) se descarta sin
+    mirar el cuerpo — ahí el namedrop en el CUERPO es casi garantizado y nunca
+    es el tema, pero un titular explícito ya habría calificado arriba.
+
+    Fuera de esas secciones, se exige corroboración: al menos 2 términos
+    DISTINTOS en el cuerpo, no solo una repetición del mismo namedrop.
     """
-    if _url_section(article.url) in _NON_POLITICS_SECTIONS:
-        return False
     if _POLITICS_RE.search(strip_accents(article.title).lower()):
         return True
+    if _url_section(article.url) in _NON_POLITICS_SECTIONS:
+        return False
     body_matches = set(_POLITICS_RE.findall(strip_accents(article.body or "").lower()))
     return len(body_matches) >= 2
 

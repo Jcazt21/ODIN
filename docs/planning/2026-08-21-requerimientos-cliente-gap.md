@@ -7,11 +7,17 @@
 > Fuente: notas de entrevista con el cliente (sin fecha, desordenadas por
 > ser tomadas en vivo). Contraste contra el código en `dev` al 2026-08-21.
 >
-> **Re-verificado el 2026-08-22** contra el árbol actual (`src/odin/`): el
-> inventario de §3 y la tabla de §4 siguen siendo exactos — 8 tablas, cero
+> **Re-verificado el 2026-08-22** contra el árbol de entonces: 8 tablas, cero
 > endpoints de agregación, cero export, sin tabla de usuarios,
 > `source`/`section`/`authors` como texto libre. Solo se corrigieron las
 > rutas de archivo, porque el código se movió de la raíz a `src/odin/`.
+>
+> **Re-verificado el 2026-09-02** contra `dev`: esta vez sí cambió bastante.
+> Entraron enteras la dimensión geográfica (R2), los usuarios documentalistas
+> con su formulario manual (R18, R19) y el export a Word (R22); avanzaron a
+> medias la ficha de actor (R1), el cruce medio × actor (R3) y el KPI (R20).
+> §3 y §4 quedaron reescritas con eso; §7 sigue describiendo las fases como se
+> planificaron, con una nota de qué quedó hecho en cada una.
 
 ---
 
@@ -88,6 +94,11 @@ Inventario honesto, no aspiracional.
 | `entity_aliases` | siglas → nombre canónico, administrable desde el frontend | maduro |
 | `analyze_jobs`, `scrape_jobs`, `crawl_runs` | cola y trazabilidad de corridas | maduro |
 | `runtime_settings` | fila única: motor de análisis | maduro |
+| `localities` | árbol geográfico en una sola tabla (país → macrorregión → región de planificación → provincia → municipio), con `path` materializado y baja lógica | maduro |
+| `locality_aliases` | nombres alternos por los que la prensa cita un lugar ("Navarrete", "Salcedo") | maduro |
+| `article_localities` | N:M artículo ↔ lugar, con `kind` HECHO/MENCIONADO, `origin` MANUAL/AUTO y confianza | maduro |
+| `users` | documentalistas y admins: rol, baja lógica, PIN provisional de un solo uso | maduro |
+| `articles` (autoría del reporte) | `documentalist_id` → FK a `users`, `analyzed_on` (día trabajado) | maduro |
 
 ### Capacidades
 
@@ -100,59 +111,85 @@ Inventario honesto, no aspiracional.
 - **Administración de identidad**: fusionar entidades duplicadas,
   administrar siglas.
 - **Filtros** sobre artículos guardados: fuente, sección, sentimiento,
-  campos de encuadre, entidad, rango de fechas.
+  campos de encuadre, entidad, tema (texto libre sobre `main_topic`), lugar
+  (con subárbol), documentalista, rango de fechas, orden por columna.
 - **Tres motores**: `local` (spaCy + pysentimiento, gratis), `groq`
   (gratis con límites), `gemini` (de pago, vedado para volumen por
   `CLAUDE.md`), más `hybrid`.
+- **Alta manual sin modelo**: `NewReportPage` → `POST /api/articles`. El
+  documentalista transcribe la nota, elige medio, sección, tema y lugares, y
+  guarda sin pasar por el análisis.
+- **Dimensión geográfica completa**: catálogo administrable desde el frontend,
+  sugerencia automática de lugares a partir de las entidades `LOC` de spaCy
+  (`local_analyzer._places` + `locality_service.suggest_from_places`) que una
+  persona acepta o descarta, y `GET /api/localities/frequency` con roll-up.
+- **Usuarios por persona**: login individual, roles `admin`/`documentalista`,
+  alta con PIN de un solo uso y cambio de contraseña forzado.
+- **Export a Word**: `POST /api/articles/export` arma un `.docx` a partir de
+  una plantilla, con una ficha por reporte.
+- **KPI de volumen por documentalista**: `GET /api/documentalists/kpi`
+  (reportes, primer y último día, días activos).
 
 ### Lo que NO existe
 
-- **Ninguna agregación.** No hay un solo endpoint que devuelva "tono de
-  Listín hacia Abinader en agosto". Todo es listar artículos.
-- **Ninguna dimensión más allá de persona/organización.** Medio, periodista,
-  sección, tema, lugar y hecho son texto libre o directamente no existen.
-- **Ningún concepto de usuario.** `src/odin/core/auth.py` es un operador único
-  contra credenciales del entorno; no hay tabla de usuarios.
+- **Casi ninguna agregación en el backend.** `GET /api/localities/frequency`
+  es el único endpoint que devuelve un conteo agregado. La ficha de entidad
+  se agrega **en el navegador** sobre las ≤200 menciones más recientes que
+  devuelve `GET /api/canonical-entities/{id}`, sin ventana de tiempo: sirve
+  para entidades con poco volumen y empieza a mentir en silencio cuando una
+  pasa las 200 menciones.
+- **Ninguna dimensión más allá de persona/organización y lugar.** Medio,
+  periodista, sección, tema y hecho siguen siendo texto libre, catálogo en
+  código, o directamente no existen.
 - **Ninguna auditoría.** El diccionario de datos lo dice explícitamente: si
-  se re-analiza un artículo, la fila se sobrescribe. No hay historial de
-  quién cambió qué.
-- **Ningún export.**
+  se re-analiza un artículo, la fila se sobrescribe. Sabemos **quién** dejó
+  guardado el reporte (`documentalist_id`), pero no **qué cambió** respecto de
+  lo que propuso el modelo.
+- **Ninguna vista para Power BI.**
 
 ---
 
 ## 4. Tabla de brecha
 
-Leyenda: ✅ existe · 🟡 existe a medias · ❌ no existe
+Leyenda: ✅ existe · 🟡 existe a medias · ❌ no existe · ⬆️ avanzó desde la
+revisión del 2026-08-22
 
 | # | Estado | Qué hay | Qué falta exactamente |
 |---|:--:|---|---|
-| R1 | 🟡 | `canonical_entities` como dimensión, con merge/rename. `GET /api/articles?entity=` filtra | No hay **ficha**: ninguna agregación por entidad (serie temporal, tono por medio, temas, lugares). `EntitiesPage` administra entidades, no las monitorea |
-| R2 | ❌ | — | El tipo `LOCATION` no existe. Peor: spaCy **sí** detecta lugares, pero `_WANTED_ENT` (`src/odin/analysis/local_analyzer.py:150`) solo acepta `PER`/`ORG` y los descarta; y `_DOMINICAN_PROVINCES` (línea 139) **elimina activamente** las 31 provincias porque spaCy las confunde con personas. La señal está a mano y hoy se tira |
-| R3 | 🟡 | `entities.sentiment_toward` por mención y `media_stance` por artículo | Falta el cruce agregado **medio × entidad × ventana de tiempo** |
-| R4 | ❌ | `main_topic` es texto libre: la frase nominal más frecuente (`_main_topic`, `src/odin/analysis/local_analyzer.py:667`) | No hay catálogo de temas, ni tabla, ni administración |
+| R1 | 🟡 ⬆️ | La ficha existe en `CanonicalEntityManager`: composición de sentimiento, **trato por medio** y artículos agrupados por medio, sobre `GET /api/canonical-entities/{id}` | Falta serie temporal, temas, lugares, secciones y periodistas que lo cubren. Y el corte estructural: se agrega en el navegador sobre las ≤200 menciones más recientes (`canonical_entity_service.py:111`), sin filtro de fechas — el mismo número cambia de significado cuando la entidad cruza ese tope |
+| R2 | ✅ ⬆️ | Dimensión geográfica entera: `localities` (31 provincias + DN + 158 municipios en 3 macrorregiones y 10 regiones), `locality_aliases`, `article_localities` con `kind` HECHO/MENCIONADO, ABM desde el frontend, `LocalityPicker` en el alta y en el detalle, sugerencia automática desde las entidades `LOC` de spaCy, y `GET /api/localities/frequency` con roll-up | Nada bloqueante. Pendiente menor: `origin=AUTO` solo se escribe cuando **una persona acepta** la sugerencia — no hay etiquetado desatendido, y fue decisión deliberada. El comentario de `db/models.py:557` ("`AUTO` todavía no lo escribe nadie") quedó desactualizado |
+| R3 | 🟡 ⬆️ | `SourceSentimentBreakdown` responde "qué trato le da cada medio a este actor", con marca de muestra baja | Es un cálculo de frontend sobre la misma lista de ≤200 menciones: sin ventana de tiempo, sin poder comparar dos períodos, y no consultable desde Power BI ni desde un export. Falta el cruce **medio × entidad × ventana** en el backend |
+| R4 | ❌ | `main_topic` sigue siendo texto libre (`_main_topic`, `src/odin/analysis/local_analyzer.py:667`). Se agregó `?topic=` en `GET /api/articles`, pero es un `contains` sobre ese texto libre (`article_service.py:130`) | No hay catálogo de temas, ni tabla, ni administración. El filtro nuevo alivia la consulta; no crea la dimensión |
 | R5 | ❌ | — | Depende de R4. Hoy el tema se *infiere* por frecuencia, no se *clasifica* contra nada |
-| R6 | ❌ | — | Depende de R4. Requiere jerarquía padre-hijo |
-| R7 | ❌ | — | Depende de R4 + un endpoint de agregación temporal |
-| R8 | ❌ | Las piezas sueltas existen (entidad, sentimiento); tema y lugar no | Falta la fila consultable que une tema+actor+institución+lugar+tono |
-| R9 | ❌ | — | "Quién habla" es agregación (factible). **"Quién NO habla" es el requerimiento más difícil del documento**: medir ausencia exige saber qué publicó cada medio, no solo qué guardamos. Choca de frente con el diseño a demanda → **decisión D1** |
+| R6 | ❌ | — | Depende de R4. Requiere jerarquía padre-hijo (el patrón ya está probado en `localities`: una tabla, `parent_id` y `path`) |
+| R7 | ❌ | — | Depende de R4. El endpoint es barato una vez que exista `article_topics`: `GET /api/localities/frequency` es el molde |
+| R8 | ❌ | Ya están actor, sentimiento y **lugar**; falta tema | Falta la fila consultable que une tema+actor+institución+lugar+tono |
+| R9 | ❌ | — | "Quién habla" es agregación (factible, y ahora media más cerca: el desglose por medio ya está calculado, falta subirlo al backend). **"Quién NO habla" sigue siendo el requerimiento más difícil del documento** → **decisión D1**, aún abierta |
 | R10 | ❌ | — | No hay tabla de relaciones entre entidades canónicas |
-| R11 | 🟡 | `articles.section` existe y es filtrable | Es texto libre, tal como lo dé cada medio. Falta catálogo normalizado y mapeo por medio |
-| R12 | ❌ | — | Nada. Y la señal original (página, tamaño en papel) **no existe en web**. Además los scrapers usan sitemaps/RSS por [ADR-001](../adr/0001-trafilatura-y-sitemaps-sobre-selectores.md), que no dan posición en portada → hay que cambiar la estrategia de captura, no agregar un campo → **decisión D5** |
+| R11 | 🟡 | `articles.section` existe, es filtrable y el alta manual lo pide | Sigue siendo texto libre, tal como lo dé cada medio. Falta catálogo normalizado y mapeo por medio |
+| R12 | ❌ | — | Sin cambios. La señal original (página, tamaño en papel) no existe en web, y los scrapers usan sitemaps/RSS por [ADR-001](../adr/0001-trafilatura-y-sitemaps-sobre-selectores.md) → **decisión D5** |
 | R13 | ❌ | — | trafilatura no extrae ante-título; requiere selector por medio |
-| R14 | 🟡 | `articles.source` es slug y es filtrable | No es dimensión: sin tabla de medios, sin metadatos (tipo, alcance, línea editorial), sin poder agregar un medio sin tocar código |
-| R15 | 🟡 | `articles.authors`, texto libre separado por `", "` | Sin normalizar, sin dimensión, sin canonicalización. Hoy "J. Pérez" y "Juan Pérez" son dos periodistas distintos |
-| R16 | ❌ | Existe algo **vecino pero distinto**: `dominant/blamed/credited_actor` (quién protagoniza, a quién se culpa, a quién se acredita) | Emisor vs referido es un **rol de la mención**, no un campo del artículo. Un artículo tiene N emisores y N referidos a la vez |
-| R17 | ❌ | — | El concepto de hecho/evento no existe en ningún nivel. Es la pieza más grande y más incierta del documento |
-| R18 | 🟡 | `POST /api/articles` guarda un análisis ya revisado; `PUT` rectifica | No hay captura desde cero sin URL y sin modelo. `SaveArticleRequest` exige `source`, `url`, `title`, `body` |
-| R19 | ❌ | Auth de operador único, sin tabla de usuarios | **Bloqueante para R19 y R20.** Hay que construir usuarios, roles y sesión por persona |
-| R20 | ❌ | — | Depende de R19 + auditoría campo a campo. Hoy re-analizar **sobrescribe** la fila: no queda rastro de qué corrigió quién |
-| R21 | 🟡 | Postgres está soportado, así que Power BI podría conectar hoy mismo | Conectaría contra un esquema normalizado para la app, no para BI. Faltan vistas estables y un usuario de solo lectura → **decisión D4** |
-| R22 | ❌ | — | Ningún export en el código |
+| R14 | 🟡 | `articles.source` es slug filtrable, y `scrapers.source_name()` le da nombre legible, que ya viaja en las respuestas (`source_name` en la ficha de entidad) | Sigue sin ser dimensión: el catálogo de medios es el **registro de scrapers en código** (`article_service.source_catalog`), no una tabla. Agregar un medio exige tocar código, y no hay dónde guardar tipo, alcance ni línea editorial |
+| R15 | 🟡 | `articles.authors`, texto libre separado por `", "` | Sin cambios. Sin normalizar, sin dimensión, sin canonicalización: "J. Pérez" y "Juan Pérez" siguen siendo dos periodistas |
+| R16 | ❌ | Sigue existiendo solo lo **vecino pero distinto**: `dominant/blamed/credited_actor` | Emisor vs referido es un **rol de la mención**. `entities` todavía no tiene esa columna |
+| R17 | ❌ | — | El concepto de hecho/evento no existe en ningún nivel |
+| R18 | ✅ ⬆️ | Los dos modos funcionan: el automático de siempre, y `NewReportPage` → `POST /api/articles` para captura manual completa sin pasar por el modelo, con medio, sección, tema, cuerpo y lugares en una sola transacción | El formulario **sigue exigiendo URL** (`REQUIRED` en `NewReportPage.tsx:36`). Para una nota de papel o de radio no hay URL que poner. Decidir si se vuelve opcional o se acepta un identificador sustituto |
+| R19 | ✅ ⬆️ | `users` con roles `admin`/`documentalista`, login por persona, alta con PIN de 4 dígitos de un solo uso, cambio de contraseña forzado, baja lógica que preserva la atribución, y `db/users.seed_operator` para que el operador del `.env` siga entrando igual | El modelo de roles es de dos niveles: no hay figura de **supervisor** ni reglas sobre si un documentalista puede editar lo de otro → **decisión D6**, todavía sin responder |
+| R20 | 🟡 ⬆️ | `GET /api/documentalists/kpi`: reportes por documentalista, primer y último día, días activos distintos, filtrable por rango | **Mide volumen, no calidad** — y el requerimiento del cliente era "verificar si realmente verificaron". La tasa de corrección sobre lo que propuso el modelo exige auditoría campo a campo, y re-analizar sigue sobrescribiendo la fila sin dejar rastro |
+| R21 | 🟡 | Postgres soportado; y ahora hay más que agregar contra: `localities`, `article_localities`, `users` | Sin cambios de fondo: faltan vistas SQL estables y un usuario de solo lectura → **decisión D4** |
+| R22 | ✅ ⬆️ | `POST /api/articles/export` devuelve un `.docx` armado sobre plantilla (`src/odin/exports/reportes-odin-template.docx` — la de `docs/export 4/` es la copia de diseño, no la que se usa), una ficha por reporte, con portada, período, medios y entidades | Es `.docx`, no el `.doc` literal de las notas — asumo que el cliente decía "Word". **Conviene confirmarlo**: si alguien depende de un flujo con `.doc` binario de verdad, esto no le sirve |
 
-**Resumen: 3 requerimientos a medias en lo importante, 6 parciales, 13
-inexistentes.** Ninguno está completo.
+**Resumen: 4 completos (R2, R18, R19, R22), 7 parciales (R1, R3, R11, R14,
+R15, R20, R21), 11 inexistentes.** Contra la revisión anterior —cero
+completos— el avance real fue la fase F5 (documentalistas), la mitad
+geográfica de F0/F2 y el export de F3.
 
----
+**El patrón de lo que falta no cambió:** casi todo lo pendiente cuelga de dos
+cosas que siguen sin construirse — el **catálogo de temas** (R4→R5, R6, R7, y
+la mitad de R8) y las **dimensiones de medio y periodista** (R14, R15, y con
+ellas el valor real de R1, R3 y R21). El trabajo hecho hasta ahora eligió, con
+buen criterio, lo que se podía terminar de punta a punta; lo que queda es
+justamente lo que §5 llama la fontanería dimensional.
 
 ## 5. El hallazgo de fondo
 
@@ -274,6 +311,10 @@ que existe para que el cliente vea producto antes de las fases caras.
 ### F0 · Fundación dimensional
 **Entrega:** R14, R15, R11, R10, y la mitad de R2
 **Bloquea a:** todas las demás fases
+**Estado al 2026-09-02:** hecha la parte geográfica (y más allá de lo que
+pedía esta fase: quedó completa, ver F2). `media_outlets`, `journalists`,
+`sections` y `entity_relations` siguen sin construirse — es lo que hoy
+bloquea al resto.
 
 Convertir en dimensiones lo que hoy es texto libre:
 
@@ -321,6 +362,8 @@ descriptor libre; el catálogo es una capa nueva encima, no un reemplazo.
 ### F2 · Rol del actor y lugar del hecho
 **Entrega:** R16, R2 completo
 **Depende de:** F0
+**Estado al 2026-09-02:** R2 entregado entero, incluida la distinción
+HECHO/MENCIONADO que esta fase pedía. R16 (emisor/referido) sin empezar.
 
 - `entities.role` — `emisor` \| `referido` \| `ambos`, con confianza. Va en
   la **mención**, no en el artículo: una nota tiene varios emisores y varios
@@ -337,6 +380,11 @@ parecen a esto, pero responden otra pregunta.
 ### F3 · Consultas de seguimiento y salida
 **Entrega:** R1, R3, R9 (parcial), R14 completo, R21, R22
 **Depende de:** F0, F1, F2
+**Estado al 2026-09-02:** el export (R22) se adelantó y está entregado. R1 y
+R3 tienen una primera versión que agrega en el navegador, útil para mostrar y
+suficiente con el volumen actual — pero no es la fase: falta subir la
+agregación al backend, con ventana de tiempo, y falta todo lo que depende de
+dimensiones que aún no existen (temas, periodistas, medio como tabla).
 
 La primera fase que el cliente puede *ver*:
 
@@ -375,6 +423,10 @@ Conviene decirlo antes de construir, no después.
 ### F5 · Documentalistas: usuarios, formulario y KPI
 **Entrega:** R18, R19, R20
 **Depende de:** nada de lo anterior — **se puede adelantar si el cliente lo prioriza**
+**Estado al 2026-09-02:** se adelantó, como preveía esta nota, y está casi
+entera: usuarios con roles, formulario manual y KPI de volumen. Falta lo que
+depende de auditoría — la tasa de corrección de R20 — y la definición de roles
+de D6.
 
 - `users` con roles (documentalista / supervisor / admin), reemplazando el
   auth de operador único de `src/odin/core/auth.py`.

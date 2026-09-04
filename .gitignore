@@ -43,3 +43,13 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+# --- Graphify (grafo de conocimiento del codebase) ---
+# Se versiona solo lo legible y estable: el reporte y las etiquetas de
+# communities (~67 KB). El resto es salida regenerable (~9.5 MB: cache de AST
+# y semantica, graph.html, graph.json) o estado propio de cada maquina
+# (.graphify_root y .graphify_python guardan rutas absolutas, manifest.json
+# guarda mtimes), que solo genera ruido y conflictos entre equipos.
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/.graphify_labels.json

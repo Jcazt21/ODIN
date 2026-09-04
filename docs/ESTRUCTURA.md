@@ -101,6 +101,7 @@ docs/
 ├── GUIA_DE_USO.md              guía paso a paso para el usuario final
 ├── docker.md                   cómo funciona la dockerización (servicios, cache, comandos)
 ├── scrapers_nuevas_fuentes.md  cómo agregar un scraper nuevo
+├── EXPORT_DOCX.md              diseño del .docx de reportes: cuadro de ficha, estilos, plantilla
 ├── LEGAL.md, PRECISION.md      ToS por medio / metodología de evaluación
 ├── adr/                        decisiones arquitectónicas (por qué se eligió cada cosa)
 ├── planning/                   task.md, conflicts.md, deploy-test.md — documentos de trabajo

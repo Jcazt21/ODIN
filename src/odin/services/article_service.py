@@ -91,6 +91,7 @@ def _apply_article_filters(
     date_to: str | None,
     q: str | None,
     entity: str | None,
+    topic: str | None = None,
     locality: int | None = None,
     documentalist: int | None = None,
 ):
@@ -126,6 +127,14 @@ def _apply_article_filters(
                 accent_insensitive_contains(Article.topic_keywords, q),
             )
         )
+    if topic:
+        # "Contiene" y no igualdad: `main_topic` es texto libre mientras no
+        # exista el catálogo administrable (R4), y con la mayoría de los temas
+        # apareciendo en un solo artículo, la coincidencia parcial es lo único
+        # que agrupa algo ("policía" alcanza "policía nacional" y "policía
+        # municipal"). Solo `main_topic`: el filtro dice "tema", y mirar además
+        # el título devolvería notas cuyo tema es otro —para eso está `q`.
+        conditions.append(accent_insensitive_contains(Article.main_topic, topic))
     if entity:
         # EXISTS y no JOIN: un artículo con dos entidades que matchean saldría
         # dos veces, y taparlo con SELECT DISTINCT rompe en PostgreSQL —el
@@ -289,6 +298,7 @@ def list_articles(
     source_quality: str | None,
     has_hard_data: bool | None,
     entity: str | None,
+    topic: str | None,
     locality: int | None,
     documentalist: int | None,
     date_from: str | None,
@@ -316,6 +326,7 @@ def list_articles(
             date_to=date_to,
             q=q,
             entity=entity,
+            topic=topic,
             locality=locality,
             documentalist=documentalist,
         )

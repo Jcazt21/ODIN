@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { FilterBar, type HardDataFilter } from "@/components/reports/FilterBar"
 import { ReportsTable, Pagination } from "@/components/reports/ReportsTable"
 import { useArticleFilterOptions, useArticles } from "@/lib/queries/articles"
+import { useDebouncedTextFilters } from "@/lib/use-debounced-text-filters"
 import { useExportArticles } from "@/lib/queries/documentalists"
 import { OdinApiError, type ArticleListParams } from "@/lib/odin-api"
 
@@ -12,24 +13,6 @@ const PAGE_SIZE = 12
 // El orden se maneja desde las cabeceras de la tabla, no desde la barra de
 // filtros: dos controles para lo mismo se contradicen en cuanto uno cambia.
 const EMPTY_FILTERS: ArticleListParams = { sort: "published_at", order: "desc" }
-
-/** Debounce solo de los campos de texto libre (q, entity): clicks en selects,
- *  fechas, orden o paginación deben reflejarse de inmediato — antes heredaban
- *  los mismos 300ms de espera del texto y se sentían lentos. */
-function useDebouncedTextFilters(filters: ArticleListParams): ArticleListParams {
-  const [debounced, setDebounced] = useState(filters)
-  useEffect(() => {
-    const textChanged = filters.q !== debounced.q || filters.entity !== debounced.entity
-    if (!textChanged) {
-      setDebounced(filters)
-      return
-    }
-    const t = setTimeout(() => setDebounced(filters), 300)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters])
-  return debounced
-}
 
 export function ReportsPage() {
   const navigate = useNavigate()

@@ -47,13 +47,8 @@ def test_the_template_keeps_the_styles_the_export_writes():
     with _TEMPLATE.open("rb") as handle:
         estilos = {s.name for s in Document(handle).styles}
 
-    for requerido in [
-        "ODIN Title",
-        "ODIN Subtitle",
-        "ODIN Kicker",
-        "ODIN Report Title",
-        "ODIN Meta",
-        "ODIN Divider",
-        "ODIN Body",
-    ]:
+    # Solo la portada y el cuerpo van por estilo. El cuadro de ficha se formatea
+    # directamente porque dentro de una tabla los estilos de párrafo arrastran su
+    # espaciado y descuadran las celdas.
+    for requerido in ["ODIN Title", "ODIN Subtitle", "ODIN Body"]:
         assert requerido in estilos, f"la plantilla no define {requerido!r}"

@@ -60,6 +60,19 @@ def _read(resp) -> Document:
     return Document(io.BytesIO(resp.content))
 
 
+def _text(resp) -> str:
+    """Todo el texto del documento.
+
+    Los datos del reporte viven en el cuadro de ficha, que es una tabla, así que
+    mirar solo `doc.paragraphs` dejaría fuera justo lo que estas pruebas
+    verifican.
+    """
+    doc = _read(resp)
+    parrafos = [p.text for p in doc.paragraphs]
+    celdas = [c.text for t in doc.tables for r in t.rows for c in r.cells]
+    return "\n".join(parrafos + celdas)
+
+
 class TestExport:
     def test_returns_a_word_document(self, api_client, reports):
         resp = api_client.post(
@@ -75,7 +88,7 @@ class TestExport:
             "/api/articles/export", json={"article_ids": [reports[0]]}, headers=_headers()
         )
 
-        text = "\n".join(p.text for p in _read(resp).paragraphs)
+        text = _text(resp)
         assert "Reporte número 1" in text
         assert "Reporte número 2" not in text
 
@@ -86,7 +99,7 @@ class TestExport:
             "/api/articles/export", json={"article_ids": reports}, headers=_headers()
         )
 
-        text = "\n".join(p.text for p in _read(resp).paragraphs)
+        text = _text(resp)
         assert "Juan Pérez" in text
         assert "20/08/2026" in text
 
@@ -95,7 +108,7 @@ class TestExport:
             "/api/articles/export", json={"article_ids": reports}, headers=_headers()
         )
 
-        text = "\n".join(p.text for p in _read(resp).paragraphs)
+        text = _text(resp)
         assert "00:00" not in text
 
     def test_rejects_an_empty_selection(self, api_client, reports):
@@ -115,7 +128,7 @@ class TestExport:
         )
 
         assert resp.status_code == 200
-        text = "\n".join(p.text for p in _read(resp).paragraphs)
+        text = _text(resp)
         assert "Reporte número 1" in text
 
     def test_fails_when_nothing_selected_exists(self, api_client, reports):
@@ -136,6 +149,6 @@ class TestExport:
             "/api/articles/export", json={"article_ids": reports}, headers=_headers()
         )
 
-        text = "\n".join(p.text for p in _read(resp).paragraphs)
-        assert "Medio: Listín Diario" in text
+        text = _text(resp)
+        assert "Listín Diario" in text
         assert "listin_diario" not in text
