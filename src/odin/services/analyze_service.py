@@ -24,7 +24,12 @@ from odin.analysis.canonicalize import canonicalize_result
 from odin.analysis.local_analyzer import sentence_mentions_venue_word
 from odin.api import deps
 from odin.api.deps import log
-from odin.api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
+from odin.api.schemas import (
+    AnalyzePreviewEntity,
+    AnalyzeResult,
+    ArticleDetail,
+    SuggestedTopic,
+)
 from odin.core import url_guard
 from odin.core.config import settings
 from odin.core.observability import (
@@ -249,6 +254,30 @@ def run_analyze_job(job_id: str) -> None:
             # acá—. A nivel de módulo eso es un ciclo.
             from odin.services.locality_service import suggest_from_places
 
+            # Temas sugeridos por el clasificador por reglas sobre el catálogo.
+            # Puro y local (no LLM), cacheado a nivel de módulo. Solo se propone
+            # acá: nada se persiste hasta el POST /api/articles.
+            from odin.analysis.topic_classifier import classify as _classify_topics
+            from odin.db.topics import get_catalog as _topic_catalog
+
+            _topics_by_id = {t.id: t for t in _topic_catalog()}
+            suggested_topics = [
+                SuggestedTopic(
+                    topic_id=mt.topic_id,
+                    name=_topics_by_id[mt.topic_id].name,
+                    path=_topics_by_id[mt.topic_id].path,
+                    score=round(mt.score, 2),
+                    evidence=mt.evidence,
+                )
+                for mt in _classify_topics(
+                    extracted["title"],
+                    extracted["body"],
+                    ", ".join(result.topic_keywords) or None,
+                    result.main_topic,
+                )
+                if mt.topic_id in _topics_by_id
+            ]
+
             detail = AnalyzeResult(
                 already_saved=False,
                 source=resolved_source,
@@ -287,6 +316,7 @@ def run_analyze_job(job_id: str) -> None:
                 # Se resuelven acá y no en el analizador: el catálogo es una
                 # tabla administrable y `result.places` son strings crudos.
                 suggested_localities=suggest_from_places(session, result.places),
+                suggested_topics=suggested_topics,
             )
             job.status = "done"
             job.result_json = detail.model_dump_json()

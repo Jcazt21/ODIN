@@ -36,8 +36,18 @@ from odin.api.schemas import (
     EntityMention,
     SaveArticleRequest,
     SourceOption,
+    TopicResponse,
 )
-from odin.db.models import Article, ArticleLocality, CanonicalEntity, Entity, Locality, User
+from odin.db.models import (
+    Article,
+    ArticleLocality,
+    ArticleTopic,
+    CanonicalEntity,
+    Entity,
+    Locality,
+    Topic,
+    User,
+)
 from odin.scrapers import SCRAPERS, source_name
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import analyzer
@@ -388,12 +398,15 @@ def article_filters() -> ArticleFiltersResponse:
             ),
             key=lambda o: o.label,
         )
+        # Faceta del filtro por tema: el catálogo administrable (R4), no la
+        # lista de `main_topic` en texto libre que vivía acá de placeholder.
         topics = [
-            t
+            TopicResponse.model_validate(t)
             for t in session.scalars(
-                select(Article.main_topic).distinct().order_by(Article.main_topic)
+                select(Topic)
+                .where(Topic.is_active.is_(True))
+                .order_by(Topic.display_order, Topic.name)
             ).all()
-            if t
         ]
         sections = [
             s
@@ -612,6 +625,35 @@ def save_article(
                 confidence=link.confidence,
             )
             for link in locality_links
+        ])
+
+        # Temas: si el documentalista eligió alguno, esos mandan y quedan
+        # MANUAL; si no, corre el clasificador por reglas y lo que matchee por
+        # encima del umbral entra como AUTO. `main_topic` no se toca — es una
+        # de las señales de entrada del clasificador.
+        from odin.analysis.topic_classifier import classify as _classify_topics
+        from odin.db.topics import get_catalog as _topic_catalog
+
+        valid_topic_ids = {t.id for t in _topic_catalog()}
+        if req.topic_ids:
+            chosen = [
+                (tid, "MANUAL", None, None)
+                for tid in dict.fromkeys(req.topic_ids)
+                if tid in valid_topic_ids
+            ]
+        else:
+            chosen = [
+                (m.topic_id, "AUTO", round(m.score, 3), m.evidence)
+                for m in _classify_topics(
+                    req.title, req.body, req.topic_keywords, req.main_topic
+                )
+                if m.topic_id in valid_topic_ids
+            ]
+        session.add_all([
+            ArticleTopic(
+                article_id=article.id, topic_id=tid, origin=origin, score=score, evidence=ev
+            )
+            for tid, origin, score, ev in chosen
         ])
         session.commit()
         # Los PERSON nuevos deben poder resolver un apellido suelto en el

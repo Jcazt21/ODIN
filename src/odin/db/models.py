@@ -144,6 +144,10 @@ class Article(Base):
         back_populates="article",
         cascade="all, delete-orphan",
     )
+    topics: Mapped[list[ArticleTopic]] = relationship(
+        back_populates="article",
+        cascade="all, delete-orphan",
+    )
     dominant_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[dominant_actor_id])
     blamed_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[blamed_actor_id])
     credited_actor: Mapped[CanonicalEntity | None] = relationship(foreign_keys=[credited_actor_id])
@@ -600,6 +604,117 @@ class ArticleLocality(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ArticleLocality article={self.article_id} locality={self.locality_id} {self.kind}>"
+
+
+# Quién creó el vínculo artículo↔tema. `AUTO` lo propuso el clasificador por
+# reglas al ingresar el reporte; `MANUAL` lo puso o lo confirmó un
+# documentalista. Igual que `LOCALITY_ORIGINS`, es una tupla en el código y no
+# una tabla: son dos estados fijos del sistema, no catálogo que el cliente
+# administre.
+ARTICLE_TOPIC_ORIGINS = ("AUTO", "MANUAL")
+
+
+class Topic(Base):
+    """Un nodo del catálogo de temas. Jerárquico en UNA tabla (tema → subtema)
+    con `parent_id` a sí misma y `path` materializado ("/1/4/"), igual que
+    `Locality`: la consulta caliente es "todo lo que cuelga del tema Agua" y con
+    `path` es un `LIKE '/1/%'` indexable, sin CTE recursivo (que no se escribe
+    igual en Postgres, SQLite y SQL Server).
+
+    El catálogo lo entrega el cliente y se administra desde la UI: por eso es una
+    tabla con baja lógica (`is_active`) y no una constante en el código.
+    """
+
+    __tablename__ = "topics"
+    __table_args__ = (
+        UniqueConstraint("parent_id", "norm_key", name="uq_topic_sibling_name"),
+        Index("ix_topics_path", "path"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(160), index=True)
+    norm_key: Mapped[str] = mapped_column(String(160), index=True)
+    slug: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(String(500))
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("topics.id", ondelete="CASCADE"), index=True
+    )
+    path: Mapped[str] = mapped_column(String(255), default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+    parent: Mapped[Topic | None] = relationship(back_populates="children", remote_side=[id])
+    children: Mapped[list[Topic]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan"
+    )
+    aliases: Mapped[list[TopicAlias]] = relationship(
+        back_populates="topic", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Topic {self.name}>"
+
+
+class TopicAlias(Base):
+    """Otro término por el que la prensa nombra un tema: "acueducto",
+    "suministro de agua", "escasez de agua" → tema *Agua*. Es lo que le da al
+    cliente control directo sobre qué cuenta como cada tema, sin tocar código."""
+
+    __tablename__ = "topic_aliases"
+    __table_args__ = (
+        UniqueConstraint("topic_id", "alias_key", name="uq_topic_alias"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("topics.id", ondelete="CASCADE"), index=True
+    )
+    alias: Mapped[str] = mapped_column(String(160))
+    alias_key: Mapped[str] = mapped_column(String(160), index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    topic: Mapped[Topic] = relationship(back_populates="aliases")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<TopicAlias {self.alias} -> {self.topic_id}>"
+
+
+class ArticleTopic(Base):
+    """Vínculo N:M artículo↔tema. N:M y no una columna en `articles` porque una
+    nota participa de varios temas (el acueducto es agua + infraestructura).
+
+    `origin`: AUTO lo propuso el clasificador; MANUAL lo puso/confirmó un
+    documentalista. `score` es la confianza del match automático (NULL cuando es
+    MANUAL: un dato humano tiene autoría, no confianza estimada). `evidence` es
+    el término del catálogo que disparó el match, para poder explicar un match
+    raro."""
+
+    __tablename__ = "article_topics"
+    __table_args__ = (
+        UniqueConstraint("article_id", "topic_id", name="uq_article_topic"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("topics.id", ondelete="CASCADE"), index=True
+    )
+    score: Mapped[float | None] = mapped_column(Float)
+    origin: Mapped[str] = mapped_column(String(20), default="AUTO")
+    evidence: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    article: Mapped[Article] = relationship(back_populates="topics")
+    topic: Mapped[Topic] = relationship()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ArticleTopic article={self.article_id} topic={self.topic_id} {self.origin}>"
 
 
 # Roles del sistema. `documentalista` es quien captura y revisa reportes; `admin`

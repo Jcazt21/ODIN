@@ -47,6 +47,7 @@ from odin.api.routers import (
     localities,
     misc,
     scrape_jobs,
+    topics,
     users,
 )
 from odin.core import auth
@@ -109,6 +110,16 @@ async def _lifespan(app: FastAPI):
     except Exception as exc:
         log.warning("seed_catalog_load_failed", error=str(exc))
 
+    # El catalogo de temas, en su propio try por lo mismo que el geografico:
+    # un fallo aca no debe llevarse por delante el resto de las siembras.
+    try:
+        from odin.db import topics as topic_store
+        k = topic_store.load_seed()
+        if k:
+            log.info("seed_topics_loaded", topics=k)
+    except Exception:
+        log.exception("seed_topics_failed")
+
     # El catalogo geografico va en su PROPIO try: compartir el de las siglas
     # hacia que un fallo alla se llevara por delante la siembra de aqui, y al
     # reves. Ademas se registra con exception() y no warning(): si esto falla,
@@ -157,6 +168,7 @@ app.include_router(entities.router)
 app.include_router(aliases.router)
 app.include_router(canonical_entities.router)
 app.include_router(localities.router)
+app.include_router(topics.router)
 app.include_router(scrape_jobs.router)
 app.include_router(misc.router)
 app.include_router(users.router)
