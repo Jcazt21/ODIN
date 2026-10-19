@@ -117,7 +117,9 @@ def load_seed() -> int:
             session.flush()
             parent_path = "/"
             if parent_id is not None:
-                parent_path = session.get(Topic, parent_id).path
+                parent = session.get(Topic, parent_id)
+                if parent is not None:
+                    parent_path = parent.path
             row.path = f"{parent_path}{row.id}/"
             slug_to_id[slug] = row.id
             existing_slugs.add(slug)

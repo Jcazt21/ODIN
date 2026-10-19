@@ -635,6 +635,7 @@ def save_article(
         from odin.db.topics import get_catalog as _topic_catalog
 
         valid_topic_ids = {t.id for t in _topic_catalog()}
+        chosen: list[tuple[int, str, float | None, str | None]]
         if req.topic_ids:
             chosen = [
                 (tid, "MANUAL", None, None)

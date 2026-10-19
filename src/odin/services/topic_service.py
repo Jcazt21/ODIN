@@ -433,7 +433,7 @@ def frequency_by_topic(
                 anc.c.id,
                 anc.c.name,
                 day.label("day"),
-                func.count(func.distinct(Article.id)).label("count"),
+                func.count(func.distinct(Article.id)).label("total"),
             )
             .select_from(ArticleTopic)
             .join(Topic, Topic.id == ArticleTopic.topic_id)
@@ -449,7 +449,7 @@ def frequency_by_topic(
         if date_to and (parsed := _parse_date(date_to)):
             stmt = stmt.where(Article.published_at < parsed + timedelta(days=1))
         return [
-            TopicFrequencyRow(topic_id=r.id, name=r.name, day=str(r.day), count=r.count)
+            TopicFrequencyRow(topic_id=r.id, name=r.name, day=str(r.day), count=r.total)
             for r in session.execute(stmt).all()
         ]
     finally:

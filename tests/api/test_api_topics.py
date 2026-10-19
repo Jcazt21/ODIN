@@ -44,3 +44,29 @@ def test_delete_topic_with_articles_is_soft(api_client, sqlite_sessionmaker):
     assert r.status_code == 204
     s = sqlite_sessionmaker()
     assert s.get(Topic, tid).is_active is False  # no se borró
+
+
+def test_frequency_returns_real_counts_per_topic_and_day(api_client, sqlite_sessionmaker):
+    from datetime import datetime
+
+    from odin.db.models import Article, ArticleTopic, Topic
+    s = sqlite_sessionmaker()
+    t = Topic(name="Deportes", norm_key="deportes", slug="deportes-freq", path="/98/")
+    a1 = Article(source="acento", url="https://x/f1", title="t", body="b",
+                 published_at=datetime(2026, 10, 1, 12))
+    a2 = Article(source="acento", url="https://x/f2", title="t", body="b",
+                 published_at=datetime(2026, 10, 1, 15))
+    s.add_all([t, a1, a2]); s.flush()
+    s.add_all([
+        ArticleTopic(article_id=a1.id, topic_id=t.id, score=0.9, origin="AUTO"),
+        ArticleTopic(article_id=a2.id, topic_id=t.id, score=0.9, origin="AUTO"),
+    ])
+    s.commit(); tid = t.id; s.close()
+
+    r = api_client.get("/api/topics/frequency", headers=_h())
+    assert r.status_code == 200, r.text
+    rows = [x for x in r.json() if x["topic_id"] == tid]
+    assert len(rows) == 1
+    assert rows[0]["name"] == "Deportes"
+    assert rows[0]["day"] == "2026-10-01"
+    assert rows[0]["count"] == 2
