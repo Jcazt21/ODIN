@@ -29,7 +29,7 @@ export function LoginScreen({ onSuccess, theme }: LoginScreenProps) {
       setError(
         err instanceof OdinApiError
           ? err.message
-          : "No se pudo conectar con la API de Odin. ¿Está corriendo en el puerto 8000?"
+          : "No se pudo conectar con la API de Odin. ¿Está corriendo en el puerto 8001?"
       )
     } finally {
       setLoading(false)

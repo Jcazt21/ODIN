@@ -122,7 +122,7 @@ export function AnalyzePage() {
   const loading = analyzeMutation.isPending
   const saving = saveMutation.isPending
   const error = analyzeMutation.error
-    ? errorMessage(analyzeMutation.error, "No se pudo conectar con la API de Odin. ¿Está corriendo en el puerto 8000?")
+    ? errorMessage(analyzeMutation.error, "No se pudo conectar con la API de Odin. ¿Está corriendo en el puerto 8001?")
     : saveMutation.error
       ? errorMessage(saveMutation.error, "No se pudo guardar el artículo.")
       : null
