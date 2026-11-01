@@ -1,3 +1,4 @@
+import type * as React from "react"
 import { Select } from "@/components/ui/select"
 import { SentimentBadge } from "@/components/SentimentBadge"
 import { SentimentSegmented } from "@/components/SentimentSegmented"
@@ -10,6 +11,7 @@ import {
   toneVars,
 } from "@/lib/labels"
 import { formatDateFull } from "@/lib/format"
+import { cn } from "@/lib/utils"
 
 export interface AnalysisCardFields {
   title: string
@@ -51,13 +53,6 @@ const FRAMING_FIELDS = [
   ["Calidad de fuentes", "source_quality", SOURCE_LABELS] as const,
 ]
 
-const WEIGHT_BY_FIELD: Record<string, number> = {
-  framing: 82,
-  headline_intent: 64,
-  lead_orientation: 55,
-  source_quality: 48,
-}
-
 const ACTOR_FIELDS = [
   ["Actor dominante", "dominant_actor"] as const,
   ["Actor señalado", "blamed_actor"] as const,
@@ -82,140 +77,124 @@ export function AnalysisCard({
     .map((k) => k.trim())
     .filter(Boolean)
 
+  const hasAnalysis =
+    editable ||
+    [
+      value.framing,
+      value.headline_intent,
+      value.lead_orientation,
+      value.source_quality,
+      value.has_hard_data,
+      value.dominant_actor,
+      value.blamed_actor,
+      value.credited_actor,
+    ].some((v) => v != null)
+
+  const label = "text-xs font-medium text-muted-foreground"
+  const tile = "space-y-1.5 rounded-xl border bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]"
+  const editInput =
+    "h-9 w-full rounded-lg border border-dashed bg-transparent px-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  const meta = (name: string, content: React.ReactNode) => (
+    <span>
+      <span className="text-[var(--faint)]">{name} </span>
+      <span className="text-muted-foreground">{content}</span>
+    </span>
+  )
+
   return (
-    <div
-      className="odin-glass overflow-hidden rounded-xl border"
-      style={{ boxShadow: "var(--shadow-sm)" }}
-    >
-      {/* 1. Cabecera */}
-      <div className="space-y-3 px-6 py-[22px]">
-        <div className="flex flex-wrap items-center gap-2">
-          {editable ? (
-            <SentimentSegmented
-              value={(value.overall_sentiment as "POS" | "NEG" | "NEU" | null) ?? "NEU"}
-              onChange={(v) => patch({ overall_sentiment: v })}
-            />
-          ) : (
-            <SentimentBadge sentiment={value.overall_sentiment} score={value.sentiment_score} />
-          )}
-        </div>
-        <h1
-          className="text-[22px] leading-[1.3] font-semibold text-pretty"
-          style={{ letterSpacing: "-0.015em", maxWidth: "52ch" }}
-        >
+    <article className="flex flex-col gap-6">
+      {/* 1. Sentimiento, título y datos de la nota */}
+      <header className="space-y-3">
+        {editable ? (
+          <SentimentSegmented
+            value={(value.overall_sentiment as "POS" | "NEG" | "NEU" | null) ?? "NEU"}
+            onChange={(v) => patch({ overall_sentiment: v })}
+          />
+        ) : (
+          <SentimentBadge sentiment={value.overall_sentiment} score={value.sentiment_score} />
+        )}
+        <h2 className="max-w-[52ch] text-2xl leading-tight font-semibold tracking-tight text-pretty">
           <a href={value.url} target="_blank" rel="noreferrer" className="hover:underline">
             {value.title}
           </a>
-        </h1>
-        <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1 text-[12.5px]">
-          {value.documentalist !== undefined && (
-            <span>
-              <span style={{ color: "var(--faint)" }}>Documentalista </span>
-              {/* Mismo fallback que la columna de la tabla de reportes: sin
-                  documentalista es que lo trajo el rastreo, no que falte el dato. */}
-              <span style={{ color: "var(--muted-foreground)" }}>
-                {value.documentalist ?? "Automático"}
-              </span>
-            </span>
+        </h2>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          {/* Mismo fallback que la columna de la tabla de reportes: sin
+              documentalista es que lo trajo el rastreo, no que falte el dato. */}
+          {value.documentalist !== undefined && meta("Documentalista", value.documentalist ?? "Automático")}
+          {/* El nombre legible, no el slug: "Listín Diario" y no listin_diario. */}
+          {meta("Fuente", value.source_name || value.source)}
+          {editable ? (
+            <label className="flex items-center gap-1.5">
+              <span className="text-[var(--faint)]">Autor</span>
+              <input
+                value={value.authors ?? ""}
+                onChange={(e) => patch({ authors: e.target.value || null })}
+                className={cn(editInput, "h-8 w-56")}
+              />
+            </label>
+          ) : (
+            value.authors && meta("Autor", value.authors)
           )}
-          <span>
-            <span style={{ color: "var(--faint)" }}>Fuente </span>
-            {/* El nombre legible, no el slug: "Listín Diario" y no listin_diario. */}
-            <span style={{ color: "var(--muted-foreground)" }}>
-              {value.source_name || value.source}
-            </span>
-          </span>
-          {value.authors && (
-            <span>
-              <span style={{ color: "var(--faint)" }}>Autor </span>
-              <span style={{ color: "var(--muted-foreground)" }}>{value.authors}</span>
-            </span>
-          )}
-          {value.section && (
-            <span>
-              <span style={{ color: "var(--faint)" }}>Sección </span>
-              <span style={{ color: "var(--muted-foreground)" }}>{value.section}</span>
-            </span>
-          )}
-          <span>
-            <span style={{ color: "var(--faint)" }}>Publicado </span>
-            <span style={{ color: "var(--muted-foreground)" }}>{formatDateFull(value.published_at)}</span>
-          </span>
-          <a href={value.url} target="_blank" rel="noreferrer" className="font-mono hover:underline">
+          {value.section && meta("Sección", value.section)}
+          {meta("Publicado", formatDateFull(value.published_at))}
+          <a href={value.url} target="_blank" rel="noreferrer" className="font-mono text-xs text-muted-foreground hover:underline">
             ver original ↗
           </a>
         </div>
-      </div>
+      </header>
 
       {/* 2. Tema y palabras clave */}
-      <div className="grid gap-5 border-t px-6 py-[22px] sm:grid-cols-2" style={{ borderColor: "var(--border)" }}>
+      <section className="grid gap-5 border-t pt-6 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <p className="font-mono text-[10.5px] font-medium tracking-[0.12em] uppercase" style={{ color: "var(--faint)" }}>
-            Tema principal
-          </p>
+          <p className={label}>Tema principal</p>
           {editable ? (
             <input
               value={value.main_topic ?? ""}
               onChange={(e) => patch({ main_topic: e.target.value || null })}
-              className="h-8 w-full rounded-[7px] border border-dashed bg-transparent px-2 text-[13.5px] font-medium outline-none"
-              style={{ borderColor: "var(--border-strong)" }}
+              className={editInput}
             />
           ) : (
-            <p className="text-[13.5px] font-medium capitalize">{value.main_topic ?? "—"}</p>
+            <p className={cn("text-[15px] font-medium capitalize", !value.main_topic && "text-[var(--faint)]")}>
+              {value.main_topic ?? "—"}
+            </p>
           )}
         </div>
         <div className="space-y-1.5">
-          <p className="font-mono text-[10.5px] font-medium tracking-[0.12em] uppercase" style={{ color: "var(--faint)" }}>
-            Palabras clave
-          </p>
+          <p className={label}>Palabras clave</p>
           {editable ? (
             <input
               value={value.topic_keywords ?? ""}
               onChange={(e) => patch({ topic_keywords: e.target.value || null })}
-              className="h-8 w-full rounded-[7px] border border-dashed bg-transparent px-2 text-[13.5px] outline-none"
-              style={{ borderColor: "var(--border-strong)" }}
+              className={editInput}
             />
           ) : keywords.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {keywords.map((kw) => (
-                <span
-                  key={kw}
-                  className="inline-block rounded-[5px] border px-2 py-0.5 text-[11.5px] leading-[1.35]"
-                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
-                >
+                <span key={kw} className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                   {kw}
                 </span>
               ))}
             </div>
           ) : (
-            <p className="text-[13.5px]" style={{ color: "var(--faint)" }}>—</p>
+            <p className="text-sm text-[var(--faint)]">—</p>
           )}
         </div>
-      </div>
+      </section>
 
-      {/* 3. Análisis de encuadre */}
-      {(editable || value.framing != null) && (
-        <div className="border-t px-6 py-[22px]" style={{ borderColor: "var(--border)" }}>
-          <p className="mb-1 font-mono text-[10.5px] font-medium tracking-[0.12em] uppercase" style={{ color: "var(--faint)" }}>
-            Análisis de encuadre
-          </p>
-          <p className="mb-3 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
-            Cómo el medio construye la historia
-          </p>
-          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
-            {FRAMING_FIELDS.map(([label, field, labels]) => {
+      {/* 3. Resultado de un vistazo: una ficha por dato clave */}
+      {hasAnalysis && (
+        <section className="space-y-4 border-t pt-6">
+          <ul
+            aria-label="Resultado del análisis"
+            className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5"
+          >
+            {FRAMING_FIELDS.map(([name, field, labels]) => {
               const raw = value[field]
               const tone = toneVars(toneOf(raw))
-              const weight = WEIGHT_BY_FIELD[field] ?? 60
               return (
-                <div
-                  key={field}
-                  className="space-y-2 rounded-[9px] border p-3"
-                  style={{ background: tone.bg, borderColor: tone.border }}
-                >
-                  <p className="text-[11px] font-semibold tracking-[0.06em] uppercase" style={{ color: "var(--faint)" }}>
-                    {label}
-                  </p>
+                <li key={field} className={tile}>
+                  <p className={label}>{name}</p>
                   {editable ? (
                     <Select
                       dashed
@@ -230,78 +209,49 @@ export function AnalysisCard({
                       ))}
                     </Select>
                   ) : (
-                    <p className="text-[15px] leading-[1.25] font-semibold" style={{ color: tone.color }}>
-                      {raw ? (labels as Record<string, string>)[raw] ?? raw : "—"}
+                    <p
+                      className={cn("text-lg leading-snug font-semibold", !raw && "text-[var(--faint)]")}
+                      style={raw ? { color: tone.color } : undefined}
+                    >
+                      {raw ? ((labels as Record<string, string>)[raw] ?? raw) : "—"}
                     </p>
                   )}
-                  <div className="h-[3px] overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${weight}%`, background: tone.color }} />
-                  </div>
-                </div>
+                </li>
               )
             })}
-          </div>
+            <li className={tile}>
+              <p className={label}>Datos duros</p>
+              <p
+                className={cn(
+                  "text-lg leading-snug font-semibold",
+                  value.has_hard_data == null && "text-[var(--faint)]"
+                )}
+              >
+                {value.has_hard_data == null ? "—" : value.has_hard_data ? "Sí" : "No"}
+              </p>
+            </li>
+          </ul>
 
-          {/* 4. Actores */}
-          <div className="mt-3 grid items-end gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
-            {ACTOR_FIELDS.map(([label, field]) => (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {ACTOR_FIELDS.map(([name, field]) => (
               <div key={field} className="space-y-1">
-                <p className="text-[11px] font-medium" style={{ color: "var(--faint)" }}>
-                  {label}
-                </p>
+                <p className={label}>{name}</p>
                 {editable ? (
                   <input
                     value={value[field] ?? ""}
                     onChange={(e) => patch({ [field]: e.target.value || null } as Partial<AnalysisCardFields>)}
-                    className="h-8 w-full rounded-[7px] border border-dashed bg-transparent px-2 text-[13px] font-medium outline-none"
-                    style={{ borderColor: "var(--border-strong)" }}
+                    className={editInput}
                   />
+                ) : value[field] ? (
+                  <p className="text-[15px] font-medium">{value[field]}</p>
                 ) : (
-                  <p className="text-[13px] font-medium">{value[field] ?? "—"}</p>
+                  <p className="text-[15px] text-[var(--faint)]">—</p>
                 )}
               </div>
             ))}
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium" style={{ color: "var(--faint)" }}>
-                Datos duros
-              </p>
-              {(() => {
-                const hard = value.has_hard_data
-                const tone = toneVars(hard == null ? "neu" : hard ? "pos" : "neu")
-                return (
-                  <span
-                    className="inline-block rounded-[5px] border px-2 py-0.5 text-[11.5px] font-semibold"
-                    style={{ background: tone.bg, borderColor: tone.border, color: tone.color }}
-                  >
-                    {hard == null ? "—" : hard ? "Sí" : "No"}
-                  </span>
-                )
-              })()}
-            </div>
           </div>
-        </div>
+        </section>
       )}
-
-      {/* 5. Cuerpo del artículo */}
-      <div className="border-t px-6 py-[22px]" style={{ borderColor: "var(--border)" }}>
-        <p className="mb-1.5 font-mono text-[10.5px] font-medium tracking-[0.12em] uppercase" style={{ color: "var(--faint)" }}>
-          Cuerpo del artículo
-        </p>
-        <div
-          className="max-h-[230px] overflow-auto rounded-[9px] border px-[18px] py-4 text-[13.5px] leading-[1.7]"
-          style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
-        >
-          {(value.body ?? "")
-            .split(/\n+/)
-            .map((p) => p.trim())
-            .filter(Boolean)
-            .map((p, i) => (
-              <p key={i} className="text-pretty" style={{ marginBottom: "12px" }}>
-                {p}
-              </p>
-            ))}
-        </div>
-      </div>
-    </div>
+    </article>
   )
 }

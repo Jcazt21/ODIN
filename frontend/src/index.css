@@ -68,42 +68,34 @@
    en ambos (color de borde 1px), así que se define una sola vez. */
 :root {
     /* modo claro (default) */
-    --bg: oklch(0.963 0.004 262);
-    --surface: oklch(0.988 0.003 262);
-    --surface-2: oklch(0.955 0.006 262);
-    --surface-3: oklch(0.935 0.008 262);
-    /* Superficies "glass": esmeriladas sobre la aurora del fondo. El alpha va
-       alto a propósito (el vidrio difumina, no transparenta) y el desenfoque
-       se aplica con la utilidad .odin-glass más abajo. */
-    /* Alpha bastante más bajo que en oscuro: sobre un fondo claro el texto
-       mantiene contraste igual, y con blanco al 76% la aurora no se veía. */
-    --panel: oklch(0.988 0.003 262 / 0.55);
-    --panel-strong: oklch(0.988 0.003 262 / 0.72);
-    /* Borde de las superficies glass: hairline que recoge la luz del fondo.
-       Distinto de --border, que sigue siendo el separador interno opaco. */
-    --panel-border: oklch(0.86 0.008 262 / 0.7);
-    --border-strong: oklch(0.84 0.01 262);
-    --text: oklch(0.24 0.016 265);
-    --faint: oklch(0.65 0.012 265);
+    --bg: oklch(0.963 0.004 195);
+    --surface: oklch(0.988 0.003 195);
+    --surface-2: oklch(0.955 0.006 195);
+    --surface-3: oklch(0.935 0.008 195);
+    /* Superficies planas y opacas: sin vidrio ni transparencia. */
+    --panel: var(--surface);
+    --panel-strong: var(--surface);
+    --panel-border: var(--border);
+    --border-strong: oklch(0.84 0.01 195);
+    --text: oklch(0.24 0.016 195);
+    --faint: oklch(0.54 0.012 195);
 
-    --accent-hover: #3700B3;
+    --accent-hover: oklch(0.41 0.09 185);
     --accent-fg: #ffffff;
-    --accent-soft: oklch(0.955 0.028 296);
-    --accent-border: oklch(0.86 0.07 296);
+    --accent-soft: oklch(0.955 0.025 185);
+    --accent-border: oklch(0.86 0.05 185);
 
-    --pos: #1B873B;
-    --pos-soft: oklch(0.955 0.035 150);
-    --neg: #B00020;
+    --pos: oklch(0.47 0.12 135);
+    --pos-soft: oklch(0.955 0.035 135);
+    --neg: oklch(0.5 0.16 25);
     --neg-soft: oklch(0.955 0.035 20);
-    --neu: oklch(0.5 0.012 265);
-    --neu-soft: oklch(0.955 0.004 265);
+    --neu: oklch(0.5 0.012 195);
+    --neu-soft: oklch(0.955 0.004 195);
     --warn: oklch(0.52 0.12 75);
     --warn-soft: oklch(0.96 0.05 85);
 
-    /* El `inset` es el brillo superior del glass (el filo iluminado de la
-       tarjeta). Va en la sombra para que todas las superficies lo hereden. */
-    --shadow: inset 0 1px 0 oklch(1 0 0 / 0.7), 0 1px 2px oklch(0.24 0.02 265 / 0.06), 0 8px 24px -12px oklch(0.24 0.02 265 / 0.14);
-    --shadow-sm: inset 0 1px 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0.24 0.02 265 / 0.07);
+    --shadow: 0 2px 4px oklch(0.24 0.02 195 / 0.05), 0 12px 28px -10px oklch(0.24 0.02 195 / 0.16);
+    --shadow-sm: 0 2px 8px -2px oklch(0.24 0.02 195 / 0.1);
 
     /* alias semánticos de shadcn -> primitivos, para no reescribir button/badge/card/alert/input/separator/skeleton */
     --background: var(--bg);
@@ -112,16 +104,16 @@
     --card-foreground: var(--text);
     --popover: var(--panel-strong);
     --popover-foreground: var(--text);
-    --primary: #6200EE;
+    --primary: oklch(0.48 0.095 185);
     --primary-foreground: var(--accent-fg);
     --secondary: var(--surface-2);
     --secondary-foreground: var(--text);
     --muted: var(--surface-2);
-    --muted-foreground: oklch(0.52 0.014 265);
+    --muted-foreground: oklch(0.52 0.014 195);
     --accent: var(--accent-soft);
     --accent-foreground: var(--primary);
     --destructive: var(--neg);
-    --border: oklch(0.905 0.007 262);
+    --border: oklch(0.905 0.007 195);
     --input: var(--surface-2);
     --ring: var(--primary);
     --success: var(--pos);
@@ -131,48 +123,51 @@
     --chart-3: var(--warn);
     --chart-4: var(--neg);
     --chart-5: var(--neu);
-    --radius: 0.625rem;
-    --sidebar: var(--panel);
-    --sidebar-foreground: var(--text);
+    --radius: 0.75rem;
+
+    /* Marco verde en degradado: el sidebar vive sobre él y el contenido en la hoja. */
+    --shell-from: oklch(0.27 0.05 190);
+    --shell-to: oklch(0.36 0.08 182);
+    --shell-gradient: linear-gradient(165deg, var(--shell-from), var(--shell-to));
+    --sheet: var(--surface);
+    --sidebar: transparent;
+    --sidebar-foreground: oklch(0.97 0.005 190);
     --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: var(--accent-fg);
-    --sidebar-accent: var(--surface-2);
-    --sidebar-accent-foreground: var(--text);
-    --sidebar-border: var(--border);
+    --sidebar-accent: oklch(0.21 0.05 190);
+    --sidebar-accent-foreground: oklch(0.99 0.003 190);
+    --sidebar-border: oklch(1 0 0 / 0.12);
     --sidebar-ring: var(--primary);
 }
 
 [data-theme="dark"] {
-    --bg: oklch(0.185 0.012 265);
-    --surface: oklch(0.225 0.013 265);
-    --surface-2: oklch(0.255 0.014 265);
-    --surface-3: oklch(0.285 0.015 265);
-    --panel: oklch(0.225 0.013 265 / 0.66);
-    --panel-strong: oklch(0.225 0.013 265 / 0.82);
-    --panel-border: oklch(1 0 0 / 0.14);
-    --border: oklch(0.315 0.014 265);
-    --border-strong: oklch(0.4 0.016 265);
-    --text: oklch(0.955 0.004 265);
-    --muted-foreground: oklch(0.71 0.012 265);
-    --faint: oklch(0.58 0.012 265);
+    --bg: oklch(0.145 0.01 195);
+    --surface: oklch(0.185 0.011 195);
+    --surface-2: oklch(0.22 0.012 195);
+    --surface-3: oklch(0.25 0.013 195);
+    --border: oklch(0.28 0.014 195);
+    --border-strong: oklch(0.4 0.016 195);
+    --text: oklch(0.94 0.006 195);
+    --muted-foreground: oklch(0.71 0.012 195);
+    --faint: oklch(0.62 0.012 195);
 
-    --primary: #03DAC6;
-    --accent-hover: oklch(0.9 0.13 180);
-    --accent-fg: #000000;
-    --accent-soft: oklch(0.32 0.06 185);
-    --accent-border: oklch(0.45 0.08 185);
+    --primary: oklch(0.78 0.11 185);
+    --accent-hover: oklch(0.84 0.1 185);
+    --accent-fg: oklch(0.2 0.03 195);
+    --accent-soft: oklch(0.31 0.05 185);
+    --accent-border: oklch(0.45 0.07 185);
 
-    --pos: #4ADE80;
-    --pos-soft: oklch(0.32 0.07 150);
-    --neg: oklch(0.7 0.17 22);
-    --neg-soft: oklch(0.33 0.08 20);
-    --neu: oklch(0.72 0.012 265);
-    --neu-soft: oklch(0.3 0.008 265);
-    --warn: oklch(0.82 0.12 80);
-    --warn-soft: oklch(0.33 0.05 80);
+    --pos: oklch(0.8 0.19 152);
+    --pos-soft: oklch(0.26 0.07 152);
+    --neg: oklch(0.72 0.2 22);
+    --neg-soft: oklch(0.26 0.08 22);
+    --neu: oklch(0.72 0.012 195);
+    --neu-soft: oklch(0.26 0.008 195);
+    --warn: oklch(0.84 0.15 82);
+    --warn-soft: oklch(0.26 0.06 82);
 
-    --shadow: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -14px oklch(0 0 0 / 0.6);
-    --shadow-sm: inset 0 1px 0 oklch(1 0 0 / 0.08), 0 1px 2px oklch(0 0 0 / 0.35);
+    --shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -14px oklch(0 0 0 / 0.6);
+    --shadow-sm: 0 2px 8px -2px oklch(0 0 0 / 0.45);
 
     --primary-foreground: var(--accent-fg);
     --muted: var(--surface-2);
@@ -188,78 +183,17 @@
     --chart-3: var(--warn);
     --chart-4: var(--neg);
     --chart-5: var(--neu);
-    --sidebar: var(--panel);
-    --sidebar-foreground: var(--text);
+    --shell-from: oklch(0.15 0.03 190);
+    --shell-to: oklch(0.22 0.05 182);
+    --sheet: var(--surface);
+    --sidebar: transparent;
+    --sidebar-foreground: oklch(0.97 0.005 190);
     --sidebar-primary: var(--primary);
     --sidebar-primary-foreground: var(--accent-fg);
-    --sidebar-accent: var(--surface-2);
-    --sidebar-accent-foreground: var(--text);
-    --sidebar-border: var(--border);
+    --sidebar-accent: oklch(0.15 0.04 190);
+    --sidebar-accent-foreground: oklch(0.99 0.003 190);
+    --sidebar-border: oklch(1 0 0 / 0.12);
     --sidebar-ring: var(--primary);
-}
-
-/* variantes opcionales de acento, activables con data-accent="indigo|teal" */
-[data-accent="indigo"] {
-    --primary: #3700B3;
-    --accent-hover: #24007a;
-}
-[data-theme="dark"][data-accent="indigo"] {
-    --primary: oklch(0.64 0.2 288);
-}
-[data-accent="teal"] {
-    --primary: #018786;
-    --accent-fg: #ffffff;
-}
-[data-theme="dark"][data-accent="teal"] {
-    --primary: #03DAC6;
-    --accent-fg: #000000;
-}
-
-/* ── Superficies glass ──────────────────────────────────────────────────────
-   Un solo lugar donde vive la receta del vidrio esmerilado: fondo translúcido
-   + hairline + desenfoque del fondo. Los dos knobs son --glass-blur y
-   --glass-saturate; el alpha se ajusta en --panel / --panel-strong.
-
-   Sobre el costo: backdrop-filter recalcula el desenfoque cada vez que cambia
-   lo que hay detrás, y detrás hay una aurora animada. Por eso el fondo corre a
-   fps y resolución reducidos (ver SOFT_AURORA_QUALITY en lib/aurora-config.ts)
-   y ningún overlay a pantalla completa lleva blur — el gasto queda acotado al
-   área real de las tarjetas. */
-:root {
-  --glass-blur: 16px;
-  /* En claro el vidrio lava el color del fondo, así que satura más para que
-     el tinte de la aurora se siga leyendo a través de la tarjeta. */
-  --glass-saturate: 1.8;
-}
-
-[data-theme="dark"] {
-  --glass-saturate: 1.35;
-}
-
-@layer components {
-  .odin-glass,
-  .odin-glass-strong {
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-    border-color: var(--panel-border);
-  }
-  .odin-glass {
-    background: var(--panel);
-  }
-  .odin-glass-strong {
-    background: var(--panel-strong);
-  }
-
-  /* Sin soporte de backdrop-filter no hay difuminado que compense la
-     transparencia, así que las superficies se vuelven casi opacas. */
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .odin-glass {
-      background: color-mix(in oklab, var(--surface) 92%, transparent);
-    }
-    .odin-glass-strong {
-      background: color-mix(in oklab, var(--surface) 96%, transparent);
-    }
-  }
 }
 
 @layer base {
@@ -271,6 +205,11 @@
     }
   html {
     @apply font-sans;
+    accent-color: var(--primary);
+    }
+  ::selection {
+    background: var(--accent-border);
+    color: var(--text);
     }
 }
 
@@ -283,9 +222,12 @@
   to { transform: rotate(360deg); }
 }
 
-@keyframes odinShimmer {
-  from { background-position: -200% 0; }
-  to { background-position: 200% 0; }
+/* Movimiento: solo transform y opacity (compositor, sin layout ni paint), así
+   el hilo principal queda libre y la animación sigue a la frecuencia de la
+   pantalla (90/120 Hz). Entradas de una sola vez, <300ms, ease-out fuerte. `backwards` (no `both`): al terminar no queda ningún
+   transform residual que cree contexto de apilamiento. */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @keyframes odinIn {
@@ -293,10 +235,51 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes odinPop {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes odinFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes odinExpand {
+  from { opacity: 0; grid-template-rows: 0fr; }
+  to { opacity: 1; grid-template-rows: 1fr; }
+}
+
+@layer components {
+  /* Filas que se despliegan: el hijo directo lleva `min-h-0 overflow-hidden`. */
+  .odin-expand {
+    display: grid;
+    animation: odinExpand 180ms var(--ease-out) backwards;
+  }
+  /* Contenido que aparece: sube 6px mientras se revela. */
+  .odin-enter {
+    animation: odinIn 200ms var(--ease-out) backwards;
+  }
+  /* Paneles, chips y diálogos: crecen desde casi su tamaño final. */
+  .odin-pop {
+    animation: odinPop 160ms var(--ease-out) backwards;
+  }
+  .odin-fade {
+    animation: odinFade 160ms var(--ease-out) backwards;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+  /* Menos movimiento, no cero: se conserva el fundido, se quita el desplazamiento. */
+  .odin-enter, .odin-pop, .odin-fade, .odin-expand {
+    animation-name: odinFade !important;
+    animation-duration: 160ms !important;
+  }
+  .animate-pulse, [style*="odinPulse"] {
+    animation: none !important;
   }
 }

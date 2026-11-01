@@ -13,7 +13,7 @@ vi.mock("@/lib/odin-api", async () => {
 
 const FACETS = {
   sources: [],
-  topics: ["policía nacional", "banco central"],
+  topics: [{ id: 1, name: "policía nacional", slug: "t1", description: null, parent_id: null, path: "/1/", is_active: true, display_order: 0, article_count: 0 }, { id: 2, name: "banco central", slug: "t2", description: null, parent_id: null, path: "/2/", is_active: true, display_order: 0, article_count: 0 }],
   sections: [],
   sentiments: [],
   framing: [],
@@ -23,7 +23,7 @@ const FACETS = {
   documentalists: [],
 } as unknown as ArticleFilterOptions
 
-function renderBar(filters: ArticleListParams = {}) {
+async function renderBar(filters: ArticleListParams = {}) {
   const onChange = vi.fn()
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -41,6 +41,9 @@ function renderBar(filters: ArticleListParams = {}) {
       />
     </QueryClientProvider>
   )
+  // Los filtros avanzados viven tras «Más filtros»; si aún no se abrieron, se abren.
+  const toggle = screen.getAllByRole("button", { name: /más filtros/i }).at(-1)!
+  if (toggle.getAttribute("aria-expanded") === "false") await userEvent.setup().click(toggle)
   return onChange
 }
 
@@ -50,9 +53,9 @@ describe("FilterBar — filtro por tema", () => {
        `onChange` es un espía: se parte de lo ya escrito y se agrega la última
        letra, que es lo que realmente ocurre tecla a tecla en la página. */
     const user = userEvent.setup()
-    const onChange = renderBar({ topic: "policí" })
+    const onChange = await renderBar({ topic: "policí" })
 
-    await user.type(await screen.findByLabelText(/tema/i), "a")
+    await user.type(await screen.findByLabelText(/^tema$/i), "a")
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ topic: "policía" }))
   })
@@ -61,9 +64,9 @@ describe("FilterBar — filtro por tema", () => {
     /* Texto libre con sugerencias, igual que el campo Tema del formulario
        manual: `main_topic` no está normalizado, así que un desplegable cerrado
        dejaría fuera cualquier variante que no esté en la lista. */
-    renderBar()
+    await renderBar()
 
-    const tema = await screen.findByLabelText(/tema/i)
+    const tema = await screen.findByLabelText(/^tema$/i)
     expect(tema.tagName).toBe("INPUT")
     const sugerencias = document.getElementById(tema.getAttribute("list") ?? "")
     expect(sugerencias?.querySelectorAll("option").length).toBe(2)
@@ -72,9 +75,9 @@ describe("FilterBar — filtro por tema", () => {
   it("limpia el filtro cuando se vacía la caja", async () => {
     /* Un string vacío en la URL filtraría por "" en vez de no filtrar. */
     const user = userEvent.setup()
-    const onChange = renderBar({ topic: "policía" })
+    const onChange = await renderBar({ topic: "policía" })
 
-    await user.clear(await screen.findByLabelText(/tema/i))
+    await user.clear(await screen.findByLabelText(/^tema$/i))
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ topic: undefined }))
   })

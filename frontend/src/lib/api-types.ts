@@ -139,6 +139,8 @@ export interface paths {
          *
          *     `locality` es el id de un lugar del catálogo e incluye su subárbol: filtrar
          *     por la provincia Santiago trae también lo marcado en sus municipios.
+         *     `author` es un nombre de autor completo (no subcadena). `topic_id` incluye
+         *     el subárbol del tema, como `locality`.
          *     `documentalist` es el id del documentalista que dejó guardado el reporte.
          *
          *     `sort` es la columna (`published_at`, `source`, `analyzed_on`) y `order`
@@ -261,6 +263,23 @@ export interface paths {
          *     puede exigir sobre su propio contenido o el de una persona nombrada.
          */
         delete: operations["delete_article_api_articles__article_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Authors */
+        get: operations["list_authors_api_authors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -542,6 +561,145 @@ export interface paths {
         post?: never;
         /** Delete Article Locality */
         delete: operations["delete_article_locality_api_articles__article_id__localities__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Topic Tree */
+        get: operations["topic_tree_api_topics_tree_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/frequency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Topic Frequency */
+        get: operations["topic_frequency_api_topics_frequency_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/unclassified": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Unclassified */
+        get: operations["unclassified_api_topics_unclassified_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Topics */
+        get: operations["list_topics_api_topics_get"];
+        put?: never;
+        /** Create Topic */
+        post: operations["create_topic_api_topics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/{topic_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Topic */
+        put: operations["update_topic_api_topics__topic_id__put"];
+        post?: never;
+        /** Delete Topic */
+        delete: operations["delete_topic_api_topics__topic_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/{topic_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Alias */
+        post: operations["add_alias_api_topics__topic_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/topics/{topic_id}/aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Alias */
+        delete: operations["delete_alias_api_topics__topic_id__aliases__alias_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/articles/{article_id}/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Article Topics */
+        get: operations["list_article_topics_api_articles__article_id__topics_get"];
+        /** Replace Article Topics */
+        put: operations["replace_article_topics_api_articles__article_id__topics_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -932,6 +1090,11 @@ export interface components {
              * @default []
              */
             suggested_localities: components["schemas"]["SuggestedLocality"][];
+            /**
+             * Suggested Topics
+             * @default []
+             */
+            suggested_topics: components["schemas"]["SuggestedTopic"][];
         };
         /**
          * ArticleDetail
@@ -1032,7 +1195,7 @@ export interface components {
              * Topics
              * @default []
              */
-            topics: string[];
+            topics: components["schemas"]["TopicResponse"][];
             /** Sentiments */
             sentiments: string[];
             /** Framing */
@@ -1166,13 +1329,37 @@ export interface components {
              */
             entity_count: number;
         };
+        /** ArticleTopicPayload */
+        ArticleTopicPayload: {
+            /** Topic Id */
+            topic_id: number;
+        };
+        /** ArticleTopicResponse */
+        ArticleTopicResponse: {
+            /** Id */
+            id: number;
+            /** Topic Id */
+            topic_id: number;
+            /** Name */
+            name: string;
+            /** Origin */
+            origin: string;
+            /** Score */
+            score: number | null;
+            /** Evidence */
+            evidence: string | null;
+        };
         /**
          * ArticleUpdatePayload
          * @description Corrige el análisis (no el contenido escrapeado) de un artículo ya
          *     guardado: solo los campos que produce el analizador, nunca `title`/`body`/
-         *     `url` (eso es lo que decía la fuente, no un juicio del sistema).
+         *     `url` (eso es lo que decía la fuente, no un juicio del sistema). `authors`
+         *     es la excepción: el scraper a veces lo entrega mal escrito (tildes rotas,
+         *     el medio como autor) y el documentalista tiene que poder corregirlo.
          */
         ArticleUpdatePayload: {
+            /** Authors */
+            authors?: string | null;
             /** Main Topic */
             main_topic?: string | null;
             /** Topic Keywords */
@@ -1197,6 +1384,24 @@ export interface components {
             blamed_actor?: string | null;
             /** Credited Actor */
             credited_actor?: string | null;
+        };
+        /** AuthorListResponse */
+        AuthorListResponse: {
+            /** Items */
+            items: components["schemas"]["AuthorSummary"][];
+            /** Total */
+            total: number;
+        };
+        /** AuthorSummary */
+        AuthorSummary: {
+            /** Name */
+            name: string;
+            /** Article Count */
+            article_count: number;
+            /** Sources */
+            sources: string[];
+            /** Last Published At */
+            last_published_at: string | null;
         };
         /** CanonicalEntityArticleMention */
         CanonicalEntityArticleMention: {
@@ -1753,6 +1958,11 @@ export interface components {
              * @default []
              */
             localities: components["schemas"]["ArticleLocalityPayload"][];
+            /**
+             * Topic Ids
+             * @default []
+             */
+            topic_ids: number[];
         };
         /** ScrapeJobAccepted */
         ScrapeJobAccepted: {
@@ -1874,6 +2084,24 @@ export interface components {
             /** Matched Text */
             matched_text: string;
         };
+        /**
+         * SuggestedTopic
+         * @description Tema propuesto por el clasificador en la vista previa, sin persistir.
+         *     Si el documentalista lo deja, vuelve como `ArticleTopicPayload` y se guarda
+         *     con origin="AUTO"; si lo quita, no queda rastro.
+         */
+        SuggestedTopic: {
+            /** Topic Id */
+            topic_id: number;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Score */
+            score: number;
+            /** Evidence */
+            evidence: string;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -1887,6 +2115,119 @@ export interface components {
             expires_in: number;
             /** Username */
             username: string;
+        };
+        /** TopicAliasPayload */
+        TopicAliasPayload: {
+            /** Alias */
+            alias: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+        };
+        /** TopicAliasResponse */
+        TopicAliasResponse: {
+            /** Id */
+            id: number;
+            /** Topic Id */
+            topic_id: number;
+            /** Alias */
+            alias: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /** TopicFrequencyRow */
+        TopicFrequencyRow: {
+            /** Topic Id */
+            topic_id: number;
+            /** Name */
+            name: string;
+            /** Day */
+            day: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * TopicNode
+         * @description Nodo del catálogo con sus hijos y alias: el árbol entero de una vez para
+         *     el administrador de temas del frontend, mismo criterio que `LocalityNode`.
+         */
+        TopicNode: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Parent Id */
+            parent_id: number | null;
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: string[];
+            /**
+             * Article Count
+             * @default 0
+             */
+            article_count: number;
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["TopicNode"][];
+        };
+        /** TopicPayload */
+        TopicPayload: {
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description?: string | null;
+            /** Parent Id */
+            parent_id?: number | null;
+            /**
+             * Display Order
+             * @default 0
+             */
+            display_order: number;
+        };
+        /** TopicResponse */
+        TopicResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Description */
+            description: string | null;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Path */
+            path: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Display Order */
+            display_order: number;
+            /**
+             * Article Count
+             * @default 0
+             */
+            article_count: number;
+        };
+        /** TopicUpdatePayload */
+        TopicUpdatePayload: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Display Order */
+            display_order?: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2084,6 +2425,8 @@ export interface operations {
                 topic?: string | null;
                 locality?: number | null;
                 documentalist?: number | null;
+                author?: string | null;
+                topic_id?: number | null;
                 date_from?: string | null;
                 date_to?: string | null;
                 sort?: string | null;
@@ -2306,6 +2649,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_authors_api_authors_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                source?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                sort?: "articles" | "name";
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorListResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -2934,6 +3314,365 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    topic_tree_api_topics_tree_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicNode"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    topic_frequency_api_topics_frequency_get: {
+        parameters: {
+            query?: {
+                date_from?: string | null;
+                date_to?: string | null;
+                parent_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicFrequencyRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unclassified_api_topics_unclassified_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_topics_api_topics_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                parent_id?: number | null;
+                include_inactive?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_topic_api_topics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_topic_api_topics__topic_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topic_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicUpdatePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_topic_api_topics__topic_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topic_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_alias_api_topics__topic_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topic_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicAliasPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicAliasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_alias_api_topics__topic_id__aliases__alias_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                topic_id: number;
+                alias_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_article_topics_api_articles__article_id__topics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleTopicResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_article_topics_api_articles__article_id__topics_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArticleTopicPayload"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArticleTopicResponse"][];
+                };
             };
             /** @description Validation Error */
             422: {

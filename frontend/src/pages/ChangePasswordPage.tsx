@@ -49,7 +49,7 @@ export function ChangePasswordPage({ onDone }: { onDone: () => void }) {
     >
       <form
         onSubmit={handleSubmit}
-        className="odin-glass w-full max-w-sm rounded-xl border px-6 py-6"
+        className="w-full max-w-sm rounded-xl border bg-card px-6 py-6"
         style={{ boxShadow: "var(--shadow-sm)" }}
       >
         <h1 className="text-[17px] font-semibold">Elegí tu contraseña</h1>

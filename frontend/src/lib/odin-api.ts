@@ -112,9 +112,27 @@ export interface ArticleListParams {
   sort?: "published_at" | "source" | "analyzed_on"
   order?: "asc" | "desc"
   documentalist?: number
+  /** Nombre completo de un autor (coincidencia por nombre, no por subcadena). */
+  author?: string
+  /** Id de un tema del catálogo; incluye su subárbol. */
+  topic_id?: number
   limit?: number
   offset?: number
 }
+
+export type AuthorSummary = components["schemas"]["AuthorSummary"]
+
+export type AuthorListResponse = components["schemas"]["AuthorListResponse"]
+
+export interface AuthorListParams {
+  q?: string
+  source?: string
+  sort?: "articles" | "name"
+  limit?: number
+  offset?: number
+}
+
+export type TopicNode = components["schemas"]["TopicNode"]
 
 export type EntityAlias = components["schemas"]["EntityAliasResponse"]
 
@@ -368,6 +386,21 @@ export function listArticles(params: ArticleListParams = {}): Promise<ArticleLis
   }
   const s = qs.toString()
   return request<ArticleListResponse>(`/api/articles${s ? `?${s}` : ""}`)
+}
+
+export function listAuthors(params: AuthorListParams = {}): Promise<AuthorListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return request<AuthorListResponse>(`/api/authors${s ? `?${s}` : ""}`)
+}
+
+export function getTopicTree(params: { include_inactive?: boolean } = {}): Promise<TopicNode[]> {
+  const s = params.include_inactive ? "?include_inactive=true" : ""
+  return request<TopicNode[]>(`/api/topics/tree${s}`)
 }
 
 export function getArticle(id: number): Promise<ArticleAnalysis> {

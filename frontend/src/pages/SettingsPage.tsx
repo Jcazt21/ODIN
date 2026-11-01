@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader"
 import { useOutletContext } from "react-router-dom"
 import { UsersCard } from "@/components/UsersCard"
 import { useMe } from "@/lib/queries/auth"
@@ -23,12 +24,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <header>
-        <h1 className="text-[19px] font-semibold">Ajustes</h1>
-        <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--faint)" }}>
-          Usuarios del sistema y preferencias de la interfaz.
-        </p>
-      </header>
+      <PageHeader title="Ajustes" subtitle="Usuarios del sistema y preferencias de la interfaz." />
 
       {isAdmin && (
         <div className="mt-4">
@@ -36,7 +32,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      <div className="odin-glass mt-4 rounded-xl border" style={{ boxShadow: "var(--shadow)" }}>
+      <div className="mt-4 rounded-xl border bg-card" style={{ boxShadow: "var(--shadow)" }}>
         <div className="flex items-center justify-between gap-4 p-4">
           <div>
             <div className="text-[14px] font-medium">Tema</div>

@@ -43,7 +43,7 @@ const TREE = [
   },
 ]
 
-function renderBar(filters: ArticleListParams = {}) {
+async function renderBar(filters: ArticleListParams = {}) {
   const onChange = vi.fn()
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -61,6 +61,9 @@ function renderBar(filters: ArticleListParams = {}) {
       />
     </QueryClientProvider>
   )
+  // Los filtros avanzados viven tras «Más filtros»; si aún no se abrieron, se abren.
+  const toggle = screen.getAllByRole("button", { name: /más filtros/i }).at(-1)!
+  if (toggle.getAttribute("aria-expanded") === "false") await userEvent.setup().click(toggle)
   return onChange
 }
 
@@ -71,14 +74,14 @@ describe("FilterBar — filtro por lugar", () => {
   })
 
   it("ofrece buscar un lugar", async () => {
-    renderBar()
+    await renderBar()
 
     expect(await screen.findByLabelText(/lugar/i)).toBeTruthy()
   })
 
   it("filtra por el id del lugar elegido", async () => {
     const user = userEvent.setup()
-    const onChange = renderBar()
+    const onChange = await renderBar()
 
     await user.type(await screen.findByLabelText(/lugar/i), "Santiago")
     await user.click(await screen.findByText("Santiago"))
@@ -90,7 +93,7 @@ describe("FilterBar — filtro por lugar", () => {
     /* El árbol trae los alias justamente para buscar en memoria: quien escribe
        "Navarrete" busca Villa Bisonó. */
     const user = userEvent.setup()
-    renderBar()
+    await renderBar()
 
     await user.type(await screen.findByLabelText(/lugar/i), "Navarrete")
 
@@ -102,7 +105,7 @@ describe("FilterBar — filtro por lugar", () => {
        de lugar traía su etiqueta visible encima, la fila crecía y las lupas y
        los chevrones —anclados a top-1/2 de un envoltorio ya estirado— caían
        por debajo de sus controles. El nombre accesible sigue existiendo. */
-    renderBar()
+    await renderBar()
 
     const lugar = await screen.findByLabelText(/lugar/i)
     // La etiqueta sigue en el DOM para lectores de pantalla, pero oculta a la
@@ -114,11 +117,11 @@ describe("FilterBar — filtro por lugar", () => {
   it("explica el roll-up solo cuando hay un lugar elegido", async () => {
     /* Antes ocupaba dos líneas siempre, empujando la grilla. El aviso importa
        recién cuando el filtro está puesto y los conteos podrían sorprender. */
-    renderBar()
+    await renderBar()
     await screen.findByLabelText(/lugar/i)
     expect(screen.queryByText(/incluye/i)).toBeNull()
 
-    renderBar({ locality: 10 })
+    await renderBar({ locality: 10 })
 
     expect(await screen.findByText(/incluye/i)).toBeTruthy()
   })

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader"
 import { useMe } from "@/lib/queries/auth"
 import { formatDay } from "@/lib/format"
 import {
@@ -28,15 +29,13 @@ export function DocumentalistsPage() {
 
   return (
     <div>
-      <header>
-        <h1 className="text-[19px] font-semibold">Documentalistas</h1>
-        <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--faint)" }}>
-          Quién captura los reportes{admin ? " y cuánto lleva cada uno" : ""}.
-        </p>
-      </header>
+      <PageHeader
+        title="Documentalistas"
+        subtitle={`Quién captura los reportes${admin ? " y cuánto lleva cada uno" : ""}.`}
+      />
 
       <div
-        className="odin-glass mt-4 overflow-x-auto rounded-xl border"
+        className="mt-4 overflow-x-auto rounded-xl border bg-card"
         style={{ boxShadow: "var(--shadow)" }}
       >
         <table className="w-full text-[12.5px]">

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader"
 import { useId, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation } from "@tanstack/react-query"
@@ -102,9 +103,9 @@ export function NewReportPage() {
     mutation.error instanceof OdinApiError ? mutation.error.message : null
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl flex-col gap-6 py-6">
+    <form onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-6">
       <header className="flex items-baseline justify-between">
-        <h1 className="text-[22px] font-semibold">Nuevo reporte</h1>
+        <PageHeader title="Nuevo reporte" />
         <div className="flex gap-2">
           <Button type="button" variant="ghost" onClick={() => navigate("/reports")}>
             Cancelar
@@ -205,7 +206,7 @@ export function NewReportPage() {
               />
               <datalist id={topicListId}>
                 {(facets?.topics ?? []).map((t) => (
-                  <option key={t} value={t} />
+                  <option key={t.id} value={t.name} />
                 ))}
               </datalist>
             </>

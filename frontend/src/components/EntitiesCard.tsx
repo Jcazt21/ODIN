@@ -35,15 +35,10 @@ export function EntitiesCard({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   return (
-    <div
-      className="odin-glass overflow-hidden rounded-xl border px-6 py-5"
-      style={{ boxShadow: "var(--shadow-sm)" }}
-    >
+    <section className="border-t pt-6">
       <div className="mb-3 flex items-baseline gap-2">
-        <h3 className="text-[15px] font-semibold">Figuras y empresas mencionadas</h3>
-        <span className="font-mono text-[11px]" style={{ color: "var(--faint)" }}>
-          {entities.length} detectadas
-        </span>
+        <h3 className="text-base font-semibold">Figuras y empresas mencionadas</h3>
+        <span className="text-xs text-muted-foreground">{entities.length} detectadas</span>
       </div>
 
       {entities.length === 0 ? (
@@ -57,8 +52,7 @@ export function EntitiesCard({
             return (
               <div
                 key={`${ent.type}-${ent.name}-${i}`}
-                className="space-y-[9px] rounded-[9px] border p-3.5"
-                style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+                className="space-y-2 rounded-xl border p-3.5 shadow-[var(--shadow-sm)]"
               >
                 <div className="flex items-center gap-2">
                   {isEditing ? (
@@ -168,6 +162,6 @@ export function EntitiesCard({
           })}
         </div>
       )}
-    </div>
+    </section>
   )
 }

@@ -1,8 +1,12 @@
-import { useState, type FormEvent } from "react"
+import { PageHeader } from "@/components/PageHeader"
+import { useRef, useState, type FormEvent } from "react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
 import { LocalityPicker } from "@/components/LocalityPicker"
 import { suggestedToPicked, type PickedLocality } from "@/lib/localities"
 import { AnalyzeProgress } from "@/components/AnalyzeProgress"
+import { ArticleBody } from "@/components/ArticleBody"
 import { EntitiesCard } from "@/components/EntitiesCard"
 import { ActionButtons } from "@/components/ActionButtons"
 import { useAnalyzeUrl, useSaveArticle } from "@/lib/queries/articles"
@@ -36,8 +40,19 @@ function errorMessage(err: unknown, fallback: string): string {
     : fallback
 }
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value)
+    return protocol === "http:" || protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
 export function AnalyzePage() {
   const [url, setUrl] = useState("")
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const urlInputRef = useRef<HTMLInputElement>(null)
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
   const [jobStage, setJobStage] = useState<AnalyzeStage | null>(null)
   const [result, setResult] = useState<AnalyzeResult | ArticleAnalysis | null>(null)
@@ -54,9 +69,18 @@ export function AnalyzePage() {
   // guardado es una sola transacción que los incluye.
   const [localities, setLocalities] = useState<PickedLocality[]>([])
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!url.trim() || analyzeMutation.isPending) return
+    void runAnalysis()
+  }
+
+  async function runAnalysis() {
+    if (analyzeMutation.isPending) return
+    if (!isHttpUrl(url.trim())) {
+      setUrlError("Escribe un enlace válido, por ejemplo https://www.diariolibre.com/…")
+      return
+    }
+    setUrlError(null)
     setJobStatus(null)
     setJobStage(null)
     setResult(null)
@@ -112,6 +136,12 @@ export function AnalyzePage() {
     setDraft((d) => (d ? { ...d, entities: d.entities.filter((_, i) => i !== index) } : d))
   }
 
+  function analyzeAnother() {
+    discard()
+    setUrl("")
+    urlInputRef.current?.focus()
+  }
+
   function discard() {
     setResult(null)
     setDraft(null)
@@ -132,99 +162,72 @@ export function AnalyzePage() {
   const cardValue: AnalysisCardFields | null = isDraft ? draft : view
 
   return (
-    <div className="flex w-full flex-col gap-[22px]">
-      <div
-        className="odin-glass rounded-xl border p-[22px]"
-        style={{ boxShadow: "var(--shadow-sm)" }}
-      >
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-[19px] font-semibold">Analizar artículo</h1>
-          <span className="font-mono text-[11px]" style={{ color: "var(--faint)" }}>
-            POST /api/analyze
-          </span>
+    <div className="flex w-full flex-col gap-6">
+      <section>
+        <div className="mb-5">
+          <PageHeader
+            title="Analizar artículo"
+            subtitle="Pega el enlace de la noticia. Revisarás el sentimiento, el encuadre y los actores antes de guardar."
+          />
         </div>
-        <p className="mt-1 mb-4 max-w-[70ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-          Pegue la URL de la noticia. El sistema extrae el contenido y devuelve sentimiento,
-          encuadre y actores para su revisión antes de guardar.
-        </p>
 
-        <form onSubmit={handleSubmit} className="flex flex-wrap gap-[9px]">
+        <form onSubmit={handleSubmit} noValidate className="flex flex-wrap gap-2">
           <input
-            type="url"
-            required
+            ref={urlInputRef}
+            autoFocus
+            type="text"
+            inputMode="url"
+            aria-label="Enlace de la noticia"
+            aria-invalid={urlError ? true : undefined}
+            aria-describedby={urlError ? "analyze-url-error" : undefined}
             placeholder="https://www.diariolibre.com/…"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="h-11 min-w-[260px] flex-1 rounded-lg border px-[13px] font-mono text-[13px] outline-none focus-visible:ring-2"
-            style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-          />
-          <button
-            type="submit"
             disabled={loading}
-            className="rounded-lg px-5 py-[11px] text-[13.5px] font-semibold disabled:opacity-60"
-            style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
-          >
+            onChange={(e) => setUrl(e.target.value)}
+            className="h-12 min-w-[260px] flex-1 rounded-xl border bg-[var(--surface)] px-3.5 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <Button type="submit" size="lg" className="h-12 rounded-xl px-6 text-sm" disabled={loading}>
             {loading ? "Analizando…" : "Analizar"}
-          </button>
+          </Button>
         </form>
+        {urlError && (
+          <p id="analyze-url-error" className="mt-2 text-sm text-destructive">
+            {urlError}
+          </p>
+        )}
 
         {error && (
-          <div
-            role="alert"
-            className="mt-4 rounded-[7px] border px-3 py-2.5 text-[12.5px]"
-            style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}
-          >
-            <strong>No se pudo analizar</strong> {error}
-          </div>
+          <Alert variant="destructive" className="mt-4 items-center sm:grid-cols-[1fr_auto]">
+            <AlertDescription>
+              <strong>No se pudo analizar.</strong> {error}
+            </AlertDescription>
+            {analyzeMutation.error && (
+              <Button type="button" variant="outline" size="sm" onClick={() => runAnalysis()}>
+                Reintentar
+              </Button>
+            )}
+          </Alert>
         )}
 
         {loading && <AnalyzeProgress jobStatus={jobStatus} stage={jobStage} />}
-      </div>
+      </section>
 
       {view && cardValue && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {"already_saved" in view && view.already_saved ? (
-              <span
-                className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
-                style={{ background: "var(--pos-soft)", color: "var(--pos)", borderColor: "var(--pos)" }}
-              >
-                Reporte guardado
-              </span>
-            ) : isDraft ? (
-              <span
-                className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
-                style={{ background: "var(--accent-soft)", color: "var(--primary)", borderColor: "var(--accent-border)" }}
-              >
-                Vista previa · sin guardar
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] font-semibold"
-                style={{ background: "var(--pos-soft)", color: "var(--pos)", borderColor: "var(--pos)" }}
-              >
-                Guardado en el archivo
-              </span>
-            )}
-            {isDraft && <ActionButtons onDiscard={discard} onSave={handleSave} saving={saving} />}
+          <div className="odin-enter">
+            <AnalysisCard
+              value={cardValue}
+              editable={isDraft}
+              onChange={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))}
+            />
           </div>
-
-          <AnalysisCard
-            value={cardValue}
-            editable={isDraft}
-            onChange={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))}
-          />
           {isDraft && (
-            <div
-              // Sin overflow-hidden: recortaba el desplegable del selector de
-              // lugares, que se posiciona absoluto y se sale de la tarjeta.
-              // Nada adentro necesita recorte por el radio.
-              className="odin-glass rounded-xl border px-6 py-5"
-              style={{ boxShadow: "var(--shadow-sm)" }}
-            >
-              <h3 className="text-[15px] font-semibold">Lugar de la noticia</h3>
-              <p className="mt-1 mb-3 text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
-                Se guardan junto con el reporte. Podés agregar más de uno.
+            // Sin overflow-hidden: recortaría el desplegable del selector de
+            // lugares, que se posiciona absoluto y se sale de la sección.
+            <section className="border-t pt-6">
+              <h3 className="text-base font-semibold">Lugar de la noticia</h3>
+              <p className="mt-1 mb-3 text-sm text-muted-foreground">
+                Se guardan junto con el reporte. Puedes agregar más de uno.
               </p>
               <LocalityPicker
                 selected={localities}
@@ -233,7 +236,7 @@ export function AnalyzePage() {
                   setLocalities((prev) => prev.filter((_, i) => i !== index))
                 }
               />
-            </div>
+            </section>
           )}
           <EntitiesCard
             entities={isDraft ? draft.entities : view.entities}
@@ -241,12 +244,16 @@ export function AnalyzePage() {
             onUpdate={updateEntity}
             onRemove={removeEntity}
           />
+          <ArticleBody body={cardValue.body} />
 
-          {isDraft && (
-            <div className="flex justify-end">
-              <ActionButtons onDiscard={discard} onSave={handleSave} saving={saving} />
-            </div>
-          )}
+          <ActionButtons
+            state={isDraft ? "draft" : "saved"}
+            reportId={"id" in view && typeof view.id === "number" ? view.id : undefined}
+            saving={saving}
+            onSave={handleSave}
+            onDiscard={discard}
+            onAnalyzeAnother={analyzeAnother}
+          />
         </>
       )}
     </div>

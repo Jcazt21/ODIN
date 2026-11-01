@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader"
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { Pencil, Check, X, Search, ChevronDown, ChevronRight, GitMerge } from "lucide-react"
@@ -365,16 +366,15 @@ export function CanonicalEntityManager() {
 
   return (
     <div
-      className="odin-glass w-full overflow-hidden rounded-xl border"
+      className="w-full overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]"
     >
       <div className="border-b px-5 py-[18px]" style={{ borderColor: "var(--border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[19px] font-semibold">Entidades canónicas</h1>
-            <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--faint)" }}>
-              {loading ? "Cargando…" : `${total} figuras/organizaciones únicas`}
-            </p>
-          </div>
+          <PageHeader
+            title="Entidades"
+            subtitle="Figuras y organizaciones únicas"
+            count={loading ? undefined : `${total} entidades`}
+          />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <div className="relative min-w-[200px] flex-1">

@@ -79,9 +79,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
       {children}
       {dialog && (
         <div
-          className="fixed inset-0 z-[100] grid place-items-center p-6"
-          // Sin backdrop-filter: sería un desenfoque de viewport completo
-          // recalculado en cada frame de la aurora. El scrim opaco basta.
+          className="odin-fade fixed inset-0 z-[100] grid place-items-center p-6"
+          // Scrim opaco, sin backdrop-filter.
           style={{ background: "oklch(0.2 0.02 265 / 0.58)" }}
           onClick={() => close(false)}
         >
@@ -90,11 +89,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="odin-dialog-title"
-            className="odin-glass-strong w-full max-w-[400px] rounded-xl border p-[22px]"
-            style={{
-              boxShadow: "var(--shadow)",
-              animation: "odinIn 0.16s ease",
-            }}
+            className="odin-pop w-full max-w-[400px] rounded-2xl border bg-card p-[22px]"
+            style={{ boxShadow: "var(--shadow)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="odin-dialog-title" className="text-[15.5px] font-semibold">

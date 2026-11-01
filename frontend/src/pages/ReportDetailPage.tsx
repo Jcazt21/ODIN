@@ -1,7 +1,11 @@
 import { useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { PageHeader } from "@/components/PageHeader"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { ChevronLeft, Pencil, Trash2 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
+import { ArticleBody } from "@/components/ArticleBody"
 import { EntitiesCard } from "@/components/EntitiesCard"
 import { LocalitiesCard } from "@/components/LocalitiesCard"
 import { useConfirm } from "@/lib/dialog"
@@ -10,6 +14,7 @@ import { OdinApiError, type ArticleAnalysis, type ArticleUpdatePayload } from "@
 
 type EditableFields = Pick<
   AnalysisCardFields,
+  | "authors"
   | "main_topic"
   | "topic_keywords"
   | "overall_sentiment"
@@ -26,6 +31,7 @@ type EditableFields = Pick<
 
 function toEditForm(article: ArticleAnalysis): EditableFields {
   return {
+    authors: article.authors,
     main_topic: article.main_topic,
     topic_keywords: article.topic_keywords,
     overall_sentiment: article.overall_sentiment,
@@ -105,91 +111,66 @@ export function ReportDetailPage() {
   const loadError = error instanceof OdinApiError ? error.message : error ? "No se pudo cargar el reporte." : null
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-[13px]"
-          style={{ color: "var(--muted-foreground)" }}
+    <div className="flex w-full flex-col gap-6">
+      <PageHeader title="Detalle del reporte" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to="/reports"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
         >
-          <ChevronLeft className="size-3.5" />
-          Volver a la lista
-        </button>
+          <ChevronLeft aria-hidden className="size-4" />
+          Volver a reportes
+        </Link>
         {article && !editing && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={startEditing}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px]"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <Pencil className="size-3.5" />
+          <div role="group" aria-label="Acciones del reporte" className="flex gap-2">
+            <Button type="button" variant="outline" size="lg" onClick={startEditing}>
+              <Pencil aria-hidden />
               Editar
-            </button>
-            <button
-              type="button"
-              disabled={deleting}
-              onClick={handleDelete}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] disabled:opacity-60"
-              style={{ borderColor: "var(--border)", color: "var(--neg)" }}
-            >
-              <Trash2 className="size-3.5" />
+            </Button>
+            <Button type="button" variant="destructive" size="lg" disabled={deleting} onClick={handleDelete}>
+              <Trash2 aria-hidden />
               {deleting ? "Eliminando…" : "Eliminar"}
-            </button>
+            </Button>
           </div>
         )}
         {article && editing && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setEditing(false)}
-              className="rounded-lg border px-3 py-1.5 text-[13px]"
-              style={{ borderColor: "var(--border)" }}
-            >
+          <div role="group" aria-label="Edición del reporte" className="flex gap-2">
+            <Button type="button" variant="outline" size="lg" disabled={saving} onClick={() => setEditing(false)}>
               Cancelar
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleSaveEdit}
-              className="rounded-lg px-3.5 py-1.5 text-[13px] font-semibold disabled:opacity-60"
-              style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
-            >
+            </Button>
+            <Button type="button" size="lg" disabled={saving} onClick={handleSaveEdit}>
               {saving ? "Guardando…" : "Guardar cambios"}
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
       {editing && (
-        <p className="text-[12.5px]" style={{ color: "var(--muted-foreground)" }}>
+        <p className="text-sm text-muted-foreground">
           Solo se corrige el análisis (tema, sentimiento, encuadre); título, cuerpo y URL no se
           pueden editar aquí.
         </p>
       )}
 
-      {saveError && (
-        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          <strong>No se pudo guardar</strong> {saveError}
-        </div>
-      )}
-      {deleteError && (
-        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          <strong>No se pudo eliminar</strong> {deleteError}
-        </div>
-      )}
-      {loadError && (
-        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          <strong>No se pudo cargar</strong> {loadError}
-        </div>
+      {[
+        ["No se pudo guardar", saveError],
+        ["No se pudo eliminar", deleteError],
+        ["No se pudo cargar", loadError],
+      ].map(
+        ([title, message]) =>
+          message && (
+            <Alert key={title} variant="destructive">
+              <AlertDescription>
+                <strong>{title}.</strong> {message}
+              </AlertDescription>
+            </Alert>
+          )
       )}
 
       {isLoading && (
-        <div className="space-y-2 rounded-xl border p-[22px]" style={{ borderColor: "var(--border)" }}>
-          <div className="h-6 w-3/4 rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
-          <div className="h-4 w-1/2 rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out 0.15s infinite" }} />
+        <div className="space-y-2 rounded-lg border p-5">
+          <div className="h-6 w-3/4 rounded bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out infinite" }} />
+          <div className="h-4 w-1/2 rounded bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out 0.15s infinite" }} />
         </div>
       )}
 
@@ -202,6 +183,7 @@ export function ReportDetailPage() {
           />
           <LocalitiesCard articleId={article.id as number} editable={editing} />
           <EntitiesCard entities={article.entities} editable={false} />
+          <ArticleBody body={cardValue.body} />
         </>
       )}
     </div>
