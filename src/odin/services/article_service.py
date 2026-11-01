@@ -104,6 +104,8 @@ def _apply_article_filters(
     topic: str | None = None,
     locality: int | None = None,
     documentalist: int | None = None,
+    author: str | None = None,
+    topic_id: int | None = None,
 ):
     conditions: list[ColumnElement[bool]] = []
     if source:
@@ -157,6 +159,28 @@ def _apply_article_filters(
             .where(
                 Entity.article_id == Article.id,
                 accent_insensitive_contains(Entity.name, entity),
+            )
+            .exists()
+        )
+    if author:
+        # Coincidencia por NOMBRE completo dentro de la lista "A, B, C", no por
+        # subcadena: "Ana" no debe traer a "Mariana Gómez".
+        conditions.append(
+            Article.authors.regexp_match(
+                "(^|, )" + _accent_insensitive_regex(author.strip()) + "(, |$)", flags="i"
+            )
+        )
+    if topic_id is not None:
+        # Incluye el subárbol (prefijo de `path`) y usa EXISTS para que una nota
+        # ligada a padre e hijo no salga dos veces; mismo patrón que `locality`.
+        topic_path = select(Topic.path).where(Topic.id == topic_id).scalar_subquery()
+        conditions.append(
+            select(1)
+            .select_from(ArticleTopic)
+            .join(Topic, Topic.id == ArticleTopic.topic_id)
+            .where(
+                ArticleTopic.article_id == Article.id,
+                Topic.path.like(topic_path + "%"),
             )
             .exists()
         )
@@ -317,6 +341,8 @@ def list_articles(
     order: str | None,
     limit: int,
     offset: int,
+    author: str | None = None,
+    topic_id: int | None = None,
 ) -> ArticleListResponse:
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
@@ -339,6 +365,8 @@ def list_articles(
             topic=topic,
             locality=locality,
             documentalist=documentalist,
+            author=author,
+            topic_id=topic_id,
         )
         total = session.scalar(select(func.count()).select_from(base.subquery())) or 0
 

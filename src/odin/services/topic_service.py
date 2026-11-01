@@ -32,8 +32,23 @@ from odin.db import topics as topic_store
 from odin.db.models import Article, ArticleTopic, Topic, TopicAlias
 from odin.scrapers.base import _parse_date
 
-
 # ── Catálogo ─────────────────────────────────────────────────────────────────
+
+def topic_article_counts(session) -> dict[int, int]:
+    """Artículos distintos por tema, con roll-up del subárbol: una nota en un
+    subtema cuenta también para sus ancestros (join por prefijo de `path`, como
+    `frequency_by_topic`). `COUNT(DISTINCT)` evita contar dos veces una nota
+    ligada a padre e hijo."""
+    anc = select(Topic.id, Topic.path).subquery()
+    stmt = (
+        select(anc.c.id, func.count(func.distinct(ArticleTopic.article_id)))
+        .select_from(ArticleTopic)
+        .join(Topic, Topic.id == ArticleTopic.topic_id)
+        .join(anc, Topic.path.like(anc.c.path + "%"))
+        .group_by(anc.c.id)
+    )
+    return {tid: n for tid, n in session.execute(stmt).all()}
+
 
 def list_topics(
     q: str | None,
@@ -59,7 +74,13 @@ def list_topics(
         rows = session.scalars(
             stmt.order_by(Topic.display_order, Topic.name).limit(limit).offset(offset)
         ).all()
-        return [TopicResponse.model_validate(r) for r in rows]
+        counts = topic_article_counts(session)
+        out = []
+        for r in rows:
+            item = TopicResponse.model_validate(r)
+            item.article_count = counts.get(r.id, 0)
+            out.append(item)
+        return out
     finally:
         session.close()
 
@@ -79,6 +100,7 @@ def get_tree(*, include_inactive: bool = False) -> list[TopicNode]:
         for a in session.scalars(select(TopicAlias)).all():
             aliases.setdefault(a.topic_id, []).append(a.alias)
 
+        counts = topic_article_counts(session)
         nodes = {
             r.id: TopicNode(
                 id=r.id,
@@ -86,6 +108,7 @@ def get_tree(*, include_inactive: bool = False) -> list[TopicNode]:
                 slug=r.slug,
                 parent_id=r.parent_id,
                 aliases=aliases.get(r.id, []),
+                article_count=counts.get(r.id, 0),
                 children=[],
             )
             for r in rows

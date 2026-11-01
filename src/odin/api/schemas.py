@@ -118,8 +118,11 @@ class CanonicalEntityMergePayload(BaseModel):
 class ArticleUpdatePayload(BaseModel):
     """Corrige el análisis (no el contenido escrapeado) de un artículo ya
     guardado: solo los campos que produce el analizador, nunca `title`/`body`/
-    `url` (eso es lo que decía la fuente, no un juicio del sistema)."""
+    `url` (eso es lo que decía la fuente, no un juicio del sistema). `authors`
+    es la excepción: el scraper a veces lo entrega mal escrito (tildes rotas,
+    el medio como autor) y el documentalista tiene que poder corregirlo."""
 
+    authors: str | None = None
     main_topic: str | None = None
     topic_keywords: str | None = None
     overall_sentiment: str | None = None
@@ -628,6 +631,7 @@ class TopicResponse(_ResponseModel):
     path: str
     is_active: bool
     display_order: int
+    article_count: int = 0
 
 
 class TopicNode(_ResponseModel):
@@ -639,6 +643,7 @@ class TopicNode(_ResponseModel):
     slug: str
     parent_id: int | None = None
     aliases: list[str] = []
+    article_count: int = 0
     children: list[TopicNode] = []
 
 
@@ -692,6 +697,18 @@ class SuggestedTopic(_ResponseModel):
     path: str
     score: float
     evidence: str
+
+
+class AuthorSummary(_ResponseModel):
+    name: str
+    article_count: int
+    sources: list[str]
+    last_published_at: datetime | None = None
+
+
+class AuthorListResponse(_ResponseModel):
+    items: list[AuthorSummary]
+    total: int
 
 
 class TopicFrequencyRow(_ResponseModel):

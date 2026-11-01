@@ -42,6 +42,7 @@ from odin.api.routers import (
     aliases,
     analyze,
     articles,
+    authors,
     canonical_entities,
     entities,
     localities,
@@ -164,6 +165,7 @@ app = FastAPI(title="Odin API", lifespan=_lifespan)
 app.include_router(auth.router)
 app.include_router(analyze.router)
 app.include_router(articles.router)
+app.include_router(authors.router)
 app.include_router(entities.router)
 app.include_router(aliases.router)
 app.include_router(canonical_entities.router)
