@@ -53,3 +53,4 @@ $RECYCLE.BIN/
 graphify-out/*
 !graphify-out/GRAPH_REPORT.md
 !graphify-out/.graphify_labels.json
+/handbook/

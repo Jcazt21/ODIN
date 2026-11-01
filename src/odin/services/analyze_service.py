@@ -39,6 +39,7 @@ from odin.core.observability import (
 from odin.core.url_guard import UrlNotAllowed
 from odin.db.models import AnalyzeJob, Article
 from odin.scrapers import source_from_url, strip_outlet_from_authors
+from odin.scrapers.authors import decode_jsonld_entities
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import (
     ANALYZER_READS_WHOLE_ARTICLE,
@@ -110,7 +111,7 @@ def fetch_and_extract(url: str):
         raise HTTPException(status_code=422, detail="No se pudo descargar la URL.")
 
     data = trafilatura.extract(
-        html,
+        decode_jsonld_entities(html),
         output_format="json",
         with_metadata=True,
         include_comments=False,
@@ -252,13 +253,12 @@ def run_analyze_job(job_id: str) -> None:
             # `locality_service` importa `odin.api.deps`, que inicializa el
             # paquete `odin.api` con todos sus routers —y uno de ellos vuelve
             # acá—. A nivel de módulo eso es un ciclo.
-            from odin.services.locality_service import suggest_from_places
-
             # Temas sugeridos por el clasificador por reglas sobre el catálogo.
             # Puro y local (no LLM), cacheado a nivel de módulo. Solo se propone
             # acá: nada se persiste hasta el POST /api/articles.
             from odin.analysis.topic_classifier import classify as _classify_topics
             from odin.db.topics import get_catalog as _topic_catalog
+            from odin.services.locality_service import suggest_from_places
 
             _topics_by_id = {t.id: t for t in _topic_catalog()}
             suggested_topics = [

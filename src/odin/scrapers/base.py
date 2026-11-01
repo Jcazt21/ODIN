@@ -27,7 +27,7 @@ import requests
 import trafilatura
 
 from odin.core.config import settings
-from odin.scrapers.authors import strip_outlet
+from odin.scrapers.authors import decode_jsonld_entities, strip_outlet
 
 log = logging.getLogger("odin.scraper")
 
@@ -284,7 +284,7 @@ class BaseScraper:
     def extract(self, url: str, html: str) -> ScrapedArticle | None:
         """Extrae los campos del artículo usando trafilatura."""
         data = trafilatura.extract(
-            html,
+            decode_jsonld_entities(html),
             output_format="json",
             with_metadata=True,
             include_comments=False,
