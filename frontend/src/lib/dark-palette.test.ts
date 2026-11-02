@@ -53,10 +53,10 @@ describe("paleta dark", () => {
     expect(Math.abs(L("--shell-to") - 0.22)).toBeLessThanOrEqual(0.02)
   })
 
-  it("light mode sin cambios", () => {
+  it("light mode: papel de periódico", () => {
     const expected: Record<string, string> = {
-      "--bg": "oklch(0.963 0.004 195)",
-      "--surface": "oklch(0.988 0.003 195)",
+      "--bg": "oklch(0.925 0.007 105)",
+      "--surface": "oklch(0.952 0.007 105)",
       "--pos": "oklch(0.47 0.12 135)",
       "--neg": "oklch(0.5 0.16 25)",
       "--warn": "oklch(0.52 0.12 75)",

@@ -40,7 +40,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
     <div className="grid min-h-screen place-items-center bg-[image:var(--shell-gradient)]">
       <main className="w-full max-w-[380px] px-6 py-10">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight text-[var(--sidebar-foreground)]">Odin</h1>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight text-[var(--sidebar-foreground)]">Odin</h1>
           <p className="mt-1 text-sm text-[var(--sidebar-foreground)]/80">Monitoreo y análisis de prensa dominicana</p>
         </div>
 

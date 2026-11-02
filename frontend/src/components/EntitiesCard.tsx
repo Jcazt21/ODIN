@@ -109,7 +109,7 @@ export function EntitiesCard({
 
                 {ent.context && (
                   <blockquote
-                    className="border-l-2 pl-[11px] text-[12.5px] leading-[1.55] italic text-pretty"
+                    className="border-l-2 pl-[11px] font-serif text-[12.5px] leading-[1.55] italic text-pretty"
                     style={{ borderColor: "var(--border-strong)", color: "var(--muted-foreground)" }}
                   >
                     “{ent.context}”

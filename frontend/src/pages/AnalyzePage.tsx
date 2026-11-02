@@ -1,5 +1,8 @@
 import { PageHeader } from "@/components/PageHeader"
 import { useRef, useState, type FormEvent } from "react"
+import { ClipboardPaste, X } from "lucide-react"
+import { isHttpUrl } from "@/lib/url"
+import { useClipboardUrl } from "@/lib/useClipboardUrl"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AnalysisCard, type AnalysisCardFields } from "@/components/AnalysisCard"
@@ -14,9 +17,9 @@ import type { EntityFields } from "@/components/EntitiesCard"
 import {
   OdinApiError,
   type AnalyzeResult,
-  type AnalyzeStage,
   type ArticleAnalysis,
   type JobStatus,
+  type JobStep,
   type SaveArticlePayload,
 } from "@/lib/odin-api"
 
@@ -40,13 +43,11 @@ function errorMessage(err: unknown, fallback: string): string {
     : fallback
 }
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const { protocol } = new URL(value)
-    return protocol === "http:" || protocol === "https:"
-  } catch {
-    return false
-  }
+/** `diariolibre.com/ruta/larga…` — el host entero y la ruta recortada. */
+function shortUrl(value: string): string {
+  const { host, pathname, search } = new URL(value)
+  const rest = `${pathname}${search}`.replace(/^\/$/, "")
+  return rest.length > 40 ? `${host}${rest.slice(0, 40)}…` : `${host}${rest}`
 }
 
 export function AnalyzePage() {
@@ -54,13 +55,14 @@ export function AnalyzePage() {
   const [urlError, setUrlError] = useState<string | null>(null)
   const urlInputRef = useRef<HTMLInputElement>(null)
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null)
-  const [jobStage, setJobStage] = useState<AnalyzeStage | null>(null)
+  const [jobSteps, setJobSteps] = useState<JobStep[]>([])
+  const [jobStartedAt, setJobStartedAt] = useState(0)
   const [result, setResult] = useState<AnalyzeResult | ArticleAnalysis | null>(null)
   const [draft, setDraft] = useState<SaveArticlePayload | null>(null)
 
-  const analyzeMutation = useAnalyzeUrl((status, stage) => {
+  const analyzeMutation = useAnalyzeUrl((status, _stage, steps) => {
     setJobStatus(status)
-    setJobStage(stage)
+    setJobSteps(steps)
   })
   const saveMutation = useSaveArticle()
   // Los lugares se acumulan acá y viajan en el mismo POST que el reporte.
@@ -74,19 +76,20 @@ export function AnalyzePage() {
     void runAnalysis()
   }
 
-  async function runAnalysis() {
+  async function runAnalysis(target = url) {
     if (analyzeMutation.isPending) return
-    if (!isHttpUrl(url.trim())) {
+    if (!isHttpUrl(target.trim())) {
       setUrlError("Escribe un enlace válido, por ejemplo https://www.diariolibre.com/…")
       return
     }
     setUrlError(null)
     setJobStatus(null)
-    setJobStage(null)
+    setJobSteps([])
+    setJobStartedAt(Date.now())
     setResult(null)
     setDraft(null)
     try {
-      const data = await analyzeMutation.mutateAsync(url.trim())
+      const data = await analyzeMutation.mutateAsync(target.trim())
       setResult(data)
       if (!data.already_saved) {
         setDraft(toDraft(data))
@@ -97,7 +100,7 @@ export function AnalyzePage() {
       // el error queda en analyzeMutation.error, mostrado abajo
     } finally {
       setJobStatus(null)
-      setJobStage(null)
+      setJobSteps([])
     }
   }
 
@@ -150,6 +153,7 @@ export function AnalyzePage() {
   }
 
   const loading = analyzeMutation.isPending
+  const { clipboardUrl, check: checkClipboard, dismiss: dismissClipboard } = useClipboardUrl(url, loading)
   const saving = saveMutation.isPending
   const error = analyzeMutation.error
     ? errorMessage(analyzeMutation.error, "No se pudo conectar con la API de Odin. ¿Está corriendo en el puerto 8001?")
@@ -184,12 +188,54 @@ export function AnalyzePage() {
             value={url}
             disabled={loading}
             onChange={(e) => setUrl(e.target.value)}
+            onFocus={() => void checkClipboard()}
             className="h-12 min-w-[260px] flex-1 rounded-xl border bg-[var(--surface)] px-3.5 font-mono text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <Button type="submit" size="lg" className="h-12 rounded-xl px-6 text-sm" disabled={loading}>
             {loading ? "Analizando…" : "Analizar"}
           </Button>
         </form>
+        {clipboardUrl && (
+          <div
+            className="odin-pop mt-2 flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm"
+            style={{ transformOrigin: "top left" }}
+          >
+            <ClipboardPaste aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate font-mono text-xs" title={clipboardUrl}>
+              {shortUrl(clipboardUrl)}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUrl(clipboardUrl)
+                setUrlError(null)
+                urlInputRef.current?.focus()
+              }}
+            >
+              Pegar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setUrl(clipboardUrl)
+                void runAnalysis(clipboardUrl)
+              }}
+            >
+              Analizar
+            </Button>
+            <button
+              type="button"
+              aria-label="Descartar sugerencia"
+              onClick={dismissClipboard}
+              className="rounded-md p-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X aria-hidden className="size-4" />
+            </button>
+          </div>
+        )}
         {urlError && (
           <p id="analyze-url-error" className="mt-2 text-sm text-destructive">
             {urlError}
@@ -209,7 +255,7 @@ export function AnalyzePage() {
           </Alert>
         )}
 
-        {loading && <AnalyzeProgress jobStatus={jobStatus} stage={jobStage} />}
+        {loading && <AnalyzeProgress jobStatus={jobStatus} steps={jobSteps} startedAt={jobStartedAt} />}
       </section>
 
       {view && cardValue && (

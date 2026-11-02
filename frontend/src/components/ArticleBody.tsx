@@ -19,7 +19,7 @@ export function ArticleBody({ body }: { body: string | null }) {
         />
         Leer el artículo completo
       </summary>
-      <div className="mt-3 space-y-4 text-base leading-relaxed text-foreground/85">
+      <div className="mt-3 space-y-4 font-serif text-base leading-relaxed text-foreground/85">
         {paragraphs.map((p, i) => (
           <p key={i} className="max-w-[75ch] text-pretty">
             {p}

@@ -1798,7 +1798,28 @@ export interface components {
             stage?: string | null;
             /** Error */
             error?: string | null;
+            /**
+             * Steps
+             * @default []
+             */
+            steps: components["schemas"]["JobStep"][];
             result?: components["schemas"]["AnalyzeResult"] | null;
+        };
+        /**
+         * JobStep
+         * @description Un paso del pipeline de análisis, con su tiempo, para el timeline.
+         */
+        JobStep: {
+            /** Key */
+            key: string;
+            /** Status */
+            status: string;
+            /** Detail */
+            detail?: string | null;
+            /** Started Ms */
+            started_ms: number;
+            /** Duration Ms */
+            duration_ms?: number | null;
         };
         /**
          * LocalityBreadcrumb

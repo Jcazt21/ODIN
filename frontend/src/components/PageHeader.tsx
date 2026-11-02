@@ -12,7 +12,7 @@ export function PageHeader({ title, subtitle, count }: PageHeaderProps) {
   return (
     <header className="space-y-1">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="font-serif text-2xl font-semibold tracking-tight">{title}</h1>
         {count && (
           <p className="inline-flex h-7 items-center rounded-full bg-[var(--accent-soft)] px-3 text-sm text-primary">
             {count}

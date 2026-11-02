@@ -277,6 +277,8 @@ export function getMe(): Promise<components["schemas"]["MeResponse"]> {
 
 export type JobStatus = components["schemas"]["JobResponse"]["status"]
 export type AnalyzeStage = NonNullable<components["schemas"]["JobResponse"]["stage"]>
+export type JobStep = components["schemas"]["JobStep"]
+export type OnJobStatus = (status: JobStatus, stage: AnalyzeStage | null, steps: JobStep[]) => void
 
 const JOB_POLL_INTERVAL_MS = 1500
 // 240s y no 120s: el backend acota cada llamada al motor de análisis (ver
@@ -315,12 +317,12 @@ function pollDelay(ms: number): Promise<void> {
 
 async function pollJob(
   jobId: string,
-  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+  onStatus?: OnJobStatus
 ): Promise<AnalyzeResult> {
   const deadline = Date.now() + JOB_POLL_TIMEOUT_MS
   for (;;) {
     const job = await request<components["schemas"]["JobResponse"]>(`/api/jobs/${jobId}`)
-    onStatus?.(job.status, job.stage ?? null)
+    onStatus?.(job.status, job.stage ?? null, job.steps)
     if (job.status === "done" && job.result) return job.result
     if (job.status === "failed") throw new OdinApiError(job.error ?? "El análisis falló.")
     if (Date.now() > deadline) {
@@ -332,7 +334,7 @@ async function pollJob(
 
 export async function analyzeUrl(
   url: string,
-  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+  onStatus?: OnJobStatus
 ): Promise<AnalyzeResult> {
   const res = await postJson<AnalyzeResult | components["schemas"]["AnalyzeAccepted"]>(
     "/api/analyze",

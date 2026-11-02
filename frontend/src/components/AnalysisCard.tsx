@@ -113,7 +113,7 @@ export function AnalysisCard({
         ) : (
           <SentimentBadge sentiment={value.overall_sentiment} score={value.sentiment_score} />
         )}
-        <h2 className="max-w-[52ch] text-2xl leading-tight font-semibold tracking-tight text-pretty">
+        <h2 className="max-w-[52ch] font-serif text-2xl leading-tight font-semibold tracking-tight text-pretty">
           <a href={value.url} target="_blank" rel="noreferrer" className="hover:underline">
             {value.title}
           </a>

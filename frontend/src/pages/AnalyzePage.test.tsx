@@ -152,8 +152,11 @@ describe("AnalyzePage — progreso y error", () => {
   })
 
   it("mientras analiza deshabilita el formulario y anuncia la etapa", async () => {
-    mockedAnalyze.mockImplementation(((_url: string, onStatus?: (s: string, st: string | null) => void) => {
-      onStatus?.("running", "analyzing")
+    mockedAnalyze.mockImplementation(((_url: string, onStatus?: odinApi.OnJobStatus) => {
+      onStatus?.("running", "analyzing", [
+        { key: "fetch", status: "done", detail: null, started_ms: 0, duration_ms: 300 },
+        { key: "analyze", status: "running", detail: null, started_ms: 300, duration_ms: null },
+      ])
       return new Promise(() => {})
     }) as never)
     const user = userEvent.setup()
@@ -161,9 +164,36 @@ describe("AnalyzePage — progreso y error", () => {
     await user.type(screen.getByRole("textbox", { name: /enlace/i }), "https://listindiario.com/nota{Enter}")
 
     const status = await screen.findByRole("status")
-    await waitFor(() => expect(status).toHaveTextContent(/analizando con el modelo/i))
+    await waitFor(() => expect(status).toHaveTextContent(/analizar con el modelo/i))
     expect(screen.getByRole("textbox", { name: /enlace/i })).toBeDisabled()
     expect(screen.getByRole("button", { name: /analizando/i })).toBeDisabled()
+  })
+
+  it("ofrece la URL del portapapeles: Pegar la llena y Analizar la dispara", async () => {
+    mockedAnalyze.mockImplementation((() => new Promise(() => {})) as never)
+    const user = userEvent.setup()
+    // Después de setup(): user-event instala su propio portapapeles falso.
+    Object.defineProperty(navigator, "clipboard", {
+      value: { readText: async () => "https://listindiario.com/del-portapapeles" },
+      configurable: true,
+    })
+    renderPage()
+    const input = screen.getByRole("textbox", { name: /enlace/i })
+
+    await user.click(input)
+    await user.click(await screen.findByRole("button", { name: "Pegar" }))
+    expect(input).toHaveValue("https://listindiario.com/del-portapapeles")
+    expect(screen.queryByRole("button", { name: "Pegar" })).not.toBeInTheDocument()
+
+    await user.clear(input)
+    await user.tab()
+    await user.click(input)
+    // Hay dos "Analizar": el del formulario y el del chip (que va después).
+    await screen.findByRole("button", { name: "Pegar" })
+    const [, chipAnalyze] = screen.getAllByRole("button", { name: "Analizar" })
+    await user.click(chipAnalyze)
+    expect(mockedAnalyze).toHaveBeenCalledWith("https://listindiario.com/del-portapapeles", expect.any(Function))
+    Reflect.deleteProperty(navigator, "clipboard")
   })
 
   it("ante un error ofrece Reintentar con la misma URL", async () => {
