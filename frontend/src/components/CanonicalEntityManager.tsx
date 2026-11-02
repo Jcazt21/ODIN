@@ -8,7 +8,8 @@ import { ENTITY_TYPE_LABELS } from "@/lib/labels"
 import { computeSentimentAggregate } from "@/lib/sentiment-aggregate"
 import { SentimentCompositionBar } from "@/components/SentimentCompositionBar"
 import { SourceSentimentBreakdown } from "@/components/SourceSentimentBreakdown"
-import { groupArticlesBySource } from "@/lib/sentiment-by-source"
+import { SourceLogo } from "@/components/SourceLogo"
+import { groupArticlesBySource, groupSentimentBySource } from "@/lib/sentiment-by-source"
 import {
   useCanonicalEntities,
   useCanonicalEntity,
@@ -65,7 +66,7 @@ function MergePanel({
   const err = mergeMutation.error instanceof OdinApiError ? mergeMutation.error.message : mergeMutation.error ? "Error fusionando." : null
 
   return (
-    <div className="rounded-[9px] border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
+    <div className="rounded-xl border p-3" style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}>
       <p className="mb-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
         Elige la entidad correcta: <strong>{entity.name}</strong> se fundirá dentro de ella y desaparecerá.
       </p>
@@ -76,7 +77,7 @@ function MergePanel({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar entidad destino…"
-          className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-sm outline-none"
+          className="h-8 w-full rounded-lg border pr-2 pl-8 text-sm outline-none"
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         />
       </div>
@@ -97,7 +98,7 @@ function MergePanel({
               type="button"
               disabled={mergeMutation.isPending}
               onClick={() => handleMerge(c)}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm disabled:opacity-50"
+              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm disabled:opacity-50"
               style={{ background: "transparent" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -115,7 +116,7 @@ function MergePanel({
           type="button"
           disabled={mergeMutation.isPending}
           onClick={onCancel}
-          className="rounded-[6px] px-2.5 py-1 text-xs"
+          className="rounded-md px-2.5 py-1 text-xs"
           style={{ color: "var(--muted-foreground)" }}
         >
           Cancelar
@@ -139,6 +140,8 @@ function CanonicalEntityRow({
   const [editing, setEditing] = useState(false)
   const [merging, setMerging] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  // Medio señalado en el desglose: el anillo muestra su lectura en vez de la global.
+  const [activeSource, setActiveSource] = useState<string | null>(null)
   const [form, setForm] = useState({ name: entity.name, description: entity.description ?? "" })
 
   const updateMutation = useUpdateCanonicalEntity()
@@ -164,7 +167,7 @@ function CanonicalEntityRow({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 rounded p-1"
+          className="shrink-0 rounded-md p-1"
           style={{ color: "var(--muted-foreground)" }}
           aria-label={expanded ? "Contraer" : "Expandir"}
         >
@@ -177,14 +180,14 @@ function CanonicalEntityRow({
               <input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                className="h-7 min-w-[140px] flex-1 rounded-[7px] border px-2 text-sm font-medium outline-none"
+                className="h-7 min-w-[140px] flex-1 rounded-lg border px-2 text-sm font-medium outline-none"
                 style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
               />
               <input
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 placeholder="Descripción (opcional)"
-                className="h-7 min-w-[160px] flex-[2] rounded-[7px] border px-2 text-sm outline-none"
+                className="h-7 min-w-[160px] flex-[2] rounded-lg border px-2 text-sm outline-none"
                 style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
               />
             </div>
@@ -194,7 +197,7 @@ function CanonicalEntityRow({
                   {err}
                 </span>
               )}
-              <button type="button" disabled={updateMutation.isPending} onClick={handleSave} aria-label="Guardar" className="rounded p-1.5" style={{ color: "var(--muted-foreground)" }}>
+              <button type="button" disabled={updateMutation.isPending} onClick={handleSave} aria-label="Guardar" className="rounded-md p-1.5" style={{ color: "var(--muted-foreground)" }}>
                 <Check className="size-3.5" />
               </button>
               <button
@@ -204,7 +207,7 @@ function CanonicalEntityRow({
                   updateMutation.reset()
                 }}
                 aria-label="Cancelar"
-                className="rounded p-1.5"
+                className="rounded-md p-1.5"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 <X className="size-3.5" />
@@ -217,7 +220,7 @@ function CanonicalEntityRow({
               <div className="flex items-center gap-2">
                 <span className="truncate text-[14px] font-semibold">{entity.name}</span>
                 <span
-                  className="shrink-0 rounded-[5px] border px-1.5 py-0.5 text-[10.5px]"
+                  className="shrink-0 rounded-md border px-1.5 py-0.5 text-[10.5px]"
                   style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
                 >
                   {ENTITY_TYPE_LABELS[entity.type] ?? entity.type}
@@ -243,7 +246,7 @@ function CanonicalEntityRow({
                 onClick={() => setMerging((v) => !v)}
                 aria-label="Fusionar"
                 title="Fusionar con otra entidad"
-                className="inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11.5px]"
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11.5px]"
                 style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
               >
                 <GitMerge className="size-3.5" />
@@ -253,7 +256,7 @@ function CanonicalEntityRow({
                 type="button"
                 onClick={() => setEditing(true)}
                 aria-label="Editar"
-                className="inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11.5px]"
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11.5px]"
                 style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
               >
                 <Pencil className="size-3.5" />
@@ -278,45 +281,62 @@ function CanonicalEntityRow({
       {expanded && (
         <div className="px-5 pb-3 pl-11">
           {detailLoading ? (
-            <div className="h-16 w-full rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
+            <div className="h-16 w-full rounded-md" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
           ) : !detail || detail.articles.length === 0 ? (
             <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
               Sin artículos vinculados.
             </p>
           ) : (
-            <>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               {(() => {
                 const aggregate = computeSentimentAggregate(detail.articles)
+                const focus = activeSource
+                  ? groupSentimentBySource(detail.articles).find((r) => r.source === activeSource)
+                  : undefined
                 return aggregate ? (
-                  <div className="mb-3 flex flex-col gap-3">
-                    <SentimentCompositionBar aggregate={aggregate} />
+                  <div
+                    className="flex flex-col gap-4 self-start rounded-xl border p-5"
+                    style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
+                  >
+                    <SentimentCompositionBar
+                      aggregate={focus?.aggregate ?? aggregate}
+                      scopeLabel={focus?.sourceName}
+                      scopeSource={focus?.source}
+                    />
                     {/* El mismo dato partido por periódico: quién habla bien y
                         quién habla mal de este actor (R3). */}
-                    <SourceSentimentBreakdown articles={detail.articles} />
+                    <SourceSentimentBreakdown
+                      articles={detail.articles}
+                      activeSource={activeSource}
+                      onActiveSourceChange={setActiveSource}
+                    />
                   </div>
-                ) : null
+                ) : (
+                  <div />
+                )
               })()}
               {/* Agrupados por medio y en el MISMO orden que "Trato por medio",
                   para poder bajar del porcentaje de un medio directo a sus notas. */}
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2 self-start">
                 {groupArticlesBySource(detail.articles).map(({ source, sourceName, articles }) => (
                   <div key={source} className="flex flex-col gap-1">
-                    <div className="flex items-baseline gap-2 px-2">
-                      <h5 className="text-[11.5px] font-semibold">{sourceName}</h5>
+                    <div className="flex items-center gap-2 px-2">
+                      <SourceLogo source={source} />
+                      <h5 className="text-[11px] font-medium" style={{ color: "var(--muted-foreground)" }}>{sourceName}</h5>
                       <span className="font-mono text-[10.5px]" style={{ color: "var(--faint)" }}>
                         {articles.length} {articles.length === 1 ? "artículo" : "artículos"}
                       </span>
                     </div>
-                    <ul className="space-y-1 text-xs">
+                    <ul className="space-y-0.5 text-[11px]" style={{ color: "var(--muted-foreground)" }}>
                       {articles.map((a) => (
                         <li
                           key={a.article_id}
-                          className="flex items-center justify-between gap-2 rounded-md px-2 py-1"
+                          className="flex items-center justify-between gap-3 rounded-lg px-2 py-0.5"
                         >
                           <Link to={`/reports/${a.article_id}`} className="truncate hover:underline">
                             {a.title}
                           </Link>
-                          <span className="shrink-0" style={{ color: "var(--muted-foreground)" }}>
+                          <span className="shrink-0 tabular-nums" style={{ color: "var(--faint)" }}>
                             {formatDate(a.published_at)} · {a.mentions_count} menc.
                           </span>
                         </li>
@@ -325,7 +345,7 @@ function CanonicalEntityRow({
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -383,7 +403,7 @@ export function CanonicalEntityManager() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar entidad…"
-              className="h-8 w-full rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
+              className="h-8 w-full rounded-lg border pr-2 pl-8 text-[13px] outline-none"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             />
           </div>
@@ -400,7 +420,7 @@ export function CanonicalEntityManager() {
       </div>
 
       {errorMessage && (
-        <div role="alert" className="m-4 rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+        <div role="alert" className="m-4 rounded-lg border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
           {errorMessage}
         </div>
       )}
@@ -408,7 +428,7 @@ export function CanonicalEntityManager() {
       {loading && items.length === 0 ? (
         <div className="space-y-2 p-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-9 w-full rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
+            <div key={i} className="h-9 w-full rounded-md" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
           ))}
         </div>
       ) : items.length === 0 ? (

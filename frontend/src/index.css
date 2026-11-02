@@ -114,6 +114,11 @@
     --shadow-sm: 0 2px 8px -2px oklch(0.24 0.02 195 / 0.1);
 
     /* alias semánticos de shadcn -> primitivos, para no reescribir button/badge/card/alert/input/separator/skeleton */
+    --pos-bar: oklch(0.7 0.17 142);
+    /* Texto dentro de los segmentos de las barras de sentimiento */
+    --pos-bar-fg: oklch(0.22 0.04 150);
+    --neu-fg: oklch(0.98 0 0);
+    --neg-fg: oklch(0.98 0 0);
     --background: var(--bg);
     --foreground: var(--text);
     --card: var(--panel);
@@ -186,6 +191,10 @@
     --shadow-sm: 0 2px 8px -2px oklch(0 0 0 / 0.45);
 
     --primary-foreground: var(--accent-fg);
+    --pos-bar: var(--pos);
+    --pos-bar-fg: oklch(0.2 0.04 152);
+    --neu-fg: oklch(0.2 0.01 195);
+    --neg-fg: oklch(0.2 0.03 22);
     --muted: var(--surface-2);
     --accent: var(--accent-soft);
     --accent-foreground: var(--primary);
@@ -242,6 +251,11 @@
 /* Movimiento: solo transform y opacity (compositor, sin layout ni paint), así
    el hilo principal queda libre y la animación sigue a la frecuencia de la
    pantalla (90/120 Hz). Entradas de una sola vez, <300ms, ease-out fuerte. `backwards` (no `both`): al terminar no queda ningún
+@keyframes odinRowIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
    transform residual que cree contexto de apilamiento. */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -308,7 +322,7 @@
   .odin-ring {
     animation: none !important;
   }
-  .animate-pulse, [style*="odinPulse"] {
+  .animate-pulse, [style*="odinPulse"], [style*="odinRowIn"] {
     animation: none !important;
   }
 }
