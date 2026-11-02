@@ -452,11 +452,22 @@ class AnalyzeAccepted(BaseModel):
     status: str = "pending"
 
 
+class JobStep(BaseModel):
+    """Un paso del pipeline de análisis, con su tiempo, para el timeline."""
+
+    key: str  # fetch | extract | analyze | places | canonicalize | classify
+    status: str  # running | done | failed
+    detail: str | None = None
+    started_ms: int  # desde que arrancó el job
+    duration_ms: int | None = None  # None mientras corre
+
+
 class JobResponse(BaseModel):
     job_id: str
     status: str  # pending | running | done | failed
     stage: str | None = None  # fetching | analyzing | canonicalizing — solo con status=running
     error: str | None = None
+    steps: list[JobStep] = []
     result: AnalyzeResult | None = None
 
 

@@ -275,6 +275,11 @@ class AnalyzeJob(Base):
     # endpoint que lo produjo) y de vida corta.
     result_json: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
+    # Pasos con tiempos para el timeline del frontend: lista JSON ordenada de
+    # {key, status, detail, started_ms, duration_ms} (ver `_StepLog` en
+    # services/analyze_service.py). Mismo criterio que `result_json`: un solo
+    # consumidor y vida corta, no amerita tabla propia.
+    steps_json: Mapped[str | None] = mapped_column(Text)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<AnalyzeJob {self.id} {self.status}>"
