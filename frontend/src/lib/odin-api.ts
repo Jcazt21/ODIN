@@ -112,9 +112,27 @@ export interface ArticleListParams {
   sort?: "published_at" | "source" | "analyzed_on"
   order?: "asc" | "desc"
   documentalist?: number
+  /** Nombre completo de un autor (coincidencia por nombre, no por subcadena). */
+  author?: string
+  /** Id de un tema del catálogo; incluye su subárbol. */
+  topic_id?: number
   limit?: number
   offset?: number
 }
+
+export type AuthorSummary = components["schemas"]["AuthorSummary"]
+
+export type AuthorListResponse = components["schemas"]["AuthorListResponse"]
+
+export interface AuthorListParams {
+  q?: string
+  source?: string
+  sort?: "articles" | "name"
+  limit?: number
+  offset?: number
+}
+
+export type TopicNode = components["schemas"]["TopicNode"]
 
 export type EntityAlias = components["schemas"]["EntityAliasResponse"]
 
@@ -259,6 +277,8 @@ export function getMe(): Promise<components["schemas"]["MeResponse"]> {
 
 export type JobStatus = components["schemas"]["JobResponse"]["status"]
 export type AnalyzeStage = NonNullable<components["schemas"]["JobResponse"]["stage"]>
+export type JobStep = components["schemas"]["JobStep"]
+export type OnJobStatus = (status: JobStatus, stage: AnalyzeStage | null, steps: JobStep[]) => void
 
 const JOB_POLL_INTERVAL_MS = 1500
 // 240s y no 120s: el backend acota cada llamada al motor de análisis (ver
@@ -297,12 +317,12 @@ function pollDelay(ms: number): Promise<void> {
 
 async function pollJob(
   jobId: string,
-  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+  onStatus?: OnJobStatus
 ): Promise<AnalyzeResult> {
   const deadline = Date.now() + JOB_POLL_TIMEOUT_MS
   for (;;) {
     const job = await request<components["schemas"]["JobResponse"]>(`/api/jobs/${jobId}`)
-    onStatus?.(job.status, job.stage ?? null)
+    onStatus?.(job.status, job.stage ?? null, job.steps)
     if (job.status === "done" && job.result) return job.result
     if (job.status === "failed") throw new OdinApiError(job.error ?? "El análisis falló.")
     if (Date.now() > deadline) {
@@ -314,7 +334,7 @@ async function pollJob(
 
 export async function analyzeUrl(
   url: string,
-  onStatus?: (status: JobStatus, stage: AnalyzeStage | null) => void
+  onStatus?: OnJobStatus
 ): Promise<AnalyzeResult> {
   const res = await postJson<AnalyzeResult | components["schemas"]["AnalyzeAccepted"]>(
     "/api/analyze",
@@ -368,6 +388,21 @@ export function listArticles(params: ArticleListParams = {}): Promise<ArticleLis
   }
   const s = qs.toString()
   return request<ArticleListResponse>(`/api/articles${s ? `?${s}` : ""}`)
+}
+
+export function listAuthors(params: AuthorListParams = {}): Promise<AuthorListResponse> {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue
+    qs.set(key, String(value))
+  }
+  const s = qs.toString()
+  return request<AuthorListResponse>(`/api/authors${s ? `?${s}` : ""}`)
+}
+
+export function getTopicTree(params: { include_inactive?: boolean } = {}): Promise<TopicNode[]> {
+  const s = params.include_inactive ? "?include_inactive=true" : ""
+  return request<TopicNode[]>(`/api/topics/tree${s}`)
 }
 
 export function getArticle(id: number): Promise<ArticleAnalysis> {

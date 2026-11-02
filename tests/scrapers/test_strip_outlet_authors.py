@@ -81,3 +81,23 @@ class TestOutletDisguisedAsDomain:
         assert (
             strip_outlet_from_authors("Eldia Com Do; Ana Ruiz", "el_dia") == "Ana Ruiz"
         )
+
+
+def test_decodifica_entidades_html_antes_de_partir():
+    assert strip_outlet_from_authors("JES&Uacute;S V&Aacute;SQUEZ", "Listin Diario") == "JESÚS VÁSQUEZ"
+
+
+def test_jsonld_decodifica_tildes_pero_no_rompe_el_json():
+    import json
+
+    from odin.scrapers.authors import decode_jsonld_entities
+
+    page = (
+        '<p title="Jes&uacute;s">x</p><script type="application/ld+json">'
+        '{"name":"Jes&uacute;s V&aacute;squez","t":"a &quot;b&quot; &amp; c"}</script>'
+    )
+    out = decode_jsonld_entities(page)
+    body = out.split("ld+json\">")[1].split("</script>")[0]
+    assert json.loads(body)["name"] == "Jesús Vásquez"
+    assert "&quot;b&quot; &amp;" in body  # no se tocan las entidades que no son tildes
+    assert 'title="Jes&uacute;s"' in out  # fuera del JSON-LD no se toca nada

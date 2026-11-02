@@ -37,6 +37,8 @@ def list_articles(
     topic: str | None = None,
     locality: int | None = None,
     documentalist: int | None = None,
+    author: str | None = None,
+    topic_id: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     sort: str | None = None,
@@ -50,6 +52,8 @@ def list_articles(
 
     `locality` es el id de un lugar del catálogo e incluye su subárbol: filtrar
     por la provincia Santiago trae también lo marcado en sus municipios.
+    `author` es un nombre de autor completo (no subcadena). `topic_id` incluye
+    el subárbol del tema, como `locality`.
     `documentalist` es el id del documentalista que dejó guardado el reporte.
 
     `sort` es la columna (`published_at`, `source`, `analyzed_on`) y `order`
@@ -69,6 +73,8 @@ def list_articles(
         topic=topic,
         locality=locality,
         documentalist=documentalist,
+        author=author,
+        topic_id=topic_id,
         date_from=date_from,
         date_to=date_to,
         sort=sort,

@@ -78,6 +78,9 @@ class SaveArticleRequest(BaseModel):
     # en una segunda llamada para que artículo y vínculos entren o fallen
     # juntos. Default vacío: el flujo de /api/analyze no manda el campo.
     localities: list[ArticleLocalityPayload] = []
+    # Temas elegidos por el documentalista. Si viene no vacío, PISA lo que
+    # propondría el clasificador (se guardan como origin="MANUAL").
+    topic_ids: list[int] = []
 
 
 # ── Schemas de siglas ─────────────────────────────────────────────────────────
@@ -115,8 +118,11 @@ class CanonicalEntityMergePayload(BaseModel):
 class ArticleUpdatePayload(BaseModel):
     """Corrige el análisis (no el contenido escrapeado) de un artículo ya
     guardado: solo los campos que produce el analizador, nunca `title`/`body`/
-    `url` (eso es lo que decía la fuente, no un juicio del sistema)."""
+    `url` (eso es lo que decía la fuente, no un juicio del sistema). `authors`
+    es la excepción: el scraper a veces lo entrega mal escrito (tildes rotas,
+    el medio como autor) y el documentalista tiene que poder corregirlo."""
 
+    authors: str | None = None
     main_topic: str | None = None
     topic_keywords: str | None = None
     overall_sentiment: str | None = None
@@ -305,6 +311,10 @@ class AnalyzeResult(_ResponseModel):
     # que se define más abajo con el resto de los schemas de lugares. El
     # `model_rebuild()` al final del módulo la resuelve.
     suggested_localities: list[SuggestedLocality] = []
+    # Temas propuestos por el clasificador por reglas (Task 6). Misma referencia
+    # adelantada que `suggested_localities`: `SuggestedTopic` se define abajo con
+    # el resto de los schemas de temas y el `model_rebuild()` la resuelve.
+    suggested_topics: list[SuggestedTopic] = []
 
 
 class ArticleSummary(_ResponseModel):
@@ -369,9 +379,11 @@ class DocumentalistOption(_ResponseModel):
 class ArticleFiltersResponse(BaseModel):
     sources: list[SourceOption]
     sections: list[str]
-    # Temas ya usados, para sugerir en el formulario manual mientras no
-    # exista el catálogo administrable (R4). Texto libre, no enumeración.
-    topics: list[str] = []
+    # El catálogo administrable de temas (R4): la faceta del filtro por tema.
+    # Reemplaza la lista de `main_topic` en texto libre que vivía acá como
+    # placeholder hasta que existiera el catálogo. Referencia adelantada:
+    # `TopicResponse` se define más abajo; `model_rebuild()` la resuelve.
+    topics: list[TopicResponse] = []
     sentiments: list[str]
     framing: list[str]
     headline_intent: list[str]
@@ -440,11 +452,22 @@ class AnalyzeAccepted(BaseModel):
     status: str = "pending"
 
 
+class JobStep(BaseModel):
+    """Un paso del pipeline de análisis, con su tiempo, para el timeline."""
+
+    key: str  # fetch | extract | analyze | places | canonicalize | classify
+    status: str  # running | done | failed
+    detail: str | None = None
+    started_ms: int  # desde que arrancó el job
+    duration_ms: int | None = None  # None mientras corre
+
+
 class JobResponse(BaseModel):
     job_id: str
     status: str  # pending | running | done | failed
     stage: str | None = None  # fetching | analyzing | canonicalizing — solo con status=running
     error: str | None = None
+    steps: list[JobStep] = []
     result: AnalyzeResult | None = None
 
 
@@ -604,8 +627,115 @@ class SuggestedLocality(_ResponseModel):
     matched_text: str
 
 
-# `AnalyzeResult.suggested_localities` la nombra por adelantado (ver allá).
+# --- Temas (catálogo administrable, R4/R5/R7) -----------------------------------
+# Espejo de ARTICLE_TOPIC_ORIGINS en db/models.py: la capa HTTP valida en el
+# borde, un origin inválido debe dar 422 y no una fila inconsistente.
+ARTICLE_TOPIC_ORIGIN_VALUES = ("AUTO", "MANUAL")
+
+
+class TopicResponse(_ResponseModel):
+    id: int
+    name: str
+    slug: str
+    description: str | None = None
+    parent_id: int | None = None
+    path: str
+    is_active: bool
+    display_order: int
+    article_count: int = 0
+
+
+class TopicNode(_ResponseModel):
+    """Nodo del catálogo con sus hijos y alias: el árbol entero de una vez para
+    el administrador de temas del frontend, mismo criterio que `LocalityNode`."""
+
+    id: int
+    name: str
+    slug: str
+    parent_id: int | None = None
+    aliases: list[str] = []
+    article_count: int = 0
+    children: list[TopicNode] = []
+
+
+class TopicPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    slug: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    parent_id: int | None = None
+    display_order: int = 0
+
+
+class TopicUpdatePayload(BaseModel):
+    name: str | None = Field(default=None, max_length=160)
+    description: str | None = Field(default=None, max_length=500)
+    is_active: bool | None = None
+    display_order: int | None = None
+
+
+class TopicAliasPayload(BaseModel):
+    alias: str = Field(min_length=1, max_length=160)
+    is_active: bool = True
+
+
+class TopicAliasResponse(_ResponseModel):
+    id: int
+    topic_id: int
+    alias: str
+    is_active: bool
+
+
+class ArticleTopicResponse(_ResponseModel):
+    id: int
+    topic_id: int
+    name: str
+    origin: str
+    score: float | None = None
+    evidence: str | None = None
+
+
+class ArticleTopicPayload(BaseModel):
+    topic_id: int
+
+
+class SuggestedTopic(_ResponseModel):
+    """Tema propuesto por el clasificador en la vista previa, sin persistir.
+    Si el documentalista lo deja, vuelve como `ArticleTopicPayload` y se guarda
+    con origin="AUTO"; si lo quita, no queda rastro."""
+
+    topic_id: int
+    name: str
+    path: str
+    score: float
+    evidence: str
+
+
+class AuthorSummary(_ResponseModel):
+    name: str
+    article_count: int
+    sources: list[str]
+    last_published_at: datetime | None = None
+
+
+class AuthorListResponse(_ResponseModel):
+    items: list[AuthorSummary]
+    total: int
+
+
+class TopicFrequencyRow(_ResponseModel):
+    topic_id: int
+    name: str
+    day: str  # ISO date
+    count: int
+
+
+TopicNode.model_rebuild()
+
+
+# `AnalyzeResult.suggested_localities`/`suggested_topics` y
+# `ArticleFiltersResponse.topics` nombran schemas por adelantado (ver allá).
 AnalyzeResult.model_rebuild()
+ArticleFiltersResponse.model_rebuild()
 
 
 class LocalityPayload(BaseModel):

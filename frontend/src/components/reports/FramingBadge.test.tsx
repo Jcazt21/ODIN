@@ -19,18 +19,17 @@ const ROWS = [
 ] as unknown as ArticleSummary[]
 
 describe("ReportsTable — etiqueta de encuadre", () => {
-  it("es una caja propia y no una etiqueta en línea", () => {
-    /* Un `<span>` en línea con fondo y borde reparte una caja redondeada POR
-       CADA línea cuando el texto salta: "Crisis / conflicto" se veía como dos
-       rectángulos desfasados. jsdom no calcula cajas de línea, así que se
-       verifica la propiedad que lo evita. */
+  it("es texto plano traducido, sin caja con borde que se parta en líneas", () => {
+    /* Antes era un `<span>` con fondo y borde que, al saltar de línea, se
+       dibujaba como dos rectángulos desfasados. Sin caja el problema no existe;
+       el test fija que no vuelva. */
     render(
       <MemoryRouter>
         <ReportsTable articles={ROWS} selectedIds={[]} onSelectionChange={vi.fn()} />
       </MemoryRouter>
     )
 
-    const badge = screen.getByText(/crisis/i)
-    expect(badge.className).toContain("inline-block")
+    const label = screen.getByText(/crisis/i)
+    expect(label.className).not.toMatch(/\bborder\b|\bbg-/)
   })
 })

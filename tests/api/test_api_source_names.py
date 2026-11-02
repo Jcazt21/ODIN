@@ -94,19 +94,20 @@ class TestSourceFacets:
 
 
 class TestTopicFacet:
-    def test_lists_distinct_topics_already_used(self, api_client, sqlite_sessionmaker):
-        """Alimenta las sugerencias del campo Tema del formulario manual."""
-        session = sqlite_sessionmaker()
-        session.add_all([
-            _make_article(url="https://listindiario.com/a", main_topic="agua potable"),
-            _make_article(url="https://listindiario.com/b", main_topic="agua potable"),
-            _make_article(url="https://listindiario.com/c", main_topic="energía"),
-            _make_article(url="https://listindiario.com/d", main_topic=None),
-        ])
-        session.commit()
-        session.close()
+    def test_lists_catalog_topics(self, api_client, monkeypatch, sqlite_sessionmaker):
+        """La faceta `topics` es ahora el catálogo administrable (R4), no la
+        lista de `main_topic` en texto libre: viaja como objetos con `slug`,
+        ordenados por `display_order` y nombre."""
+        from odin.db import topics as topic_store
+
+        monkeypatch.setattr(topic_store, "get_session", sqlite_sessionmaker)
+        monkeypatch.setattr(topic_store, "init_db", lambda: None)
+        topic_store.invalidate_cache()
+        topic_store.load_seed()
 
         resp = api_client.get("/api/articles/filters", headers=_auth_headers())
 
         assert resp.status_code == 200
-        assert resp.json()["topics"] == ["agua potable", "energía"]
+        topics = resp.json()["topics"]
+        assert {t["slug"] for t in topics} >= {"agua", "salud", "educacion"}
+        assert all("id" in t and "path" in t for t in topics)

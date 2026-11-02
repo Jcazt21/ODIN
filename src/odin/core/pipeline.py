@@ -26,7 +26,7 @@ from odin.core.observability import (
     correlation_scope,
     get_logger,
 )
-from odin.db.models import Article, CanonicalEntity, CrawlRun, Entity
+from odin.db.models import Article, ArticleTopic, CanonicalEntity, CrawlRun, Entity
 from odin.db.session import get_session, init_db
 from odin.scrapers import SCRAPERS
 from odin.scrapers.base import BaseScraper, ScrapedArticle
@@ -118,6 +118,30 @@ def _persist(
         result.credited_actor, canonical_by_name
     )
     session.add(article)
+    session.flush()  # id del artículo para el vínculo de temas
+
+    # Clasificación de temas: mismas reglas que en /api/analyze y el guardado
+    # manual, sobre el catálogo cacheado a nivel de módulo — no re-consulta la
+    # BD por artículo dentro de una corrida. `main_topic` no se toca: es una
+    # señal de entrada del clasificador, no su salida.
+    from odin.analysis.topic_classifier import classify as _classify_topics
+    from odin.db.topics import get_catalog as _topic_catalog
+
+    _valid_topics = {t.id for t in _topic_catalog()}
+    for m in _classify_topics(
+        scraped.title,
+        scraped.body or "",
+        ", ".join(result.topic_keywords) or None,
+        result.main_topic,
+    ):
+        if m.topic_id in _valid_topics:
+            session.add(ArticleTopic(
+                article_id=article.id,
+                topic_id=m.topic_id,
+                origin="AUTO",
+                score=round(m.score, 3),
+                evidence=m.evidence,
+            ))
     session.commit()
     return article
 

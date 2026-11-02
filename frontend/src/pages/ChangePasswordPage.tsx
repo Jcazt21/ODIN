@@ -49,10 +49,10 @@ export function ChangePasswordPage({ onDone }: { onDone: () => void }) {
     >
       <form
         onSubmit={handleSubmit}
-        className="odin-glass w-full max-w-sm rounded-xl border px-6 py-6"
+        className="w-full max-w-sm rounded-xl border bg-card px-6 py-6"
         style={{ boxShadow: "var(--shadow-sm)" }}
       >
-        <h1 className="text-[17px] font-semibold">Elegí tu contraseña</h1>
+        <h1 className="font-serif text-[17px] font-semibold">Elegí tu contraseña</h1>
         <p className="mt-1 mb-5 text-[13px]" style={{ color: "var(--muted-foreground)" }}>
           Entraste con un PIN de un solo uso. Para seguir, definí una contraseña
           propia de al menos {MIN_PASSWORD_LENGTH} caracteres.

@@ -85,4 +85,10 @@ describe("SettingsPage — alta de usuarios", () => {
     await screen.findByText("Tema")
     expect(screen.queryByText("Usuarios")).toBeNull()
   })
+
+  it("usa PageHeader y no se centra", () => {
+    renderPage()
+    expect(screen.getByRole("heading", { level: 1, name: "Ajustes" })).toBeInTheDocument()
+    expect(document.querySelector(".mx-auto, .odin-glass")).toBeNull()
+  })
 })

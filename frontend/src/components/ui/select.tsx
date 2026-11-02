@@ -17,7 +17,7 @@ export function Select({ className, dashed, children, ...props }: SelectProps) {
       <select
         {...props}
         className={cn(
-          "h-8 w-full appearance-none rounded-[7px] border bg-[var(--surface-2)] px-[11px] py-[8px] pr-7 text-[13px]",
+          "h-9 w-full appearance-none rounded-lg border bg-[var(--surface)] px-2.5 pr-7 text-sm",
           "outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
           dashed ? "border-dashed" : "border-solid",
           className

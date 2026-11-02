@@ -106,4 +106,10 @@ describe("DocumentalistsPage", () => {
 
     await waitFor(() => expect(mockedKpi).toHaveBeenCalled())
   })
+
+  it("usa PageHeader y no se centra", () => {
+    renderPage()
+    expect(screen.getByRole("heading", { level: 1, name: "Documentalistas" })).toBeInTheDocument()
+    expect(document.querySelector(".mx-auto, .odin-glass")).toBeNull()
+  })
 })

@@ -11,6 +11,8 @@ import { NewReportPage } from "@/pages/NewReportPage"
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage"
 import { EntitiesPage } from "@/pages/EntitiesPage"
 import { AliasesPage } from "@/pages/AliasesPage"
+import { AuthorsPage } from "@/pages/AuthorsPage"
+import { TopicsPage } from "@/pages/TopicsPage"
 import { DocumentalistsPage } from "@/pages/DocumentalistsPage"
 import { SettingsPage } from "@/pages/SettingsPage"
 import { useMe } from "@/lib/queries/auth"
@@ -35,8 +37,7 @@ function getInitialTheme(): Theme {
  * Al abrir la aplicación con un token guardado lo validamos contra
  * /api/auth/me (useMe) — puede haber vencido o haber sido firmado con otro
  * secreto (la API reinició sin ODIN_JWT_SECRET). Mientras tanto se muestra
- * una pantalla en blanco (sin Aurora: evita montar/desmontar WebGL en una
- * vista transitoria) para no parpadear entre login y workspace.
+ * una pantalla en blanco para no parpadear entre login y workspace.
  */
 function App() {
   const [username, setUsername] = useState<string | null>(() =>
@@ -102,7 +103,7 @@ function App() {
         <Routes>
           <Route
             path="/login"
-            element={<LoginPage authed={Boolean(username)} theme={theme} onSuccess={setUsername} />}
+            element={<LoginPage authed={Boolean(username)} onSuccess={setUsername} />}
           />
           <Route
             element={
@@ -118,6 +119,8 @@ function App() {
             <Route path="/reports/:id" element={<ReportDetailPage />} />
             <Route path="/entities" element={<EntitiesPage />} />
             <Route path="/aliases" element={<AliasesPage />} />
+            <Route path="/authors" element={<AuthorsPage />} />
+            <Route path="/topics" element={<TopicsPage />} />
             <Route path="/documentalists" element={<DocumentalistsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/" element={<Navigate to="/analyze" replace />} />

@@ -38,11 +38,15 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-odin}:${POSTGRES_PASSWORD:-odin}@db:5432/${POSTGRES_DB:-odin}
+    # Migra antes de servir: si una migración falla el contenedor no arranca,
+    # en vez de quedar arriba con un esquema viejo. Solo en este servicio; el
+    # scraper comparte imagen pero no debe migrar.
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn odin.api:app --host 0.0.0.0 --port 8000"]
     depends_on:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - hf_cache:/home/appuser/.cache/huggingface
     healthcheck:

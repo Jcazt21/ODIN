@@ -24,7 +24,12 @@ from odin.analysis.canonicalize import canonicalize_result
 from odin.analysis.local_analyzer import sentence_mentions_venue_word
 from odin.api import deps
 from odin.api.deps import log
-from odin.api.schemas import AnalyzePreviewEntity, AnalyzeResult, ArticleDetail
+from odin.api.schemas import (
+    AnalyzePreviewEntity,
+    AnalyzeResult,
+    ArticleDetail,
+    SuggestedTopic,
+)
 from odin.core import url_guard
 from odin.core.config import settings
 from odin.core.observability import (
@@ -34,6 +39,7 @@ from odin.core.observability import (
 from odin.core.url_guard import UrlNotAllowed
 from odin.db.models import AnalyzeJob, Article
 from odin.scrapers import source_from_url, strip_outlet_from_authors
+from odin.scrapers.authors import decode_jsonld_entities
 from odin.scrapers.base import _parse_date
 from odin.services.analyzer_registry import (
     ANALYZER_READS_WHOLE_ARTICLE,
@@ -46,6 +52,57 @@ from odin.services.analyzer_registry import (
 ANALYZE_STAGES = ("fetching", "analyzing", "canonicalizing")
 
 _thread_state = threading.local()
+
+
+class _StepLog:
+    """Pasos del job con sus tiempos, persistidos en `AnalyzeJob.steps_json`
+    para que el polling los entregue (timeline del frontend). Cada cambio hace
+    commit, igual que el de `job.stage`: es lo que el otro hilo lee."""
+
+    def __init__(self, session, job: AnalyzeJob) -> None:
+        self._session = session
+        self._job = job
+        self._t0 = time.perf_counter()
+        self._steps: list[dict] = []
+
+    def _ms(self) -> int:
+        return int((time.perf_counter() - self._t0) * 1000)
+
+    def _save(self) -> None:
+        self._job.steps_json = json.dumps(self._steps, ensure_ascii=False)
+        self._session.commit()
+
+    def begin(self, key: str) -> None:
+        self._steps.append(
+            {"key": key, "status": "running", "detail": None, "started_ms": self._ms(), "duration_ms": None}
+        )
+        self._save()
+
+    def _close(self, status: str, detail: str | None) -> None:
+        if self._steps and self._steps[-1]["status"] == "running":
+            step = self._steps[-1]
+            step["status"] = status
+            step["detail"] = detail
+            step["duration_ms"] = self._ms() - step["started_ms"]
+            self._save()
+
+    def end(self, detail: str | None = None) -> None:
+        self._close("done", detail)
+
+    def fail(self) -> None:
+        self._close("failed", None)
+
+
+def _step_begin(key: str) -> None:
+    steps = getattr(_thread_state, "steps", None)
+    if steps is not None:
+        steps.begin(key)
+
+
+def _step_end(detail: str | None = None) -> None:
+    steps = getattr(_thread_state, "steps", None)
+    if steps is not None:
+        steps.end(detail)
 
 
 def resolve_source(url: str, extracted_sitename: str | None) -> str:
@@ -90,6 +147,8 @@ def _http_session() -> requests.Session:
 
 
 def fetch_and_extract(url: str):
+    # Marca los pasos `fetch` y `extract` en el log del job en curso (si lo
+    # hay; ver `run_analyze_job`). La firma no cambia: los tests la sustituyen.
     # La URL viene del usuario: se descarga con las protecciones de url_guard
     # (allowlist de dominios, bloqueo de IPs internas, tope de tamaño), no con
     # el fetch del scraper, que confía en las URLs de sus propios sitemaps.
@@ -103,9 +162,11 @@ def fetch_and_extract(url: str):
 
     if not html:
         raise HTTPException(status_code=422, detail="No se pudo descargar la URL.")
+    _step_end(f"{len(html.encode('utf-8')) / 1024:.0f} KB")
+    _step_begin("extract")
 
     data = trafilatura.extract(
-        html,
+        decode_jsonld_entities(html),
         output_format="json",
         with_metadata=True,
         include_comments=False,
@@ -126,6 +187,7 @@ def fetch_and_extract(url: str):
     if cats:
         section = cats[0] if isinstance(cats, list) else str(cats)
     published_at = _parse_date(meta.get("date"))
+    _step_end(f"{len(body.split())} palabras · {meta.get('sitename') or 'medio desconocido'}")
 
     return {
         "title": title,
@@ -223,31 +285,68 @@ def run_analyze_job(job_id: str) -> None:
         job.started_at = datetime.now(UTC)
         session.commit()
 
+        steps = _StepLog(session, job)
+        _thread_state.steps = steps
         try:
+            steps.begin("fetch")
             extracted = fetch_and_extract(url)
+            steps.end()  # no-op si fetch_and_extract ya cerró sus pasos
 
             job.stage = "analyzing"
             session.commit()
+            steps.begin("analyze")
             result = analyze_safely(extracted["title"], extracted["body"])
+            arbitrate_ambiguous_persons(result)
+            steps.end(analyzer.name)
             # Los motores LLM no devuelven lugares (los topónimos salen del NER
             # de spaCy, no de leer el artículo), así que se extraen aparte.
             # `place_extractor()` reusa el motor activo si ya es local.
             if not result.places:
+                steps.begin("places")
                 result.places = place_extractor().extract_places(
                     extracted["title"], extracted["body"]
                 )
-            arbitrate_ambiguous_persons(result)
+                steps.end(f"{len(result.places)} lugares")
 
             job.stage = "canonicalizing"
             session.commit()
+            steps.begin("canonicalize")
             canonicalize_result(result)
+            steps.end(f"{len(result.entities)} entidades")
+            steps.begin("classify")
 
             resolved_source = resolve_source(url, extracted.get("sitename"))
             # Import diferido, igual que en `article_service.save_article`:
             # `locality_service` importa `odin.api.deps`, que inicializa el
             # paquete `odin.api` con todos sus routers —y uno de ellos vuelve
             # acá—. A nivel de módulo eso es un ciclo.
+            # Temas sugeridos por el clasificador por reglas sobre el catálogo.
+            # Puro y local (no LLM), cacheado a nivel de módulo. Solo se propone
+            # acá: nada se persiste hasta el POST /api/articles.
+            from odin.analysis.topic_classifier import classify as _classify_topics
+            from odin.db.topics import get_catalog as _topic_catalog
             from odin.services.locality_service import suggest_from_places
+
+            _topics_by_id = {t.id: t for t in _topic_catalog()}
+            suggested_topics = [
+                SuggestedTopic(
+                    topic_id=mt.topic_id,
+                    name=_topics_by_id[mt.topic_id].name,
+                    path=_topics_by_id[mt.topic_id].path,
+                    score=round(mt.score, 2),
+                    evidence=mt.evidence,
+                )
+                for mt in _classify_topics(
+                    extracted["title"],
+                    extracted["body"],
+                    ", ".join(result.topic_keywords) or None,
+                    result.main_topic,
+                )
+                if mt.topic_id in _topics_by_id
+            ]
+
+            suggested_localities = suggest_from_places(session, result.places)
+            steps.end(f"{len(suggested_topics)} temas · {len(suggested_localities)} localidades")
 
             detail = AnalyzeResult(
                 already_saved=False,
@@ -286,20 +385,24 @@ def run_analyze_job(job_id: str) -> None:
                 entities=[AnalyzePreviewEntity.model_validate(e) for e in result.entities],
                 # Se resuelven acá y no en el analizador: el catálogo es una
                 # tabla administrable y `result.places` son strings crudos.
-                suggested_localities=suggest_from_places(session, result.places),
+                suggested_localities=suggested_localities,
+                suggested_topics=suggested_topics,
             )
             job.status = "done"
             job.result_json = detail.model_dump_json()
         except HTTPException as exc:
+            steps.fail()
             job.status = "failed"
             job.error = str(exc.detail)
         except Exception:
+            steps.fail()
             # Detalle completo al log; al usuario, algo que pueda leer. Antes
             # el `str(exc)` de cualquier excepción interna se mostraba tal cual
             # en el UI.
             log.exception("analyze_job_failed", job_id=job_id, url=url)
             job.status = "failed"
             job.error = "El análisis falló por un error interno. Intenta de nuevo."
+        _thread_state.steps = None
         job.stage = None  # solo tiene sentido mientras el job corre
         job.finished_at = datetime.now(UTC)
         session.commit()

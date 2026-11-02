@@ -64,11 +64,13 @@ def get_job(job_id: str):
     respuesta."""
     job = analyze_service.get_job_row(job_id)
     # Todo lo escalar se serializa normalmente; lo único que se inserta crudo
-    # es `result_json`, que es JSON que produjo este mismo servicio con
-    # `AnalyzeResult.model_dump_json()`.
+    # son `result_json` y `steps_json`, JSON que produjo este mismo servicio
+    # (`AnalyzeResult.model_dump_json()` y `_StepLog`).
     head = json.dumps(
         {"job_id": job.id, "status": job.status, "stage": job.stage, "error": job.error},
         ensure_ascii=False,
     )
-    payload = f'{head[:-1]},"result":{job.result_json or "null"}}}'
+    payload = (
+        f'{head[:-1]},"steps":{job.steps_json or "[]"},"result":{job.result_json or "null"}}}'
+    )
     return Response(content=payload, media_type="application/json")

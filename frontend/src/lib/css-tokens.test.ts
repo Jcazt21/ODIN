@@ -51,6 +51,10 @@ describe("tokens CSS", () => {
       for (const m of readFileSync(file, "utf8").matchAll(/var\((--[a-z0-9-]+)/gi)) {
         // Los internos de Tailwind se declaran en su runtime, no en el proyecto.
         if (m[1].startsWith("--tw-")) continue
+        // Base UI inyecta --transform-origin en el popup al posicionarlo.
+        if (m[1] === "--transform-origin") continue
+        // Base UI inyecta --anchor-width en el popup del Select/Combobox.
+        if (m[1] === "--anchor-width") continue
         offenders.push(defined.has(m[1]) ? "" : `${file.replace(SRC, "src")}: ${m[1]}`)
       }
     }

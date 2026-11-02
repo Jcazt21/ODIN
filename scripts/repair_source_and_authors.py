@@ -16,14 +16,47 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
+from html.entities import html5
 
 from sqlalchemy import select
 
 from odin.db.models import Article
 from odin.db.session import _get_sessionmaker
 from odin.scrapers import SCRAPERS, source_from_url, source_name, strip_outlet_from_authors
+
+# Una entidad HTML que ya se guardó partida por el ";" y con cada pedazo en
+# mayúscula inicial: "Jes; Uacute; S V; Aacute; Squez" era "Jes&uacute;s V&aacute;squez".
+_ENTIDAD_PARTIDA = re.compile(r"(\w*); ([A-Z][a-z]*(?:acute|grave|uml|tilde|circ|cedil)); ?(.?)")
+
+# Nombres que TERMINAN en la tilde: tras ellos el pedazo siguiente es otra
+# palabra ("Jos; Eacute; Luis"), no la continuación de la misma ("Jes; Uacute; S").
+_TERMINAN_EN_TILDE = {"josé", "andrés", "martín", "julián", "adrián", "sebastián", "rubén", "germán", "joaquín", "agustín", "esteban"}
+
+
+def _reparar_entidades(authors: str | None) -> str | None:
+    """Reconstruye las tildes de un autor guardado con la entidad partida.
+
+    El título-caso de trafilatura borró si la letra era mayúscula o minúscula,
+    así que se asume minúscula salvo al inicio de palabra ("Álvaro"), que es lo
+    normal en un nombre. Lo que no encaje en el patrón (p. ej. "G; Mez", donde
+    no quedó ni el nombre de la entidad) se deja tal cual para revisarlo a mano.
+    """
+    if not authors:
+        return authors
+
+    def _sub(m: re.Match[str]) -> str:
+        antes, nombre, despues = m.groups()
+        char = html5.get(nombre[0].lower() + nombre[1:] + ";")
+        if not char:
+            return m.group(0)
+        if (antes + char).lower() in _TERMINAN_EN_TILDE:
+            return antes + char + " " + despues
+        return antes + (char.upper() if not antes else char) + (despues.lower() if despues else "")
+
+    return _ENTIDAD_PARTIDA.sub(_sub, authors)
 
 
 @dataclass
@@ -67,7 +100,7 @@ def main() -> int:
                     new_source = derived
 
             effective = new_source or article.source
-            cleaned = strip_outlet_from_authors(article.authors, effective)
+            cleaned = strip_outlet_from_authors(_reparar_entidades(article.authors), effective)
             authors_cambia = cleaned != article.authors
 
             if new_source or authors_cambia:

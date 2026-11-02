@@ -1,118 +1,240 @@
-import { useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { BrainCircuit, Check, ChevronDown, ChevronRight, Loader2, Search, ShieldCheck } from "lucide-react"
-import { cn } from "@/lib/utils"
-import type { AnalyzeStage, JobStatus } from "@/lib/odin-api"
+import { useEffect, useState } from "react"
+import { ChevronDown } from "lucide-react"
+import type { JobStatus, JobStep } from "@/lib/odin-api"
 
-type StepState = "pending" | "active" | "done"
+/** Pasos del pipeline agrupados en ramas, como un historial de git: el cliente
+ *  fija la forma del grafo desde el primer segundo y el backend (`steps`) solo
+ *  rellena estado, detalle y tiempos, por `key`. Las claves son las de
+ *  `_StepLog` en services/analyze_service.py. */
+const ANALYZE_PLAN = [
+  {
+    branch: "descarga",
+    steps: [
+      { key: "fetch", label: "Descargar la página" },
+      { key: "extract", label: "Extraer el artículo" },
+    ],
+  },
+  {
+    branch: "análisis",
+    steps: [
+      { key: "analyze", label: "Analizar con el modelo" },
+      { key: "places", label: "Detectar lugares" },
+    ],
+  },
+  {
+    branch: "consolidación",
+    steps: [
+      { key: "canonicalize", label: "Canonicalizar entidades" },
+      { key: "classify", label: "Sugerir temas y localidades" },
+    ],
+  },
+] as const
 
-const STAGES: { key: AnalyzeStage; title: string; icon: typeof Search }[] = [
-  { key: "fetching", title: "Descargando y extrayendo el artículo", icon: Search },
-  { key: "analyzing", title: "Analizando con el modelo (sentimiento, encuadre, entidades)", icon: BrainCircuit },
-  { key: "canonicalizing", title: "Canonicalizando entidades", icon: ShieldCheck },
-]
+type NodeState = "pending" | "active" | "done" | "skipped" | "failed"
 
-function stepColor(state: StepState) {
-  switch (state) {
-    case "done":
-      return { background: "var(--pos-soft)", color: "var(--pos)" }
-    case "active":
-      return { background: "var(--accent)", color: "var(--primary)" }
-    case "pending":
-      return { background: "var(--surface-2)", color: "var(--faint)" }
-  }
+interface Row {
+  key: string
+  label: string
+  state: NodeState
+  detail: string | null
+  startedMs: number | null
+  durationMs: number | null
+  first: boolean
 }
 
-/** Panel colapsable estilo "agent planning" para POST /api/analyze — timeline
- *  con conector vertical entre etapas, en vez de la lista simple anterior. */
+interface Branch {
+  name: string
+  rows: Row[]
+  state: "pending" | "active" | "done"
+}
+
+/** Une el plan estático con lo que reportó el backend. Un paso que no llegó a
+ *  empezar pero tiene posteriores ya iniciados (p. ej. `places` cuando el motor
+ *  ya devolvió los lugares) se muestra como omitido. */
+function buildBranches(steps: JobStep[]): Branch[] {
+  const byKey = new Map(steps.map((s) => [s.key, s]))
+  const flat = ANALYZE_PLAN.flatMap((b) => b.steps.map((s) => s.key as string))
+  const lastStarted = Math.max(-1, ...steps.map((s) => flat.indexOf(s.key)))
+  // Antes del primer reporte del backend, el primer paso ya es el que viene.
+  const nothingYet = steps.length === 0
+
+  return ANALYZE_PLAN.map((b) => {
+    const rows: Row[] = b.steps.map((p, i) => {
+      const s = byKey.get(p.key)
+      const idx = flat.indexOf(p.key)
+      let state: NodeState = "pending"
+      if (s) state = s.status === "running" ? "active" : s.status === "failed" ? "failed" : "done"
+      else if (idx < lastStarted) state = "skipped"
+      else if (nothingYet && idx === 0) state = "active"
+      return {
+        key: p.key,
+        label: p.label,
+        state,
+        detail: s?.detail ?? (state === "skipped" ? "no hizo falta" : null),
+        startedMs: s?.started_ms ?? null,
+        durationMs: s?.duration_ms ?? null,
+        first: i === 0,
+      }
+    })
+    const settled = rows.every((r) => r.state === "done" || r.state === "skipped")
+    const touched = rows.some((r) => r.state !== "pending")
+    return { name: b.branch, rows, state: settled ? "done" : touched ? "active" : "pending" }
+  })
+}
+
+function formatSeconds(ms: number): string {
+  return `${(Math.max(0, ms) / 1000).toFixed(1)} s`
+}
+
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    const id = setInterval(() => setNow(Date.now()), 200)
+    return () => clearInterval(id)
+  }, [active])
+  return now
+}
+
+const ROW_H = "h-8"
+const CURVE_H = 14
+
+/** Curva que sale del riel principal hacia la rama (`fork`) o vuelve (`merge`). */
+function Connector({ kind, state }: { kind: "fork" | "merge"; state: Branch["state"] }) {
+  const d = kind === "fork" ? "M7.5 0 C7.5 9 19.5 5 19.5 14" : "M19.5 0 C19.5 9 7.5 5 7.5 14"
+  return (
+    <svg
+      aria-hidden
+      width="28"
+      height={CURVE_H}
+      viewBox={`0 0 28 ${CURVE_H}`}
+      fill="none"
+      className={state === "pending" ? "text-border" : "text-primary"}
+    >
+      <path d={d} stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function Node({ state }: { state: NodeState }) {
+  const base = "absolute top-1/2 left-[20px] size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+  if (state === "active") {
+    return (
+      <>
+        <span aria-hidden className={`${base} odin-ring bg-primary`} />
+        <span aria-hidden className={`${base} border-2 border-primary bg-card`} />
+      </>
+    )
+  }
+  if (state === "done") return <span aria-hidden className={`${base} bg-primary`} />
+  if (state === "failed") return <span aria-hidden className={`${base} bg-destructive`} />
+  if (state === "skipped") return <span aria-hidden className={`${base} border border-dashed border-border bg-card`} />
+  return <span aria-hidden className={`${base} border border-border bg-card`} />
+}
+
+/** Timeline de progreso real del análisis, con la forma de un historial de git. */
 export function AnalyzeProgress({
   jobStatus,
-  stage,
+  steps,
+  startedAt,
 }: {
   jobStatus: JobStatus | null
-  stage: AnalyzeStage | null
+  steps: JobStep[]
+  startedAt: number
 }) {
-  const [expanded, setExpanded] = useState(true)
-  const currentIndex = stage ? STAGES.findIndex((s) => s.key === stage) : -1
-  const allDone = currentIndex >= 0 && currentIndex === STAGES.length - 1 && jobStatus !== "running"
+  const [open, setOpen] = useState(true)
+  const now = useNow(true)
+  const elapsed = now - startedAt
+  const branches = buildBranches(steps)
+  const rows = branches.flatMap((b) => b.rows)
+  const doneCount = rows.filter((r) => r.state === "done" || r.state === "skipped").length
+  const activeRow = rows.find((r) => r.state === "active")
+  const queued = steps.length === 0 && jobStatus !== "running"
+  const heading = queued ? "Encolando el análisis" : (activeRow?.label ?? "Analizando")
 
+  let rowIndex = 0
   return (
-    <div
-      className="mt-[18px] overflow-hidden rounded-xl border"
-      style={{ borderColor: "var(--border)", background: "var(--card)" }}
-    >
-      <div
-        onClick={() => setExpanded((v) => !v)}
-        className={cn(
-          "flex cursor-pointer select-none items-center justify-between px-4 py-3 transition-colors",
-          expanded && "border-b",
-        )}
-        style={{ borderColor: "var(--border)" }}
+    <div className="mt-4 rounded-xl border bg-card p-3 odin-pop" style={{ transformOrigin: "top left" }}>
+      {/* Región viva sin contadores: solo anuncia el paso en curso. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {heading}
+      </p>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 rounded-md text-left text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="flex items-center gap-2.5">
-          {allDone ? (
-            <Check className="size-4" style={{ color: "var(--pos)" }} />
-          ) : (
-            <Loader2 className="size-4 animate-spin" style={{ color: "var(--primary)" }} />
-          )}
-          <span className="text-[13.5px] font-semibold">
-            {jobStatus === "running" ? "Analizando — puede tardar hasta un minuto" : "Encolando el análisis…"}
-          </span>
-        </div>
-        <div className="text-muted-foreground">
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-        </div>
-      </div>
+        <ChevronDown
+          aria-hidden
+          className="size-4 shrink-0"
+          style={{ transform: open ? "none" : "rotate(-90deg)", transition: "transform 160ms var(--ease-out)" }}
+        />
+        <span aria-hidden className="font-medium text-foreground">
+          {heading}
+        </span>
+        <span aria-hidden className="font-mono text-xs text-[var(--faint)]">
+          · {Math.floor(elapsed / 1000)} s
+        </span>
+      </button>
 
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.2, 0.65, 0.3, 0.9] }}
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col p-4">
-              {STAGES.map((s, i) => {
-                const state: StepState = currentIndex < 0 ? "pending" : i < currentIndex ? "done" : i === currentIndex ? "active" : "pending"
-                const isLast = i === STAGES.length - 1
-                const StepIcon = s.icon
-                return (
-                  <div
-                    key={s.key}
-                    className={cn("relative flex gap-3", state === "pending" && "opacity-50")}
-                  >
-                    {!isLast && (
-                      <div className="absolute left-[11px] top-7 bottom-[-4px] w-px" style={{ background: "var(--border)" }} />
-                    )}
-                    <div className="relative z-10 mt-0.5 flex-none">
-                      <div
-                        className="flex size-6 items-center justify-center rounded-full ring-4 transition-colors duration-300"
-                        style={{ ...stepColor(state), ["--tw-ring-color" as string]: "var(--card)" }}
+      {open && (
+        <ol aria-hidden className="relative mt-2 list-none p-0">
+          {/* Riel principal: fondo y relleno que crece con los pasos completados. */}
+          <span className="absolute top-0 bottom-0 left-[7px] w-px bg-border" />
+          <span
+            className="absolute top-0 bottom-0 left-[7px] w-px origin-top bg-primary"
+            style={{
+              transform: `scaleY(${doneCount / rows.length})`,
+              transition: "transform 280ms var(--ease-out)",
+            }}
+          />
+          {branches.map((b) => (
+            <li key={b.name} className="relative">
+              <Connector kind="fork" state={b.state} />
+              <div className="relative">
+                <span
+                  className={`absolute top-0 bottom-0 left-[19px] w-px ${b.state === "pending" ? "bg-border" : "bg-primary"}`}
+                />
+                <ul className="list-none p-0">
+                  {b.rows.map((r) => {
+                    const delay = rowIndex++ * 40
+                    return (
+                      <li
+                        key={r.key}
+                        className={`odin-enter relative flex ${ROW_H} items-center gap-2 text-sm`}
+                        style={{ animationDelay: `${delay}ms` }}
                       >
-                        {state === "done" ? (
-                          <Check className="size-3.5" />
-                        ) : state === "active" ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <StepIcon className="size-3.5" />
+                        <span className="relative h-full w-7 shrink-0">
+                          <Node state={r.state} />
+                        </span>
+                        <span className={r.state === "pending" || r.state === "skipped" ? "text-muted-foreground" : "text-foreground"}>
+                          {r.label}
+                        </span>
+                        {r.first && (
+                          <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[11px] text-primary">
+                            {b.name}
+                          </span>
                         )}
-                      </div>
-                    </div>
-                    <span
-                      className={cn("pb-4 text-[13px]", state === "active" && "font-semibold")}
-                      style={{ color: state === "pending" ? "var(--muted-foreground)" : "var(--foreground)" }}
-                    >
-                      {s.title}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                        <span className="ml-auto flex items-baseline gap-2 font-mono text-xs text-[var(--faint)]">
+                          {r.detail && <span className="truncate">{r.detail}</span>}
+                          {r.state === "active" && (
+                            <span className="tabular-nums">{formatSeconds(elapsed - (r.startedMs ?? 0))}</span>
+                          )}
+                          {(r.state === "done" || r.state === "failed") && r.durationMs !== null && (
+                            <span className="tabular-nums">{formatSeconds(r.durationMs)}</span>
+                          )}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+              <Connector kind="merge" state={b.state} />
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }

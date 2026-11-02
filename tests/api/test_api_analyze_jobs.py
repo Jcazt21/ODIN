@@ -121,6 +121,51 @@ class TestAnalyzeNewUrlEnqueuesJob:
         assert job_body["result"]["already_saved"] is False
         assert job_body["result"]["main_topic"] == "elecciones"
 
+    def test_job_reports_steps_in_order_with_timings(self, monkeypatch, api_client, sqlite_sessionmaker):
+        """El timeline del frontend se alimenta de `steps`: claves en orden,
+        cada una cerrada con su duración (el doble de `fetch_and_extract` no
+        marca `extract`, así que el paso de descarga cubre las dos cosas)."""
+        self._patch_pipeline(monkeypatch)
+        # Catálogo de temas y localidades fuera de la prueba: no hay tablas
+        # sembradas en la base de test.
+        from odin.db import topics as topics_db
+        from odin.services import locality_service
+
+        monkeypatch.setattr(topics_db, "get_catalog", lambda: [])
+        monkeypatch.setattr(locality_service, "suggest_from_places", lambda session, places: [])
+
+        resp = api_client.post(
+            "/api/analyze", json={"url": "https://diariolibre.com/con-pasos"}, headers=_auth_headers()
+        )
+        job_body = api_client.get(f"/api/jobs/{resp.json()['job_id']}", headers=_auth_headers()).json()
+
+        assert job_body["status"] == "done"
+        steps = job_body["steps"]
+        assert [s["key"] for s in steps] == ["fetch", "analyze", "places", "canonicalize", "classify"]
+        assert all(s["status"] == "done" and s["duration_ms"] is not None for s in steps)
+        assert steps[2]["detail"] == "0 lugares"
+        assert [s["started_ms"] for s in steps] == sorted(s["started_ms"] for s in steps)
+
+    def test_failed_fetch_leaves_only_the_fetch_step(self, monkeypatch, api_client, sqlite_sessionmaker):
+        from fastapi import HTTPException
+
+        from odin.core import url_guard
+
+        monkeypatch.setattr(url_guard, "validate_url", lambda url: url)
+
+        def _boom(url):
+            raise HTTPException(status_code=422, detail="No se pudo descargar la URL.")
+
+        monkeypatch.setattr(analyze_service, "fetch_and_extract", _boom)
+
+        resp = api_client.post(
+            "/api/analyze", json={"url": "https://diariolibre.com/sin-fetch"}, headers=_auth_headers()
+        )
+        job_body = api_client.get(f"/api/jobs/{resp.json()['job_id']}", headers=_auth_headers()).json()
+
+        assert job_body["status"] == "failed"
+        assert [(s["key"], s["status"]) for s in job_body["steps"]] == [("fetch", "failed")]
+
     def test_expected_failure_shows_its_message(self, monkeypatch, api_client, sqlite_sessionmaker):
         """Los fallos previstos (`HTTPException`) llevan un texto pensado para
         el usuario: se muestra tal cual."""
@@ -409,5 +454,6 @@ class TestGetJob:
             "status": "running",
             "stage": "analyzing",
             "error": None,
+            "steps": [],
             "result": None,
         }

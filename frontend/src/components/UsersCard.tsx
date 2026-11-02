@@ -60,7 +60,7 @@ export function UsersCard() {
 
   return (
     <div
-      className="odin-glass overflow-hidden rounded-xl border px-6 py-5"
+      className="overflow-hidden rounded-xl border bg-card px-6 py-5"
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       <h3 className="text-[15px] font-semibold">Usuarios</h3>

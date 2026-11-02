@@ -3,11 +3,10 @@ import { LoginScreen } from "@/components/LoginScreen"
 
 interface LoginPageProps {
   authed: boolean
-  theme: "light" | "dark"
   onSuccess: (username: string) => void
 }
 
-export function LoginPage({ authed, theme, onSuccess }: LoginPageProps) {
+export function LoginPage({ authed, onSuccess }: LoginPageProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from ?? "/analyze"
@@ -16,7 +15,6 @@ export function LoginPage({ authed, theme, onSuccess }: LoginPageProps) {
 
   return (
     <LoginScreen
-      theme={theme}
       onSuccess={(username) => {
         onSuccess(username)
         navigate(from, { replace: true })

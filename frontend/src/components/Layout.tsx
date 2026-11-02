@@ -1,20 +1,8 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 import { Nav } from "@/components/Nav"
-import { SoftAurora } from "@/components/SoftAurora"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
-import { getUsername } from "@/lib/auth"
-import { softAuroraFor, SOFT_AURORA_OPACITY, type Theme } from "@/lib/aurora-config"
-
-const NAV_ITEMS = [
-  { label: "Analizar", tab: "/analyze" },
-  { label: "Reportes", tab: "/reports" },
-  // Oculto temporalmente: la pantalla de "Nuevo reporte" sigue en pulido.
-  // La ruta /reports/new sigue registrada en App.tsx.
-  { label: "Entidades", tab: "/entities" },
-  { label: "Siglas", tab: "/aliases" },
-  { label: "Documentalistas", tab: "/documentalists" },
-  { label: "Ajustes", tab: "/settings" },
-]
+import { getRole, getUsername } from "@/lib/auth"
+import type { Theme } from "@/lib/theme"
 
 /** Contexto que Layout pasa a las páginas hijas vía <Outlet context>. */
 export interface WorkspaceOutletContext {
@@ -22,58 +10,39 @@ export interface WorkspaceOutletContext {
   onToggleTheme: () => void
 }
 
-// Apaga la banda de Aurora del workspace sin exponer un control en la UI: es
-// lo primero que se sacrifica en equipos lentos (README §Fondo Plasma).
-const WORKSPACE_AURORA_ENABLED = true
-
 interface LayoutProps {
   onLogout: () => void
   theme: Theme
   onToggleTheme: () => void
 }
 
+/** Todas las rutas se alinean a la izquierda y usan el ancho de la hoja. Los
+    formularios largos conservan un tope de lectura, pero sin centrarse. */
+function widthFor(pathname: string): string {
+  return pathname === "/reports/new" || pathname === "/settings" ? "max-w-[880px]" : ""
+}
+
 export function Layout({ onLogout, theme, onToggleTheme }: LayoutProps) {
   const location = useLocation()
-  const navigate = useNavigate()
-  const activeTab = NAV_ITEMS.find((item) => location.pathname.startsWith(item.tab))?.tab ?? "/analyze"
 
   return (
-    <div className="relative min-h-screen" style={{ background: "var(--bg)" }}>
-      {WORKSPACE_AURORA_ENABLED && (
-        // `fixed` en vez de una banda superior: la aurora queda centrada en el
-        // viewport y las tarjetas translúcidas la dejan ver al hacer scroll.
-        // Además es un solo canvas del tamaño de la ventana que no crece con el
-        // largo de la página ni se repinta al scrollear.
-        <div
-          className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
-          style={{ opacity: SOFT_AURORA_OPACITY.workspace[theme] }}
-        >
-          <SoftAurora {...softAuroraFor(theme)} />
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse 85% 60% at 50% 50%, transparent 0%, var(--bg) 90%)",
-            }}
-          />
-        </div>
-      )}
-
-      <div className="relative z-[1] mx-auto max-w-[1180px] px-6 pt-[22px] pb-20">
-        <Nav
-          items={NAV_ITEMS}
-          activeTab={activeTab}
-          onTabChange={(tab) => navigate(tab)}
-          username={getUsername()}
-          onLogout={onLogout}
-        />
-
-        <main className="mt-[22px] flex flex-col gap-[22px]">
+    <div className="min-h-screen bg-[image:var(--shell-gradient)] lg:grid lg:h-screen lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-4 lg:overflow-hidden lg:p-4 lg:pb-0">
+      <Nav username={getUsername()} role={getRole()} theme={theme} onToggleTheme={onToggleTheme} onLogout={onLogout} />
+      {/* La hoja es el contenedor con scroll en escritorio; en móvil scrollea la ventana. */}
+      <main
+        tabIndex={0}
+        aria-label="Contenido"
+        className="min-h-[calc(100vh-3.5rem)] bg-background outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:rounded-t-[28px] lg:bg-[var(--sheet)]"
+      >
+        <div className={`flex w-full flex-col gap-6 px-6 pt-8 pb-20 lg:px-10 ${widthFor(location.pathname)}`}>
           <ErrorBoundary resetKey={location.pathname}>
-            <Outlet context={{ theme, onToggleTheme } satisfies WorkspaceOutletContext} />
+            {/* key: cada ruta remonta el contenedor y vuelve a correr la entrada. */}
+            <div key={location.pathname} className="odin-enter flex flex-col gap-6">
+              <Outlet context={{ theme, onToggleTheme } satisfies WorkspaceOutletContext} />
+            </div>
           </ErrorBoundary>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

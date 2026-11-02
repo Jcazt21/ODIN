@@ -1,31 +1,59 @@
-export function ActionButtons({
-  onDiscard,
-  onSave,
-  saving,
-}: {
-  onDiscard: () => void
+import { Link } from "react-router-dom"
+import { Button, buttonVariants } from "@/components/ui/button"
+
+interface ActionButtonsProps {
+  /** `draft`: vista previa editable; `saved`: ya existe en el archivo. */
+  state: "draft" | "saved"
+  reportId?: number
+  saving?: boolean
   onSave: () => void
-  saving: boolean
-}) {
+  onDiscard: () => void
+  onAnalyzeAnother: () => void
+}
+
+/** Barra inferior única del flujo de Analizar: estado a la izquierda, acciones a la derecha. */
+export function ActionButtons({
+  state,
+  reportId,
+  saving = false,
+  onSave,
+  onDiscard,
+  onAnalyzeAnother,
+}: ActionButtonsProps) {
+  const isDraft = state === "draft"
   return (
-    <div className="flex items-center gap-2.5">
-      <button
-        type="button"
-        onClick={onDiscard}
-        className="rounded-lg border px-3.5 py-2 text-[13px]"
-        style={{ borderColor: "var(--border)", color: "var(--neg)" }}
-      >
-        Descartar
-      </button>
-      <button
-        type="button"
-        disabled={saving}
-        onClick={onSave}
-        className="rounded-lg px-4 py-2 text-[13px] font-semibold disabled:opacity-60"
-        style={{ background: "var(--primary)", color: "var(--accent-fg)" }}
-      >
-        {saving ? "Guardando…" : "Guardar reporte"}
-      </button>
+    <div className="odin-enter sticky bottom-4 z-30 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)]">
+      <span className="flex items-center gap-2 text-sm">
+        <span
+          aria-hidden
+          className="size-2 rounded-full"
+          style={{ background: isDraft ? "var(--primary)" : "var(--pos)" }}
+        />
+        {isDraft ? "Vista previa · sin guardar" : "Guardado en el archivo"}
+      </span>
+      <div className="flex items-center gap-2">
+        {isDraft ? (
+          <>
+            <Button type="button" variant="outline" size="lg" onClick={onDiscard}>
+              Descartar
+            </Button>
+            <Button type="button" size="lg" disabled={saving} onClick={onSave}>
+              {saving ? "Guardando…" : "Guardar reporte"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button type="button" variant="outline" size="lg" onClick={onAnalyzeAnother}>
+              Analizar otro
+            </Button>
+            {reportId !== undefined && (
+              <Link to={`/reports/${reportId}`} className={buttonVariants({ size: "lg" })}>
+                Ver reporte
+              </Link>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

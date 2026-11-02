@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { FilterBar, type HardDataFilter } from "@/components/reports/FilterBar"
 import { ReportsTable, Pagination } from "@/components/reports/ReportsTable"
 import { useArticleFilterOptions, useArticles } from "@/lib/queries/articles"
@@ -55,7 +56,9 @@ export function ReportsPage() {
   }
 
   const hasActiveFilters =
-    hardData !== "" || Object.entries(filters).some(([k, v]) => k !== "sort" && v !== undefined && v !== "")
+    hardData !== "" || Object.entries(filters).some(
+      ([k, v]) => k !== "sort" && k !== "order" && v !== undefined && v !== ""
+    )
 
   const total = data?.total ?? 0
   const items = data?.items ?? []
@@ -77,74 +80,65 @@ export function ReportsPage() {
       />
 
       {errorMessage && (
-        <div role="alert" className="rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
-          {errorMessage}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
       )}
 
       {!loading && items.length === 0 ? (
-        <div
-          className="odin-glass flex flex-col items-center gap-3 rounded-xl border py-14 text-center"
-        >
-          <p className="text-[14.5px] font-semibold">Sin resultados</p>
-          <p className="max-w-[38ch] text-[13px]" style={{ color: "var(--muted-foreground)" }}>
-            Ningún reporte coincide con los filtros aplicados.
+        <div className="flex flex-col items-center gap-3 rounded-xl border bg-[var(--surface)] py-14 text-center">
+          <p className="text-base font-semibold">Sin resultados</p>
+          <p className="max-w-[38ch] text-sm text-muted-foreground">
+            {hasActiveFilters
+              ? "Ningún reporte coincide con los filtros aplicados."
+              : "Todavía no hay reportes guardados."}
           </p>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px]"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <X className="size-3.5" />
+          {hasActiveFilters ? (
+            <Button type="button" variant="outline" size="lg" onClick={resetFilters}>
+              <X aria-hidden />
               Quitar filtros
-            </button>
+            </Button>
+          ) : (
+            <Link to="/analyze" className={buttonVariants({ size: "lg" })}>
+              Analizar un artículo
+            </Link>
           )}
         </div>
       ) : (
-        <>
-          {selectedIds.length > 0 && (
-            <div
-              className="mb-2 flex items-center gap-3 rounded-[7px] border px-3 py-2"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
-            >
-              <span className="text-[12.5px]">
-                {selectedIds.length} {selectedIds.length === 1 ? "reporte" : "reportes"} seleccionados
-              </span>
-              <Button
-                type="button"
-                onClick={() => exportMutation.mutate(selectedIds)}
-                disabled={exportMutation.isPending}
-              >
-                {exportMutation.isPending ? "Exportando…" : "Exportar a Word"}
-              </Button>
-              <button
-                type="button"
-                onClick={() => setSelectedIds([])}
-                className="text-[12px] underline-offset-2 hover:underline"
-                style={{ color: "var(--faint)" }}
-              >
-                Limpiar selección
-              </button>
-              {exportMutation.error && (
-                <span role="alert" className="text-[12px]" style={{ color: "var(--neg)" }}>
-                  No se pudo exportar.
-                </span>
-              )}
-            </div>
+        <ReportsTable
+          articles={items}
+          loading={loading}
+          onOpen={(id) => navigate(`/reports/${id}`)}
+          sort={filters.sort ?? "published_at"}
+          order={filters.order ?? "desc"}
+          onSort={(sort, order) => updateFilters({ sort, order })}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
+      )}
+
+      {selectedIds.length > 0 && (
+        <div className="odin-enter sticky bottom-4 z-30 flex flex-wrap items-center gap-3 rounded-xl bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)]">
+          <span className="text-sm">
+            {selectedIds.length} {selectedIds.length === 1 ? "seleccionado" : "seleccionados"}
+          </span>
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => exportMutation.mutate(selectedIds)}
+            disabled={exportMutation.isPending}
+          >
+            {exportMutation.isPending ? "Exportando…" : "Exportar a Word"}
+          </Button>
+          <Button type="button" variant="ghost" size="lg" onClick={() => setSelectedIds([])}>
+            Limpiar
+          </Button>
+          {exportMutation.error && (
+            <Alert variant="destructive" className="w-auto flex-1 basis-60">
+              <AlertDescription>No se pudo exportar.</AlertDescription>
+            </Alert>
           )}
-          <ReportsTable
-            articles={items}
-            loading={loading}
-            onOpen={(id) => navigate(`/reports/${id}`)}
-            sort={filters.sort ?? "published_at"}
-            order={filters.order ?? "desc"}
-            onSort={(sort, order) => updateFilters({ sort, order })}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-          />
-        </>
+        </div>
       )}
 
       <Pagination

@@ -60,7 +60,7 @@ describe("NewReportPage", () => {
     ])
     mockedFacets.mockResolvedValue({
       sources: [],
-      topics: ["agua potable", "energía"],
+      topics: [{ id: 1, name: "agua potable", slug: "t1", description: null, parent_id: null, path: "/1/", is_active: true, display_order: 0, article_count: 0 }, { id: 2, name: "energía", slug: "t2", description: null, parent_id: null, path: "/2/", is_active: true, display_order: 0, article_count: 0 }],
       sections: [],
       sentiments: [],
       framing: [],
@@ -137,5 +137,11 @@ describe("NewReportPage", () => {
     expect(navigate).not.toHaveBeenCalled()
     // Lo escrito no se pierde: el documentalista decide qué hacer.
     expect((screen.getByLabelText(/título/i) as HTMLInputElement).value).toBe("Un título")
+  })
+
+  it("usa PageHeader y no se centra", () => {
+    renderPage()
+    expect(screen.getByRole("heading", { level: 1, name: "Nuevo reporte" })).toBeInTheDocument()
+    expect(document.querySelector(".mx-auto, .odin-glass")).toBeNull()
   })
 })

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader"
 import { useState, useEffect, useRef, type FormEvent } from "react"
 import { Pencil, Trash2, Plus, Check, X, Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
@@ -342,16 +343,14 @@ export function AliasManager() {
 
   return (
     <div
-      className="odin-glass w-full overflow-hidden rounded-xl border"
+      className="w-full overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]"
     >
       <div className="border-b px-5 py-[18px]" style={{ borderColor: "var(--border)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[19px] font-semibold">Siglas</h1>
-            <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--faint)" }}>
-              {loading ? "Cargando…" : `${aliases.length} siglas · ${active} activas`}
-            </p>
-          </div>
+          <PageHeader
+            title="Siglas"
+            count={loading ? undefined : `${aliases.length} siglas · ${active} activas`}
+          />
           <NewAliasForm />
         </div>
         <div className="relative mt-3">
