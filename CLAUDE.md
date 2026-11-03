@@ -5,9 +5,9 @@
 No existe un branch `dev`. Para cada feature grande nueva (por ejemplo,
 agregar un módulo) se crea un branch propio, y esos cambios grandes se
 trabajan por planes. Los cambios chicos pueden hacerse directo en el branch
-actual. **No hacer commits** — el usuario los hace manualmente. Dejar los
-cambios listos en el working tree sin commitear, y que el usuario decida
-cuándo y qué commitear.
+actual. Se pueden hacer commits, **sin líneas de atribución** (nada de
+`Co-Authored-By` ni `Claude-Session` en commits, ni el pie "Generated with
+Claude Code" en PRs).
 
 ## Gemini API
 
