@@ -1,5 +1,5 @@
 # --- Scraping ---
-requests>=2.32
+requests>=2.34.2
 trafilatura>=1.12        # extracción robusta de cuerpo/autor/fecha de artículos
 feedparser>=6.0          # descubrimiento de artículos vía RSS
 beautifulsoup4>=4.12     # fallback / parsing puntual
