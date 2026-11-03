@@ -28,7 +28,7 @@ python-dotenv>=1.0
 
 # --- Observabilidad (§7.1 de task.md) ---
 structlog>=24.4          # logs estructurados (JSON) con correlation ID
-prometheus-client>=0.21  # métricas /metrics (formato Prometheus)
+prometheus-client>=0.26.0  # métricas /metrics (formato Prometheus)
 sentry-sdk>=2.18         # seguimiento de errores; opt-in vía ODIN_SENTRY_DSN
 
 # --- API (frontend) ---
