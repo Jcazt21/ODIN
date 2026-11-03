@@ -1,0 +1,40 @@
+name: Dependency audit
+
+# Auditoría semanal de vulnerabilidades. Va aparte del CI para que un CVE nuevo
+# en una dependencia no bloquee PRs que no tienen nada que ver.
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      # --extra-index-url: torch se fija a la build +cpu (README.md#requirementslock),
+      # que solo vive en el índice de PyTorch; pip-audit la reporta como "Skip
+      # Reason" en vez de fallar (esperado).
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm audit --omit=dev

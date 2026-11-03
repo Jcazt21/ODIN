@@ -1,116 +1,65 @@
 name: CI
 
-# Lint + tipos + tests + auditoría de dependencias sobre cada push/PR.
+# Calidad de código sobre cada PR y cada push a main. No hay CD: nada se despliega.
 #
 # requirements.lock (ver README.md#requirementslock) es la única fuente de
-# verdad para las versiones/hashes de las dependencias de ejecución. Los jobs
-# "types" y "test" no instalan el lock completo: usan requirements-ci.txt
-# (ver ese archivo) con `pip install -c requirements.lock`, que toma versión y
-# hash del lock pero evita pysentimiento/spacy y lo que arrastran
-# (transformers/accelerate/torch, varios GB) — ni mypy (ignore_missing_imports)
-# ni pytest (tests que sí los usan se saltan solos) los necesitan. El job
-# "pip-audit" audita requirements.lock completo tal cual, sin instalarlo.
+# verdad para versiones/hashes. El job "backend" no instala el lock completo:
+# usa requirements-ci.txt con `pip install -c requirements.lock`, que toma
+# versión y hash del lock pero evita pysentimiento/spacy y lo que arrastran
+# (transformers/torch, varios GB). Los tests que dependen de esos paquetes se
+# saltan solos (importorskip).
 #
-# requirements.lock se regenera con:
-#   uv pip compile requirements.txt --generate-hashes --python-version 3.13 \
-#       --python-platform x86_64-unknown-linux-gnu --torch-backend cpu \
-#       -o requirements.lock
+# La auditoría de dependencias vive en audit.yml (semanal), no acá.
 
 on:
   push:
     branches: [main]
   pull_request:
-  # Disparo manual desde la pestaña Actions. Sin esto, la única forma de
-  # relanzar el CI cuando una corrida se queda encolada o se pierde el evento
-  # de push es hacer un commit vacío.
   workflow_dispatch:
 
-env:
-  PYTHON_VERSION: "3.13"
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  lint:
+  backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      # Versión fijada igual que .pre-commit-config.yaml (astral-sh/ruff-pre-commit
-      # rev v0.16.1), para que CI y el hook local vean exactamente el mismo ruff.
-      - run: pip install ruff==0.16.1
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
+      # Versiones de herramientas alineadas con .pre-commit-config.yaml.
+      - run: pip install ruff==0.16.1 "mypy>=1.14" "pytest>=8.3"
+      # Layout src/: sin instalar el paquete local, "import odin.*" falla.
+      - run: pip install --no-deps -e .
       - run: ruff check .
-
-  types:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: requirements.lock
-      # mypy necesita los paquetes reales instalados (SQLAlchemy, FastAPI,
-      # Pydantic...) para resolver sus tipos, no solo el código propio. Set
-      # recortado: ver requirements-ci.txt.
-      - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
-      - run: pip install "mypy>=1.14"
       - run: mypy
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: requirements.lock
-      - run: pip install --require-hashes -c requirements.lock -r requirements-ci.txt
-      - run: pip install "pytest>=8.3"
-      # El código vive en src/odin/ (layout src/): sin instalar el paquete
-      # local, "import odin.*" falla en cualquier entorno que no tenga el
-      # .pth del editable install (el runner de CI no lo tiene). --no-deps
-      # porque requirements.lock ya resolvió todas las dependencias arriba.
-      - run: pip install --no-deps -e .
-      # Las pruebas usan SQLite en memoria (ver tests/conftest.py), nunca
-      # DATABASE_URL real, y no llaman a la API de Gemini (ver CLAUDE.md). Las
-      # que dependen del modelo es_core_news_lg de spaCy se saltan solas si no
-      # está instalado (no se descarga acá: ~500 MB que no hacen falta para
-      # que el resto de la suite corra).
+      # SQLite en memoria (tests/conftest.py); nunca llama a Gemini (CLAUDE.md).
       - run: pytest
 
-  test-windows:
-    # Red de seguridad de portabilidad: el cliente corre Odin en Windows.
-    # requirements.lock está fijado a x86_64-unknown-linux-gnu (ver
-    # README.md#requirementslock), así que --require-hashes -c
-    # requirements.lock no sirve acá — se instala requirements-ci.txt sin pin
-    # de hash (mismo set liviano que el job "test", sin pysentimiento/spacy).
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install -r requirements-ci.txt
-      - run: pip install "pytest>=8.3"
-      # Ver comentario equivalente en el job "test": src/odin/ necesita el
-      # paquete instalado para ser importable.
-      - run: pip install --no-deps -e .
-      - run: pytest
-
-  pip-audit:
+  frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-node@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      # Audita las versiones fijadas en el lock contra la base de datos de
-      # vulnerabilidades (OSV) sin necesidad de instalar el entorno completo.
-      # --extra-index-url: torch se fija a la build +cpu (ver
-      # README.md#requirementslock), que solo vive en el índice de PyTorch.
-      # pip-audit no puede auditar esa build igual (no está en PyPI) y lo
-      # reporta como "Skip Reason" en vez de fallar — es esperado, no un error.
-      - run: pip install pip-audit
-      - run: pip-audit -r requirements.lock --extra-index-url https://download.pytorch.org/whl/cpu
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # Incluye `tsc -b`: falla ante errores de tipos.
+      - run: npm run build
