@@ -2,10 +2,10 @@
 
 ## Flujo de Git
 
-Trabajar sobre el branch `dev`, no `main`. **No hacer commits** — el
-usuario los hace manualmente. Dejar los cambios listos en el working tree
-(o, si se pidió explícitamente aislar el trabajo, en un worktree/branch)
-sin commitear, y que el usuario decida cuándo y qué commitear.
+No existe un branch `dev`. Cada feature grande va en su propio branch (se
+trabaja por planes); los cambios chicos pueden ir directo en el branch actual.
+Se pueden hacer commits, **sin líneas de atribución** (nada de
+`Co-Authored-By` ni `Claude-Session`). Los PRs van hacia `main`.
 
 ## Gemini API
 

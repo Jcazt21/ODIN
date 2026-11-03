@@ -36,9 +36,12 @@ def test_delete_topic_with_articles_is_soft(api_client, sqlite_sessionmaker):
     s = sqlite_sessionmaker()
     t = Topic(name="Deportes", norm_key="deportes", slug="deportes", path="/99/")
     a = Article(source="acento", url="https://x/dep", title="t", body="b")
-    s.add_all([t, a]); s.flush()
+    s.add_all([t, a])
+    s.flush()
     s.add(ArticleTopic(article_id=a.id, topic_id=t.id, score=0.9, origin="AUTO"))
-    s.commit(); tid = t.id; s.close()
+    s.commit()
+    tid = t.id
+    s.close()
 
     r = api_client.delete(f"/api/topics/{tid}", headers=_h())
     assert r.status_code == 204
@@ -56,12 +59,15 @@ def test_frequency_returns_real_counts_per_topic_and_day(api_client, sqlite_sess
                  published_at=datetime(2026, 10, 1, 12))
     a2 = Article(source="acento", url="https://x/f2", title="t", body="b",
                  published_at=datetime(2026, 10, 1, 15))
-    s.add_all([t, a1, a2]); s.flush()
+    s.add_all([t, a1, a2])
+    s.flush()
     s.add_all([
         ArticleTopic(article_id=a1.id, topic_id=t.id, score=0.9, origin="AUTO"),
         ArticleTopic(article_id=a2.id, topic_id=t.id, score=0.9, origin="AUTO"),
     ])
-    s.commit(); tid = t.id; s.close()
+    s.commit()
+    tid = t.id
+    s.close()
 
     r = api_client.get("/api/topics/frequency", headers=_h())
     assert r.status_code == 200, r.text

@@ -130,7 +130,7 @@ def load_seed() -> int:
                 select(TopicAlias.topic_id, TopicAlias.alias_key)
             ).all()
         }
-        for name, slug, _parent, aliases in SEED_TOPICS:
+        for _name, slug, _parent, aliases in SEED_TOPICS:
             tid = slug_to_id.get(slug)
             if tid is None:
                 continue

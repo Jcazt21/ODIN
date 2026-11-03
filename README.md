@@ -1,5 +1,7 @@
 # Odin — Análisis de artículos de prensa dominicana, a demanda
 
+[![CI](https://github.com/Jcazt21/ODIN/actions/workflows/ci.yml/badge.svg)](https://github.com/Jcazt21/ODIN/actions/workflows/ci.yml)
+
 Odin analiza artículos de prensa dominicana **uno a uno y a petición tuya**: le
 pegas la URL de un artículo, él lo descarga y lo analiza, tú revisas el
 resultado y decides si se guarda en la base de datos.
@@ -438,13 +440,13 @@ La configuración de las tres herramientas vive en [pyproject.toml](pyproject.to
 Las dependencias de ejecución siguen declarándose en `requirements.txt`, que
 `pyproject.toml` lee — una sola lista, sin copias que se desincronizan.
 
-**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) corre 5 jobs en
-cada push y pull request a `main`: `lint` (ruff), `types` (mypy), `test`
-(pytest en Linux), `test-windows` (pytest en Windows — el cliente corre Odin
-ahí, es la red de seguridad de portabilidad) y `pip-audit`. Los jobs de tipos y
-tests instalan desde `requirements.lock` con `--require-hashes` (menos
-`test-windows`, que usa `requirements-ci.txt` sin pin de hash porque el lock
-está fijado a Linux).
+**CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)) corre 2 jobs en
+paralelo sobre cada pull request y cada push a `main`: `backend` (ruff, mypy,
+pytest; instala desde `requirements.lock` con `--require-hashes`) y `frontend`
+(oxlint, vitest, `tsc -b` + build de Vite). Es solo calidad de código: no hay
+despliegue. La auditoría de dependencias (`pip-audit`, `npm audit`) corre una vez
+por semana en [audit.yml](.github/workflows/audit.yml). Para el flujo de trabajo
+completo, ver [CONTRIBUTING.md](CONTRIBUTING.md); `make check` replica el CI en local.
 
 **`ruff format` está apagado a propósito.** Reformatear todo el backend antes de
 tener pruebas produce un diff enorme que esconde los cambios reales; se activa
@@ -472,8 +474,7 @@ uv pip compile requirements.txt --generate-hashes --python-version 3.13 \
   `nvidia-*`/`triton` (~4.5GB) sin que el contenedor tenga GPU. Esta flag fija
   la build `+cpu` (índice de PyTorch) directamente en el lock. Instalar desde
   el lock requiere entonces `--extra-index-url
-  https://download.pytorch.org/whl/cpu` (ver `Dockerfile.backend` y
-  `.github/workflows/ci.yml`), porque esa build solo vive ahí, no en PyPI.
+  https://download.pytorch.org/whl/cpu` (ver `Dockerfile.backend`), porque esa build solo vive ahí, no en PyPI.
 
 > `Dockerfile.backend` y el CI de GitHub Actions
 > ([.github/workflows/ci.yml](.github/workflows/ci.yml)) instalan desde este
