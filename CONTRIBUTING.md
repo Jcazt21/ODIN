@@ -5,7 +5,7 @@
 ```bash
 python3.13 -m venv .venv && source .venv/bin/activate
 make install              # pip install -e ".[dev]" + pre-commit install
-make frontend-install     # npm ci (Node 22, ver frontend/.nvmrc)
+make frontend-install     # npm ci (Node 22, ver .nvmrc)
 ```
 
 Más detalle (base de datos, `.env`, Docker) en el [README](README.md#instalación).

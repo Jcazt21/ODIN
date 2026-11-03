@@ -11,5 +11,5 @@ npm run build     # tsc -b + vite build
 npm run generate:types   # regenera src/lib/api-types.ts desde el OpenAPI del backend
 ```
 
-Node 22 (`.nvmrc`). Los tipos de la API (`src/lib/api-types.ts`) están versionados:
+Node 22 (`../.nvmrc`). Los tipos de la API (`src/lib/api-types.ts`) están versionados:
 regenéralos cuando cambien endpoints o schemas del backend.
