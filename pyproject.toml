@@ -17,7 +17,7 @@ dynamic = ["dependencies"]
 dev = [
     "ruff>=0.17.3",
     "mypy>=1.14",
-    "pre-commit>=4.0",
+    "pre-commit>=4.7.0",
     "pytest>=8.3",
     # Genera requirements.lock. Se usa uv y no pip-tools porque este último
     # importa internos de pip y se rompe con las versiones recientes.
