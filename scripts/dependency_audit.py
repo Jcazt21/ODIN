@@ -12,7 +12,7 @@ NVD_API_KEY es opcional (se lee de .env o del entorno): sin ella el script
 funciona igual pero contra el rate limit público de NVD (5 req/30s en vez de
 50 req/30s), así que la auditoría tarda más si hay muchos CVEs que enriquecer.
 
-Genera dependency-audit-<YYYY-MM-DD>.md en la raíz del repo.
+Genera docs/audits/dependency-audit-<YYYY-MM-DD>.md.
 """
 
 from __future__ import annotations
@@ -626,7 +626,8 @@ def main() -> int:
         nvd_key_present=bool(nvd_key),
     )
 
-    out_path = ROOT / f"dependency-audit-{date.today().isoformat()}.md"
+    out_path = ROOT / "docs" / "audits" / f"dependency-audit-{date.today().isoformat()}.md"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report, encoding="utf-8")
     print(f"\nReporte escrito en {out_path}")
     return 0
