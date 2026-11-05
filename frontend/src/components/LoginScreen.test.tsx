@@ -17,12 +17,11 @@ describe("LoginScreen", () => {
     expect(container.querySelector("canvas")).toBeNull()
   })
 
-  it("el formulario vive en una tarjeta centrada bajo el título Odin", () => {
+  it("muestra el título de acceso y el formulario junto a la imagen", () => {
     const { container } = render(<LoginScreen onSuccess={vi.fn()} />)
-    expect(screen.getByRole("heading", { name: "Odin" })).toBeInTheDocument()
-    const card = container.querySelector("[data-slot=card]")
-    expect(card).not.toBeNull()
-    expect(card).toContainElement(screen.getByLabelText("Usuario"))
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument()
+    expect(container.querySelector("aside img")).not.toBeNull()
+    expect(screen.getByLabelText("Usuario")).toBeInTheDocument()
   })
 
   it("los campos tienen etiquetas asociadas", () => {

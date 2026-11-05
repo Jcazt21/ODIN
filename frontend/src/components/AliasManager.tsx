@@ -82,7 +82,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
             <input
               value={form.alias}
               onChange={(e) => setForm((f) => ({ ...f, alias: e.target.value }))}
-              className="h-7 w-full rounded-[6px] border px-2 font-mono text-sm outline-none"
+              className="h-7 w-full rounded-md border px-2 font-mono text-sm outline-none"
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
             />
           </td>
@@ -90,7 +90,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
             <input
               value={form.canonical_name}
               onChange={(e) => setForm((f) => ({ ...f, canonical_name: e.target.value }))}
-              className="h-7 w-full rounded-[6px] border px-2 text-sm outline-none"
+              className="h-7 w-full rounded-md border px-2 text-sm outline-none"
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
             />
           </td>
@@ -111,7 +111,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
                   {err}
                 </span>
               )}
-              <button type="button" disabled={busy} onClick={handleSave} aria-label="Guardar" className="rounded p-1.5" style={{ color: "var(--muted-foreground)" }}>
+              <button type="button" disabled={busy} onClick={handleSave} aria-label="Guardar" className="rounded-md p-1.5" style={{ color: "var(--muted-foreground)" }}>
                 <Check className="size-3.5" />
               </button>
               <button
@@ -121,7 +121,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
                   updateMutation.reset()
                 }}
                 aria-label="Cancelar"
-                className="rounded p-1.5"
+                className="rounded-md p-1.5"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 <X className="size-3.5" />
@@ -137,7 +137,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
           </td>
           <td className="px-2 py-2.5">
             <span
-              className="inline-block rounded-[5px] border px-1.5 py-0.5 text-[10.5px]"
+              className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px]"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}
             >
               {alias.type}
@@ -174,7 +174,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
                 disabled={busy}
                 onClick={() => setEditing(true)}
                 aria-label="Editar"
-                className="rounded p-1.5"
+                className="rounded-md p-1.5"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 <Pencil className="size-3.5" />
@@ -184,7 +184,7 @@ function AliasRow({ alias }: { alias: EntityAlias }) {
                 disabled={busy}
                 onClick={handleDelete}
                 aria-label="Eliminar"
-                className="rounded p-1.5 transition-colors hover:text-[var(--neg)]"
+                className="rounded-md p-1.5 transition-colors hover:text-[var(--neg)]"
                 style={{ color: "var(--muted-foreground)" }}
               >
                 <Trash2 className="size-3.5" />
@@ -239,7 +239,7 @@ function NewAliasForm() {
     <form
       id="alias-new-form"
       onSubmit={handleSubmit}
-      className="flex flex-wrap items-end gap-2 rounded-[9px] border p-3"
+      className="flex flex-wrap items-end gap-2 rounded-xl border p-3"
       style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
     >
       <div className="min-w-[80px] flex-1">
@@ -252,7 +252,7 @@ function NewAliasForm() {
           onChange={(e) => setForm((f) => ({ ...f, alias: e.target.value.toUpperCase() }))}
           placeholder="MINERD"
           required
-          className="h-8 w-full rounded-[7px] border px-2 font-mono text-sm outline-none"
+          className="h-8 w-full rounded-lg border px-2 font-mono text-sm outline-none"
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         />
       </div>
@@ -266,7 +266,7 @@ function NewAliasForm() {
           onChange={(e) => setForm((f) => ({ ...f, canonical_name: e.target.value }))}
           placeholder="Ministerio de Educación de la República Dominicana"
           required
-          className="h-8 w-full rounded-[7px] border px-2 text-sm outline-none"
+          className="h-8 w-full rounded-lg border px-2 text-sm outline-none"
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         />
       </div>
@@ -360,14 +360,14 @@ export function AliasManager() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar sigla…"
-            className="h-8 w-[180px] rounded-[7px] border pr-2 pl-8 text-[13px] outline-none"
+            className="h-8 w-[180px] rounded-lg border pr-2 pl-8 text-[13px] outline-none"
             style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
           />
         </div>
       </div>
 
       {errorMessage && (
-        <div role="alert" className="m-4 rounded-[7px] border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
+        <div role="alert" className="m-4 rounded-lg border px-3 py-2.5 text-[12.5px]" style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}>
           {errorMessage}
         </div>
       )}
@@ -375,7 +375,7 @@ export function AliasManager() {
       {loading && aliases.length === 0 ? (
         <div className="space-y-2 p-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-9 w-full rounded" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
+            <div key={i} className="h-9 w-full rounded-md" style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }} />
           ))}
         </div>
       ) : aliases.length === 0 ? (

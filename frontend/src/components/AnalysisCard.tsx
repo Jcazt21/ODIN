@@ -1,5 +1,6 @@
 import type * as React from "react"
 import { Select } from "@/components/ui/select"
+import { SourceLogo } from "@/components/SourceLogo"
 import { SentimentBadge } from "@/components/SentimentBadge"
 import { SentimentSegmented } from "@/components/SentimentSegmented"
 import {
@@ -123,7 +124,13 @@ export function AnalysisCard({
               documentalista es que lo trajo el rastreo, no que falte el dato. */}
           {value.documentalist !== undefined && meta("Documentalista", value.documentalist ?? "Automático")}
           {/* El nombre legible, no el slug: "Listín Diario" y no listin_diario. */}
-          {meta("Fuente", value.source_name || value.source)}
+          {meta(
+            "Fuente",
+            <span className="inline-flex items-center gap-1.5 align-middle">
+              <SourceLogo source={value.source} />
+              {value.source_name || value.source}
+            </span>,
+          )}
           {editable ? (
             <label className="flex items-center gap-1.5">
               <span className="text-[var(--faint)]">Autor</span>

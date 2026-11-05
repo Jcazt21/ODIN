@@ -72,7 +72,7 @@ export function ChangePasswordPage({ onDone }: { onDone: () => void }) {
                 setPassword(e.target.value)
                 setLocalError(null)
               }}
-              className="h-9 w-full rounded-[7px] border px-3 text-[13px] outline-none"
+              className="h-9 w-full rounded-lg border px-3 text-[13px] outline-none"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             />
           </div>
@@ -90,7 +90,7 @@ export function ChangePasswordPage({ onDone }: { onDone: () => void }) {
                 setRepeat(e.target.value)
                 setLocalError(null)
               }}
-              className="h-9 w-full rounded-[7px] border px-3 text-[13px] outline-none"
+              className="h-9 w-full rounded-lg border px-3 text-[13px] outline-none"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             />
           </div>

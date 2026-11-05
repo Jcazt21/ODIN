@@ -89,7 +89,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="odin-dialog-title"
-            className="odin-pop w-full max-w-[400px] rounded-2xl border bg-card p-[22px]"
+            className="odin-pop w-full max-w-[400px] rounded-xl border bg-card p-[22px]"
             style={{ boxShadow: "var(--shadow)" }}
             onClick={(e) => e.stopPropagation()}
           >

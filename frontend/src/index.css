@@ -2,12 +2,24 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind.css";
 
+/* Figtree (Google Fonts, OFL): variable en peso, partida en dos subconjuntos con
+   el mismo `unicode-range` que publica Google. El navegador solo baja el
+   `latin-ext` si aparece algún carácter fuera del latín básico. */
 @font-face {
-  font-family: 'Switzer';
-  src: url('./assets/fonts/Switzer-Variable.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Figtree';
+  src: url('./assets/fonts/Figtree-latin.woff2') format('woff2');
+  font-weight: 300 900;
   font-style: normal;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  src: url('./assets/fonts/Figtree-latin-ext.woff2') format('woff2');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
   font-family: 'Geist Mono';
@@ -28,7 +40,7 @@
 
 @theme inline {
     --font-heading: var(--font-sans);
-    --font-sans: 'Switzer', ui-sans-serif, system-ui, sans-serif;
+    --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
     --font-mono: 'Geist Mono', ui-monospace, monospace;
     --font-serif: 'Geist Serif', Georgia, serif;
     --color-sidebar-ring: var(--sidebar-ring);
@@ -102,6 +114,11 @@
     --accent-border: oklch(0.86 0.05 185);
 
     --pos: oklch(0.47 0.12 135);
+    --pos-bar: oklch(0.7 0.17 142);
+    /* Texto dentro de los segmentos de las barras de sentimiento */
+    --pos-bar-fg: oklch(0.22 0.04 150);
+    --neu-fg: oklch(0.98 0 0);
+    --neg-fg: oklch(0.98 0 0);
     --pos-soft: oklch(0.955 0.035 135);
     --neg: oklch(0.5 0.16 25);
     --neg-soft: oklch(0.955 0.035 20);
@@ -114,11 +131,6 @@
     --shadow-sm: 0 2px 8px -2px oklch(0.24 0.02 195 / 0.1);
 
     /* alias semánticos de shadcn -> primitivos, para no reescribir button/badge/card/alert/input/separator/skeleton */
-    --pos-bar: oklch(0.7 0.17 142);
-    /* Texto dentro de los segmentos de las barras de sentimiento */
-    --pos-bar-fg: oklch(0.22 0.04 150);
-    --neu-fg: oklch(0.98 0 0);
-    --neg-fg: oklch(0.98 0 0);
     --background: var(--bg);
     --foreground: var(--text);
     --card: var(--panel);
@@ -179,6 +191,10 @@
     --accent-border: oklch(0.45 0.07 185);
 
     --pos: oklch(0.8 0.19 152);
+    --pos-bar: var(--pos);
+    --pos-bar-fg: oklch(0.2 0.04 152);
+    --neu-fg: oklch(0.2 0.01 195);
+    --neg-fg: oklch(0.2 0.03 22);
     --pos-soft: oklch(0.26 0.07 152);
     --neg: oklch(0.72 0.2 22);
     --neg-soft: oklch(0.26 0.08 22);
@@ -191,10 +207,6 @@
     --shadow-sm: 0 2px 8px -2px oklch(0 0 0 / 0.45);
 
     --primary-foreground: var(--accent-fg);
-    --pos-bar: var(--pos);
-    --pos-bar-fg: oklch(0.2 0.04 152);
-    --neu-fg: oklch(0.2 0.01 195);
-    --neg-fg: oklch(0.2 0.03 22);
     --muted: var(--surface-2);
     --accent: var(--accent-soft);
     --accent-foreground: var(--primary);
@@ -239,6 +251,11 @@
     }
 }
 
+@keyframes odinRowIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
 @keyframes odinPulse {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
@@ -251,11 +268,6 @@
 /* Movimiento: solo transform y opacity (compositor, sin layout ni paint), así
    el hilo principal queda libre y la animación sigue a la frecuencia de la
    pantalla (90/120 Hz). Entradas de una sola vez, <300ms, ease-out fuerte. `backwards` (no `both`): al terminar no queda ningún
-@keyframes odinRowIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
-
    transform residual que cree contexto de apilamiento. */
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

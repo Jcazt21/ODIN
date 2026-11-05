@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Link } from "react-router-dom"
+import { SourceLogo } from "@/components/SourceLogo"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { SentimentDot, SENTIMENT_TONE } from "@/components/reports/SentimentDot"
@@ -112,7 +113,7 @@ export function ReportsTable({
                 <tr key={i} className="h-16 border-b">
                   <td className="px-3.5 py-3" colSpan={COLUMNS}>
                     <div
-                      className={cn("h-4 rounded bg-[var(--surface-3)]", SKELETON_WIDTHS[i % SKELETON_WIDTHS.length])}
+                      className={cn("h-4 rounded-md bg-[var(--surface-3)]", SKELETON_WIDTHS[i % SKELETON_WIDTHS.length])}
                       style={{ animation: "odinPulse 1.6s ease-in-out infinite" }}
                     />
                   </td>
@@ -173,7 +174,12 @@ export function ReportsTable({
                         <p className="mt-0.5 text-xs text-muted-foreground capitalize">{a.main_topic}</p>
                       )}
                     </td>
-                    <td className={cn(CELL, "text-muted-foreground")}>{a.source_name || a.source}</td>
+                    <td className={cn(CELL, "text-muted-foreground")}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <SourceLogo source={a.source} />
+                        {a.source_name || a.source}
+                      </span>
+                    </td>
                     <td className={CELL}>
                       <SentimentDot sentiment={a.overall_sentiment} score={a.sentiment_score} />
                     </td>
