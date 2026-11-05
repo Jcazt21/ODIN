@@ -31,7 +31,7 @@ export function SentimentSegmented({
           type="button"
           onClick={() => onChange(s)}
           className={cn(
-            "rounded-[7px] border border-transparent font-mono font-bold tracking-wide transition-colors",
+            "rounded-lg border border-transparent font-mono font-bold tracking-wide transition-colors",
             size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2.5 py-1 text-[11px]",
             value === s
               ? ACTIVE_STYLES[s]

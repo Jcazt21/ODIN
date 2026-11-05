@@ -90,3 +90,9 @@ def norm_key(name: str) -> str:
     """
     name = name.replace("-", " ").replace(".", "")
     return " ".join(strip_accents(name).lower().split())
+
+
+def slugify(name: str) -> str:
+    """Slug URL-seguro: sin acentos, minúsculas, `[a-z0-9]` separados por un
+    único guion. Devuelve "" si el nombre no tiene letras ni números."""
+    return re.sub(r"[^a-z0-9]+", "-", strip_accents(name).lower()).strip("-")

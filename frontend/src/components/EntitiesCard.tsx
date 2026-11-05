@@ -59,7 +59,7 @@ export function EntitiesCard({
                     <input
                       value={ent.name}
                       onChange={(e) => onUpdate?.(i, { name: e.target.value })}
-                      className="h-8 flex-1 rounded-[7px] border border-dashed bg-transparent px-2 text-[14px] font-semibold outline-none"
+                      className="h-8 flex-1 rounded-lg border border-dashed bg-transparent px-2 text-[14px] font-semibold outline-none"
                       style={{ borderColor: "var(--border-strong)" }}
                     />
                   ) : (
@@ -68,7 +68,7 @@ export function EntitiesCard({
                   {isLowConfidence(ent) && (
                     <span
                       title="Confianza de extracción baja — revisar"
-                      className="inline-block rounded-[5px] border px-1.5 py-0.5 text-[10.5px] font-semibold"
+                      className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-semibold"
                       style={{ background: "var(--warn-soft)", borderColor: "var(--warn)", color: "var(--warn)" }}
                     >
                       revisar
@@ -122,7 +122,7 @@ export function EntitiesCard({
                       <button
                         type="button"
                         onClick={() => setEditingIndex(null)}
-                        className="rounded-[6px] border px-2 py-1 text-[11.5px]"
+                        className="rounded-md border px-2 py-1 text-[11.5px]"
                         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
                       >
                         Listo
@@ -132,7 +132,7 @@ export function EntitiesCard({
                         type="button"
                         onClick={() => setEditingIndex(i)}
                         aria-label="Editar entidad"
-                        className="inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11.5px]"
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11.5px]"
                         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
                       >
                         <Pencil className="size-3" />
@@ -149,7 +149,7 @@ export function EntitiesCard({
                         })
                       }}
                       aria-label="Quitar entidad"
-                      className="inline-flex items-center gap-1 rounded-[6px] border px-2 py-1 text-[11.5px] transition-colors hover:text-[var(--neg)]"
+                      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11.5px] transition-colors hover:text-[var(--neg)]"
                       style={{ background: "var(--surface)", borderColor: "var(--border)" }}
                     >
                       <Trash2 className="size-3" />

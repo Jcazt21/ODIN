@@ -32,7 +32,7 @@ export function Layout({ onLogout, theme, onToggleTheme }: LayoutProps) {
       <main
         tabIndex={0}
         aria-label="Contenido"
-        className="min-h-[calc(100vh-3.5rem)] bg-background outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:rounded-t-[28px] lg:bg-[var(--sheet)]"
+        className="min-h-[calc(100vh-3.5rem)] bg-background outline-none focus-visible:ring-3 focus-visible:ring-ring/50 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:rounded-t-xl lg:bg-[var(--sheet)]"
       >
         <div className={`flex w-full flex-col gap-6 px-6 pt-8 pb-20 lg:px-10 ${widthFor(location.pathname)}`}>
           <ErrorBoundary resetKey={location.pathname}>

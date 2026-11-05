@@ -169,8 +169,8 @@ export function ReportDetailPage() {
 
       {isLoading && (
         <div className="space-y-2 rounded-lg border p-5">
-          <div className="h-6 w-3/4 rounded bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out infinite" }} />
-          <div className="h-4 w-1/2 rounded bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out 0.15s infinite" }} />
+          <div className="h-6 w-3/4 rounded-md bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out infinite" }} />
+          <div className="h-4 w-1/2 rounded-md bg-[var(--surface-3)]" style={{ animation: "odinPulse 1.6s ease-in-out 0.15s infinite" }} />
         </div>
       )}
 

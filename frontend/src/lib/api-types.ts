@@ -2184,6 +2184,18 @@ export interface components {
             /** Parent Id */
             parent_id: number | null;
             /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Description */
+            description: string | null;
+            /**
+             * Display Order
+             * @default 0
+             */
+            display_order: number;
+            /**
              * Aliases
              * @default []
              */
@@ -2193,6 +2205,11 @@ export interface components {
              * @default 0
              */
             article_count: number;
+            /**
+             * Child Count
+             * @default 0
+             */
+            child_count: number;
             /**
              * Children
              * @default []
@@ -2204,7 +2221,7 @@ export interface components {
             /** Name */
             name: string;
             /** Slug */
-            slug: string;
+            slug?: string | null;
             /** Description */
             description?: string | null;
             /** Parent Id */

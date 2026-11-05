@@ -114,7 +114,7 @@ export function LocalityPicker({
           {selected.map((item, index) => (
             <li
               key={item.linkId ?? `${item.locality_id}-${item.kind}`}
-              className="flex items-center gap-2 rounded-[7px] border px-2.5 py-1.5"
+              className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             >
               <MapPin className="size-3.5 shrink-0" style={{ color: "var(--faint)" }} />
@@ -155,7 +155,7 @@ export function LocalityPicker({
       {!disabled && !isLoading && (error || entries.length === 0) && (
         <p
           role="alert"
-          className="rounded-[7px] border px-2.5 py-2 text-[12px]"
+          className="rounded-lg border px-2.5 py-2 text-[12px]"
           style={{ background: "var(--neg-soft)", borderColor: "var(--neg)", color: "var(--neg)" }}
         >
           No se pudo cargar el catálogo de lugares. Revisa que el backend esté

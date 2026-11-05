@@ -76,7 +76,7 @@ export function LocalitiesCard({
 
       {isLoading ? (
         <div
-          className="h-8 rounded"
+          className="h-8 rounded-md"
           style={{ background: "var(--surface-3)", animation: "odinPulse 1.6s ease-in-out infinite" }}
         />
       ) : (

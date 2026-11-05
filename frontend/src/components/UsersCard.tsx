@@ -101,7 +101,7 @@ export function UsersCard() {
               id={firstNameId}
               value={form.first_name}
               onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-              className="h-9 w-full rounded-[7px] border px-3 text-[13px] outline-none"
+              className="h-9 w-full rounded-lg border px-3 text-[13px] outline-none"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             />
           </div>
@@ -113,7 +113,7 @@ export function UsersCard() {
               id={lastNameId}
               value={form.last_name}
               onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-              className="h-9 w-full rounded-[7px] border px-3 text-[13px] outline-none"
+              className="h-9 w-full rounded-lg border px-3 text-[13px] outline-none"
               style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
             />
           </div>
@@ -161,7 +161,7 @@ export function UsersCard() {
         {(users ?? []).map((u) => (
           <li
             key={u.id}
-            className="flex items-center justify-between rounded-[7px] px-2 py-1.5 text-[13px]"
+            className="flex items-center justify-between rounded-lg px-2 py-1.5 text-[13px]"
           >
             <span>
               {u.display_name}{" "}

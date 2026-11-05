@@ -26,7 +26,7 @@ export function ExpandableRow({ label, colSpan, cells, children }: ExpandableRow
             aria-expanded={open}
             aria-label={`${open ? "Ocultar" : "Ver"} artículos de ${label}`}
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ChevronRight
               aria-hidden

@@ -188,7 +188,7 @@ export function LocalityCombobox({
           role="listbox"
           aria-label={`Opciones de ${label}`}
           onMouseDown={() => clearTimeout(blurTimer.current)}
-          className="fixed z-50 max-h-72 overflow-auto rounded-[7px] border py-1 shadow-lg"
+          className="fixed z-50 max-h-72 overflow-auto rounded-lg border py-1 shadow-lg"
           style={{
             // Token real y OPACO. Antes decía `--surface-1`, que no existe: un
             // var() sin definir no pinta nada y el desplegable quedaba

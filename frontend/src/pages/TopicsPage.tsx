@@ -3,16 +3,17 @@ import { Search } from "lucide-react"
 import { ArticleRowsList } from "@/components/ArticleRowsList"
 import { ExpandableRow } from "@/components/ExpandableRow"
 import { PageHeader } from "@/components/PageHeader"
+import { NewTopicForm } from "@/components/topics/NewTopicForm"
+import { TopicRowCells } from "@/components/topics/TopicRowCells"
 import { Alert } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTopicArticles, useTopicTree } from "@/lib/queries/topics"
 import { flattenTopicTree, normalizeText } from "@/lib/topic-tree"
 
-const COLUMNS = 3
+const COLUMNS = 5
 const CELL = "px-3.5 py-3 align-middle"
 const HEADER = "border-b px-3.5 py-2.5 text-left text-xs font-medium whitespace-nowrap text-muted-foreground"
-const INDENT_REM = 1.25
 
 function TopicArticles({ id }: { id: number }) {
   const [limit, setLimit] = useState(10)
@@ -34,15 +35,20 @@ export function TopicsPage() {
   const [includeInactive, setIncludeInactive] = useState(false)
   const { data, isLoading, error } = useTopicTree({ include_inactive: includeInactive })
 
+  const [formOpen, setFormOpen] = useState(false)
+
+  const allRows = useMemo(() => flattenTopicTree(data ?? []), [data])
   const rows = useMemo(() => {
-    const flat = flattenTopicTree(data ?? [])
     const needle = normalizeText(search)
-    return needle ? flat.filter((r) => normalizeText(r.name).includes(needle)) : flat
-  }, [data, search])
+    return needle ? allRows.filter((r) => normalizeText(r.name).includes(needle)) : allRows
+  }, [allRows, search])
+  const searching = normalizeText(search) !== ""
 
   return (
     <div className="flex w-full flex-col gap-4">
       <PageHeader title="Temas" count={data ? `${rows.length} ${rows.length === 1 ? "tema" : "temas"}` : undefined} />
+
+      <NewTopicForm topics={allRows} open={formOpen} onOpenChange={setFormOpen} />
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1">
@@ -74,10 +80,12 @@ export function TopicsPage() {
             <thead>
               <tr>
                 <th className={`${HEADER} w-10`}>
-                  <span className="sr-only">Artículos</span>
+                  <span className="sr-only">Expandir</span>
                 </th>
                 <th className={HEADER}>Tema</th>
                 <th className={HEADER}>Artículos</th>
+                <th className={HEADER}>Estado</th>
+                <th className={`${HEADER} text-right`}>Acciones</th>
               </tr>
             </thead>
             {isLoading ? (
@@ -94,7 +102,16 @@ export function TopicsPage() {
               <tbody>
                 <tr>
                   <td colSpan={COLUMNS} className="px-4 py-10 text-center text-muted-foreground">
-                    No hay temas que coincidan.
+                    {searching ? (
+                      "No hay temas que coincidan."
+                    ) : (
+                      <div className="flex flex-col items-center gap-3">
+                        <span>No hay temas todavía.</span>
+                        <Button type="button" onClick={() => setFormOpen(true)}>
+                          Crea el primer tema
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               </tbody>
@@ -105,22 +122,7 @@ export function TopicsPage() {
                     key={t.id}
                     label={t.name}
                     colSpan={COLUMNS}
-                    cells={
-                      <>
-                        <td className={CELL}>
-                          <span
-                            data-depth={t.depth}
-                            style={{ paddingLeft: `${t.depth * INDENT_REM}rem` }}
-                            className={t.depth === 0 ? "font-medium" : undefined}
-                          >
-                            {t.name}
-                          </span>
-                        </td>
-                        <td className={CELL}>
-                          <Badge variant="secondary" className="tabular-nums">{t.article_count}</Badge>
-                        </td>
-                      </>
-                    }
+                    cells={<TopicRowCells topic={t} />}
                   >
                     <TopicArticles id={t.id} />
                   </ExpandableRow>

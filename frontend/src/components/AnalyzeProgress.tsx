@@ -163,7 +163,7 @@ export function AnalyzeProgress({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 rounded-md text-left text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex w-full items-center gap-2 rounded-lg text-left text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronDown
           aria-hidden
@@ -212,7 +212,7 @@ export function AnalyzeProgress({
                           {r.label}
                         </span>
                         {r.first && (
-                          <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[11px] text-primary">
+                          <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[11px] text-primary">
                             {b.name}
                           </span>
                         )}
