@@ -7,7 +7,7 @@ lxml>=6.1.3
 
 # --- Base de datos ---
 SQLAlchemy>=2.0
-psycopg2-binary>=2.9     # driver PostgreSQL
+psycopg2-binary>=2.9.13     # driver PostgreSQL
 # pyodbc>=5.1            # descomentar para SQL Server (requiere ODBC Driver 17/18)
 alembic>=1.20.1            # migraciones versionadas (alembic upgrade head)
 
