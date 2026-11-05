@@ -21,7 +21,7 @@ spacy>=3.7               # NER: figuras públicas y empresas
 google-genai>=1.0   # API de Google Gemini; requiere GEMINI_API_KEY
 
 # --- Analizador LLM opcional (free tier, rate-limited) ---
-groq>=0.13          # API de Groq; requiere GROQ_API_KEY
+groq>=1.7.0          # API de Groq; requiere GROQ_API_KEY
 
 # --- Utilidades ---
 python-dotenv>=1.0
