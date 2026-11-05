@@ -3,7 +3,10 @@ import { flattenTopicTree, normalizeText } from "./topic-tree"
 import type { TopicNode } from "./odin-api"
 
 const node = (id: number, name: string, article_count: number, children: TopicNode[] = []): TopicNode =>
-  ({ id, name, slug: `t${id}`, parent_id: null, aliases: [], article_count, children }) as TopicNode
+  ({
+    id, name, slug: `t${id}`, parent_id: null, aliases: [], article_count, children,
+    is_active: true, description: null, display_order: 0, child_count: children.length,
+  }) as TopicNode
 
 describe("flattenTopicTree", () => {
   it("aplana el árbol con la profundidad de cada nodo", () => {

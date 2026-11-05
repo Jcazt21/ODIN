@@ -136,7 +136,11 @@ export type TopicNode = components["schemas"]["TopicNode"]
 
 export type TopicResponse = components["schemas"]["TopicResponse"]
 
-export type TopicPayload = components["schemas"]["TopicPayload"]
+/** `display_order` tiene default en el backend: el generador lo marca requerido,
+ *  pero el cliente puede omitirlo. */
+export type TopicPayload = Omit<components["schemas"]["TopicPayload"], "display_order"> & {
+  display_order?: number
+}
 
 export type TopicUpdatePayload = components["schemas"]["TopicUpdatePayload"]
 
