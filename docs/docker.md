@@ -179,6 +179,23 @@ docker compose build
 docker compose up --build
 ```
 
+### Qué hace que un build sin cambios sea todo `CACHED`
+
+- **Bases fijadas por digest** (`python`, `node`, `nginx` y el frontend
+  `docker/dockerfile`): el tag se republica seguido y cada cambio de digest
+  invalida todas las capas siguientes (modelo de spaCy, torch, ...). Para
+  actualizarlas a propósito: `docker pull <imagen>:<tag>`, copiar el digest de
+  `docker images --digests` y pegarlo en el `FROM`.
+- **Modelo de spaCy en un cache mount propio** (`/root/.cache/spacy-models`):
+  pip no cachea bien un wheel bajado por URL directa, así que se descarga a
+  mano una sola vez.
+- **`COPY` final mínimo** (`alembic.ini`, `alembic/`): `src/` ya está
+  instalado en site-packages, así que tocar docs, scripts o handbook no
+  invalida ninguna capa del backend (ver `.dockerignore`).
+- **Una sola imagen para `backend` y `scraper`** (`image: odin-backend`).
+- **Opcional:** `BUILDX_NO_DEFAULT_ATTESTATIONS=1` en tu shell (`export`, no el `.env`: buildx lee el entorno del proceso) evita
+  generar attestation/provenance en cada export de imagen.
+
 ---
 
 ## 4. Comandos de uso diario

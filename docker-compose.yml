@@ -34,6 +34,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    # La imagen se comparte con "scraper": se construye una sola vez.
+    image: odin-backend
     restart: unless-stopped
     env_file: .env
     environment:
@@ -88,9 +90,8 @@ services:
           memory: 128M
 
   scraper:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
+    # Misma imagen que "backend" (se construye allá); sin `build` propio.
+    image: odin-backend
     profiles: ["tools"]
     env_file: .env
     environment:

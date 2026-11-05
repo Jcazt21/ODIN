@@ -29,3 +29,18 @@ odin.egg-info
 README.md
 # task.md y deploy-test.md vivían acá; ahora están bajo docs/planning/,
 # ya cubierto por la exclusión de "docs" arriba.
+# Nada de esto se usa dentro de la imagen; excluirlo evita transferirlo y que
+# un cambio acá invalide capas.
+graphify-out
+handbook
+temp
+scripts
+*.sql
+*.db
+odin.db.bak*
+AGENTS.md
+CONTRIBUTING.md
+SECURITY.md
+CHANGELOG.md
+Makefile
+.github
