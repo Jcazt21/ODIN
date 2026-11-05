@@ -33,7 +33,7 @@ sentry-sdk>=2.18         # seguimiento de errores; opt-in vía ODIN_SENTRY_DSN
 
 # --- API (frontend) ---
 fastapi>=0.162.0
-uvicorn[standard]>=0.32
+uvicorn[standard]>=0.54.0
 PyJWT>=2.9               # tokens de sesión del login (HS256)
 
 # --- Exportación de reportes ---
