@@ -134,6 +134,12 @@ export interface AuthorListParams {
 
 export type TopicNode = components["schemas"]["TopicNode"]
 
+export type TopicResponse = components["schemas"]["TopicResponse"]
+
+export type TopicPayload = components["schemas"]["TopicPayload"]
+
+export type TopicUpdatePayload = components["schemas"]["TopicUpdatePayload"]
+
 export type EntityAlias = components["schemas"]["EntityAliasResponse"]
 
 export type AliasPayload = components["schemas"]["AliasPayload"]
@@ -403,6 +409,18 @@ export function listAuthors(params: AuthorListParams = {}): Promise<AuthorListRe
 export function getTopicTree(params: { include_inactive?: boolean } = {}): Promise<TopicNode[]> {
   const s = params.include_inactive ? "?include_inactive=true" : ""
   return request<TopicNode[]>(`/api/topics/tree${s}`)
+}
+
+export function createTopic(payload: TopicPayload): Promise<TopicResponse> {
+  return postJson("/api/topics", payload)
+}
+
+export function updateTopic(id: number, payload: TopicUpdatePayload): Promise<TopicResponse> {
+  return putJson(`/api/topics/${id}`, payload)
+}
+
+export function deleteTopic(id: number): Promise<void> {
+  return del(`/api/topics/${id}`)
 }
 
 export function getArticle(id: number): Promise<ArticleAnalysis> {

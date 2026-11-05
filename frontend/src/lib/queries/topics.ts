@@ -1,5 +1,13 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query"
-import { getTopicTree, listArticles } from "@/lib/odin-api"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  createTopic,
+  deleteTopic,
+  getTopicTree,
+  listArticles,
+  updateTopic,
+  type TopicPayload,
+  type TopicUpdatePayload,
+} from "@/lib/odin-api"
 
 export const ARTICLES_PAGE = 10
 
@@ -24,5 +32,35 @@ export function useTopicArticles(id: number, enabled = false, limit = ARTICLES_P
     queryFn: () => listArticles({ topic_id: id, limit, sort: "published_at", order: "desc" }),
     enabled,
     placeholderData: keepPreviousData,
+  })
+}
+
+export function useCreateTopic() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: TopicPayload) => createTopic(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: topicKeys.all })
+    },
+  })
+}
+
+export function useUpdateTopic() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: TopicUpdatePayload }) => updateTopic(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: topicKeys.all })
+    },
+  })
+}
+
+export function useDeleteTopic() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => deleteTopic(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: topicKeys.all })
+    },
   })
 }

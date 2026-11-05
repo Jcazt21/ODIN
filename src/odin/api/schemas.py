@@ -653,14 +653,18 @@ class TopicNode(_ResponseModel):
     name: str
     slug: str
     parent_id: int | None = None
+    is_active: bool = True
+    description: str | None = None
+    display_order: int = 0
     aliases: list[str] = []
     article_count: int = 0
+    child_count: int = 0
     children: list[TopicNode] = []
 
 
 class TopicPayload(BaseModel):
     name: str = Field(min_length=1, max_length=160)
-    slug: str = Field(min_length=1, max_length=160)
+    slug: str | None = Field(default=None, max_length=160)
     description: str | None = Field(default=None, max_length=500)
     parent_id: int | None = None
     display_order: int = 0

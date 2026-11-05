@@ -14,7 +14,7 @@ from datetime import timedelta
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
-from odin.analysis.text_norm import norm_key
+from odin.analysis.text_norm import norm_key, slugify
 from odin.api import deps
 from odin.api.deps import log
 from odin.api.schemas import (
@@ -101,14 +101,27 @@ def get_tree(*, include_inactive: bool = False) -> list[TopicNode]:
             aliases.setdefault(a.topic_id, []).append(a.alias)
 
         counts = topic_article_counts(session)
+        # Todos los hijos, también los inactivos ocultos: la UI decide con esto
+        # si borrar será baja lógica.
+        child_counts = dict(
+            session.execute(
+                select(Topic.parent_id, func.count())
+                .where(Topic.parent_id.is_not(None))
+                .group_by(Topic.parent_id)
+            ).all()
+        )
         nodes = {
             r.id: TopicNode(
                 id=r.id,
                 name=r.name,
                 slug=r.slug,
                 parent_id=r.parent_id,
+                is_active=r.is_active,
+                description=r.description,
+                display_order=r.display_order,
                 aliases=aliases.get(r.id, []),
                 article_count=counts.get(r.id, 0),
+                child_count=child_counts.get(r.id, 0),
                 children=[],
             )
             for r in rows
@@ -133,7 +146,12 @@ def create_topic(payload: TopicPayload) -> TopicResponse:
     if not name:
         raise HTTPException(status_code=422, detail="El nombre no puede estar vacío.")
     nkey = norm_key(name)
-    slug = payload.slug.strip()
+    explicit_slug = (payload.slug or "").strip()
+    derived_slug = "" if explicit_slug else slugify(name)
+    if not explicit_slug and not derived_slug:
+        raise HTTPException(
+            status_code=422, detail="El nombre debe contener letras o números."
+        )
     session = deps.get_session()
     try:
         parent = session.get(Topic, payload.parent_id) if payload.parent_id else None
@@ -148,16 +166,27 @@ def create_topic(payload: TopicPayload) -> TopicResponse:
             raise HTTPException(
                 status_code=409, detail=f"'{name}' ya existe bajo ese tema padre."
             )
-        slug_clash = session.scalar(select(Topic).where(Topic.slug == slug))
-        if slug_clash:
-            raise HTTPException(
-                status_code=409, detail=f"El slug '{slug}' ya está en uso."
-            )
+        if explicit_slug:
+            slug = explicit_slug
+            if session.scalar(select(Topic).where(Topic.slug == slug)):
+                raise HTTPException(
+                    status_code=409, detail=f"El slug '{slug}' ya está en uso."
+                )
+        else:
+            slug = derived_slug
+            n = 2
+            while session.scalar(select(Topic).where(Topic.slug == slug)):
+                if n > 50:
+                    raise HTTPException(
+                        status_code=409, detail=f"El slug '{derived_slug}' ya está en uso."
+                    )
+                slug = f"{derived_slug}-{n}"
+                n += 1
         row = Topic(
             name=name,
             norm_key=nkey,
             slug=slug,
-            description=payload.description,
+            description=(payload.description or "").strip() or None,
             parent_id=payload.parent_id,
             display_order=payload.display_order,
             path="",
@@ -206,7 +235,7 @@ def update_topic(topic_id: int, payload: TopicUpdatePayload) -> TopicResponse:
             row.name = name
             row.norm_key = nkey
         if payload.description is not None:
-            row.description = payload.description
+            row.description = payload.description.strip() or None
         if payload.is_active is not None:
             row.is_active = payload.is_active
         if payload.display_order is not None:
