@@ -26,3 +26,29 @@ updates:
     groups:
       pip-minor-patch:
         update-types: [minor, patch]
+
+  # Las bases de los Dockerfiles están fijadas por digest (ver docs/docker.md):
+  # Dependabot actualiza el tag y el digest juntos. Dockerfile.backend se
+  # detecta por el nombre. Las versiones mayores/menores se mueven a mano:
+  # requirements.lock solo tiene hashes cp313 (python), node va con su LTS y un
+  # salto de postgres exige migrar el volumen de datos.
+  - package-ecosystem: docker
+    directories: [/, /frontend]
+    schedule:
+      interval: weekly
+    groups:
+      docker-bases:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
