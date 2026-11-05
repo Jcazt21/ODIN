@@ -17,12 +17,18 @@ describe("LoginScreen", () => {
     expect(container.querySelector("canvas")).toBeNull()
   })
 
-  it("el formulario vive en una tarjeta centrada bajo el título Odin", () => {
+  it("el título del formulario es Iniciar sesión y la marca Odin acompaña a la pintura", () => {
     const { container } = render(<LoginScreen onSuccess={vi.fn()} />)
-    expect(screen.getByRole("heading", { name: "Odin" })).toBeInTheDocument()
-    const card = container.querySelector("[data-slot=card]")
-    expect(card).not.toBeNull()
-    expect(card).toContainElement(screen.getByLabelText("Usuario"))
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeInTheDocument()
+    expect(screen.getAllByText("Odin").length).toBeGreaterThan(0)
+    expect(screen.getByText(/monitoreo y análisis de prensa dominicana/i)).toBeInTheDocument()
+    // La pintura es decorativa: sin texto alternativo para lectores de pantalla.
+    expect(container.querySelector("img")).toHaveAttribute("aria-hidden", "true")
+  })
+
+  it("indica que las cuentas las gestiona un administrador", () => {
+    render(<LoginScreen onSuccess={vi.fn()} />)
+    expect(screen.getByText(/pídele a un administrador/i)).toBeInTheDocument()
   })
 
   it("los campos tienen etiquetas asociadas", () => {
