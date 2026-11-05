@@ -21,7 +21,7 @@ dev = [
     "pytest>=8.3",
     # Genera requirements.lock. Se usa uv y no pip-tools porque este último
     # importa internos de pip y se rompe con las versiones recientes.
-    "uv>=0.5",
+    "uv>=0.13.6",
     # Audita requirements.lock contra la base de vulnerabilidades de OSV.
     "pip-audit>=2.10.1",
 ]
