@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 # Imagen para el backend FastAPI (paquete odin.api) y el scraper CLI (comando `odin`).
 # Mismo código Python, dos usos: ver docker-compose.yml (servicios "backend" y "scraper").
 #
@@ -6,7 +6,11 @@
 # con `uv pip compile --python-version 3.13`, así que sus hashes solo cubren
 # ruedas cp313. Instalarlo con --require-hashes (ver más abajo) sobre un
 # intérprete distinto no encuentra candidato válido y el build falla.
-FROM python:3.13-slim
+# Fijada por digest: el tag 3.13-slim se republica seguido, y cada cambio de
+# digest invalida *todas* las capas siguientes (modelo de spaCy, torch, etc.)
+# aunque no haya tocado nada. Para actualizar: `docker pull python:3.13-slim`
+# y copiar el nuevo digest de `docker images --digests python`.
+FROM python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
 
 WORKDIR /app
 
@@ -27,8 +31,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # requirements.lock cambia seguido, si esta capa fuera *después* de instalar
 # requirements.lock, cada cambio ahí forzaría re-descargar los ~568MB del
 # modelo también. Puesta antes, solo se re-descarga si cambia esta línea.
+#
+# El wheel se baja a mano a un cache mount propio en vez de dárselo a pip por
+# URL: pip no cachea bien una descarga directa (GitHub la sirve por un
+# redirect firmado, sin cabeceras de cache), así que si la capa se invalidaba
+# (por ejemplo, porque cambió la imagen base) volvía a bajar los ~568MB. Con
+# el archivo en el mount, solo se descarga la primera vez.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl
+    --mount=type=cache,target=/root/.cache/spacy-models \
+    f=/root/.cache/spacy-models/es_core_news_lg-3.8.0-py3-none-any.whl; \
+    [ -s "$f" ] || python -c "import sys, urllib.request; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" \
+        https://github.com/explosion/spacy-models/releases/download/es_core_news_lg-3.8.0/es_core_news_lg-3.8.0-py3-none-any.whl "$f"; \
+    pip install "$f"
 
 # psycopg2-binary trae libpq embebido; no hacen falta headers de compilación.
 #
@@ -79,7 +93,11 @@ RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser \
 
 ENV HOME=/home/appuser
 
-COPY --chown=appuser:appuser . .
+# Solo lo que se usa en runtime: src/ ya está instalado en site-packages (paso
+# anterior) y el resto del repo (docs, scripts, handbook...) no lo toca la
+# imagen. Con `COPY . .` cualquier archivo cambiado invalidaba esta capa.
+COPY --chown=appuser:appuser alembic.ini ./
+COPY --chown=appuser:appuser alembic/ alembic/
 
 USER appuser
 
