@@ -2,7 +2,7 @@
 requests>=2.34.2
 trafilatura>=1.12        # extracción robusta de cuerpo/autor/fecha de artículos
 feedparser>=6.0.14          # descubrimiento de artículos vía RSS
-beautifulsoup4>=4.12     # fallback / parsing puntual
+beautifulsoup4>=4.15.0     # fallback / parsing puntual
 lxml>=6.1.3
 
 # --- Base de datos ---
