@@ -18,7 +18,7 @@ dev = [
     "ruff>=0.17.3",
     "mypy>=1.14",
     "pre-commit>=4.7.0",
-    "pytest>=8.3",
+    "pytest>=9.2.0",
     # Genera requirements.lock. Se usa uv y no pip-tools porque este último
     # importa internos de pip y se rompe con las versiones recientes.
     "uv>=0.13.6",
